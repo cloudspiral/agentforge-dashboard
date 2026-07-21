@@ -1,0 +1,7 @@
+{% if has_previous or has_next %}
+<nav class="pagination" aria-label="Pagination">
+  {% if has_previous %}<a href="?offset={{ previous_offset }}&limit={{ limit }}">← Previous</a>{% else %}<span></span>{% endif %}
+  <span>Showing {{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total }}</span>
+  {% if has_next %}<a href="?offset={{ next_offset }}&limit={{ limit }}">Next →</a>{% else %}<span></span>{% endif %}
+</nav>
+{% endif %}

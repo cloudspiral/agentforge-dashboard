@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Regression {{ run.id }} · AgentForge{% endblock %}
+{% block content %}
+<section class="page-heading"><p class="eyebrow">Regression run</p><h1>{{ run.target_version }}</h1><p class="mono">{{ run.id }}</p></section>
+<section class="stat-grid">
+  <article><span>Status</span><strong class="text">{{ run.status }}</strong></article>
+  <article><span>Total cases</span><strong>{{ run.total_cases }}</strong></article>
+  <article><span>Passed</span><strong>{{ run.passed_cases }}</strong></article>
+  <article><span>Reproduced</span><strong>{{ run.reproduced_cases }}</strong></article>
+  <article><span>Duration</span><strong class="text">{{ ('%.1fs' | format(duration_seconds)) if duration_seconds is not none else 'not complete' }}</strong></article>
+  <article><span>Cost</span><strong class="text">${{ run.estimated_cost_usd }}</strong></article>
+</section>
+<section class="panel two-column">
+  <div><h2>Metadata</h2><dl class="summary-list">
+    <div><dt>Trigger</dt><dd>{{ run.trigger }}</dd></div>
+    <div><dt>Campaign</dt><dd>{% if run.campaign_id %}<a class="mono" href="/dashboard/campaigns/{{ run.campaign_id }}">{{ run.campaign_id }}</a>{% else %}not linked{% endif %}</dd></div>
+    <div><dt>Started</dt><dd>{{ run.started_at or 'not started' }}</dd></div>
+    <div><dt>Completed</dt><dd>{{ run.completed_at or 'not completed' }}</dd></div>
+  </dl></div>
+  <div><h2>Outcome counts</h2><dl class="summary-list">
+    {% for outcome, count in outcomes.items() %}<div><dt>{{ outcome | replace('_', ' ') }}</dt><dd>{{ count }}</dd></div>{% else %}<p>No results recorded.</p>{% endfor %}
+  </dl></div>
+</section>
+<section class="panel"><h2>Results</h2><div class="table-wrap"><table>
+  <thead><tr><th>Outcome</th><th>Case</th><th>Version</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
+  <tbody>{% for result in run.results %}<tr>
+    <td>{{ result.outcome }}</td><td class="mono">{{ result.case_id }}</td><td>{{ result.case_version }}</td>
+    <td>{{ result.latency_ms ~ 'ms' if result.latency_ms is not none else '—' }}</td><td>${{ result.estimated_cost_usd }}</td><td class="mono">{{ result.trace_id or 'not available' }}</td>
+  </tr>{% else %}<tr><td colspan="6">No regression results recorded.</td></tr>{% endfor %}</tbody>
+</table></div></section>
+{% endblock %}

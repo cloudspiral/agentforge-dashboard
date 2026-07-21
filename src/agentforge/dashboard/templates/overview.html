@@ -1,45 +1,40 @@
 {% extends "base.html" %}
-{% block title %}AgentForge overview{% endblock %}
+{% block title %}AgentForge operations{% endblock %}
 {% block content %}
 <section class="hero">
-  <p class="eyebrow">Evidence-first security evaluation</p>
-  <h1>Clinical Co-Pilot assurance</h1>
-  <p>Models recommend. Deterministic gates authorize. Runners execute only versioned, allowlisted actions.</p>
+  <p class="eyebrow">Local operations</p>
+  <h1>Application state</h1>
+  <p>Current queue, worker, campaign, finding, and regression state from PostgreSQL.</p>
 </section>
 
-<section class="stat-grid" aria-label="Platform summary">
-  <article><span>Queued</span><strong>{{ campaigns.get('queued', 0) }}</strong></article>
-  <article><span>Running</span><strong>{{ campaigns.get('running', 0) }}</strong></article>
+<section class="stat-grid" aria-label="Application summary">
+  <article><span>Total campaigns</span><strong>{{ campaign_total }}</strong></article>
+  <article><span>Queued</span><strong>{{ queue.depth }}</strong></article>
+  <article><span>Running</span><strong>{{ queue.running }}</strong></article>
   <article><span>Completed</span><strong>{{ campaigns.get('completed', 0) }}</strong></article>
-  <article><span>Open findings</span><strong>{{ findings.values() | sum }}</strong></article>
-  <article><span>Confirmed</span><strong>{{ verdicts.get('exploit_confirmed', 0) }}</strong></article>
-  <article><span>Estimated cost</span><strong>${{ '%.4f' | format(estimated_cost) }}</strong></article>
+  <article><span>Failed</span><strong>{{ campaigns.get('failed', 0) }}</strong></article>
+  <article><span>Accumulated cost</span><strong>${{ '%.4f' | format(activity.actual_cost_usd) }}</strong></article>
 </section>
 
 <section class="panel two-column">
   <div>
-    <h2>Start a bounded campaign</h2>
-    <form id="campaign-form">
-      <label>API token <input name="token" type="password" autocomplete="off" required></label>
-      <label>Target
-        <select name="target_alias"><option value="local">Local</option><option value="deployed">Deployed</option></select>
-      </label>
-      <label>Category
-        <select name="category">
-          <option value="prompt_injection">Prompt injection</option>
-          <option value="data_exfiltration">Data exfiltration</option>
-          <option value="tool_misuse">Tool misuse</option>
-        </select>
-      </label>
-      <label>Max attempts <input name="max_attempts" type="number" min="1" max="10" value="5"></label>
-      <button type="submit">Queue campaign</button>
-      <output id="campaign-result" aria-live="polite"></output>
-    </form>
+    <h2>Queue</h2>
+    <dl class="summary-list">
+      <div><dt>Worker</dt><dd>{{ queue.worker_name or 'not observed' }}</dd></div>
+      <div><dt>Worker status</dt><dd>{{ queue.worker_status }}</dd></div>
+      <div><dt>Oldest queued</dt><dd>{{ '%.1f' | format(queue.oldest_age_seconds) }}s</dd></div>
+      <div><dt>Stale running</dt><dd>{{ queue.stale_running }}</dd></div>
+    </dl>
+    <p><a href="/dashboard/queue">Inspect queue status</a></p>
   </div>
   <div>
-    <h2>Verdicts</h2>
+    <h2>Stored activity</h2>
     <dl class="summary-list">
-      {% for name, value in verdicts.items() %}<div><dt>{{ name | replace('_', ' ') }}</dt><dd>{{ value }}</dd></div>{% else %}<p>No judged attempts yet.</p>{% endfor %}
+      <div><dt>Attempts</dt><dd>{{ activity.attempts }}</dd></div>
+      <div><dt>Average attempt latency</dt><dd>{{ '%.1f' | format(activity.average_attempt_latency_ms) }}ms</dd></div>
+      <div><dt>Findings</dt><dd>{{ finding_summary.total }}</dd></div>
+      <div><dt>Reports</dt><dd>{{ finding_summary.reports }}</dd></div>
+      <div><dt>Regression runs</dt><dd>{{ regression_summary.total }}</dd></div>
     </dl>
   </div>
 </section>
@@ -47,13 +42,59 @@
 <section class="panel">
   <h2>Recent campaigns</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>Status</th><th>Type</th><th>Scope</th><th>Target</th><th>Created</th></tr></thead>
+    <thead><tr><th>Status</th><th>Campaign</th><th>Trigger</th><th>Target</th><th>Worker</th><th>Created</th></tr></thead>
     <tbody>
-      {% for item in recent_campaigns %}
-      <tr><td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td><td><a href="/dashboard/campaigns/{{ item.id }}">{{ item.campaign_type }}</a></td><td>{{ item.category_scope or 'ranked automatically' }}</td><td>{{ item.target_alias }} · {{ item.target_version }}</td><td>{{ item.created_at }}</td></tr>
-      {% else %}<tr><td colspan="5">No campaigns yet.</td></tr>{% endfor %}
+      {% for row in recent_campaigns %}{% set item = row.campaign %}
+      <tr>
+        <td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td>
+        <td><a href="/dashboard/campaigns/{{ item.id }}">{{ item.campaign_type }}</a><small>{{ item.id }}</small></td>
+        <td>{{ item.trigger_type }}</td>
+        <td>{{ item.target_alias }}<small>{{ item.target_version }}</small></td>
+        <td>{{ row.worker_name or 'unclaimed' }}</td>
+        <td>{{ item.created_at }}</td>
+      </tr>
+      {% else %}<tr><td colspan="6">No campaigns yet.</td></tr>{% endfor %}
     </tbody>
   </table></div>
+</section>
+
+<section class="panel">
+  <h2>Recent lifecycle events</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Event</th><th>Transition</th><th>Campaign</th><th>Worker</th></tr></thead>
+    <tbody>
+      {% for row in recent_events %}
+      <tr>
+        <td>{{ row.event.created_at }}</td>
+        <td>{{ row.event.event_type | replace('_', ' ') }}</td>
+        <td>{{ row.event.from_status or 'new' }} → {{ row.event.to_status }}</td>
+        <td><a class="mono" href="/dashboard/campaigns/{{ row.campaign.id }}">{{ row.campaign.id }}</a></td>
+        <td>{{ row.event.worker_name or '—' }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5">No lifecycle events yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel two-column">
+  <div>
+    <h2>Findings and reports</h2>
+    <dl class="summary-list">
+      <div><dt>Active findings</dt><dd>{{ finding_summary.active }}</dd></div>
+      <div><dt>Total findings</dt><dd>{{ finding_summary.total }}</dd></div>
+      <div><dt>Stored reports</dt><dd>{{ finding_summary.reports }}</dd></div>
+    </dl>
+    {% if finding_summary.total == 0 %}<p class="empty-state">No finding or report data.</p>{% endif %}
+  </div>
+  <div>
+    <h2>Regression runs</h2>
+    <dl class="summary-list">
+      <div><dt>Total runs</dt><dd>{{ regression_summary.total }}</dd></div>
+      {% for outcome, count in regression_summary.outcomes.items() %}<div><dt>{{ outcome | replace('_', ' ') }}</dt><dd>{{ count }}</dd></div>{% endfor %}
+      <div><dt>Estimated cost</dt><dd>${{ '%.4f' | format(regression_summary.estimated_cost_usd) }}</dd></div>
+    </dl>
+    {% if regression_summary.total == 0 %}<p class="empty-state">No regression data.</p>{% endif %}
+  </div>
 </section>
 
 <section class="panel">
@@ -64,22 +105,3 @@
   </table></div>
 </section>
 {% endblock %}
-{% block scripts %}
-<script>
-  document.querySelector('#campaign-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const output = document.querySelector('#campaign-result');
-    output.textContent = 'Queueing…';
-    const response = await fetch('/api/v1/campaigns', {
-      method: 'POST',
-      headers: {'Authorization': `Bearer ${form.get('token')}`, 'Content-Type': 'application/json'},
-      body: JSON.stringify({target_alias: form.get('target_alias'), category: form.get('category'), max_attempts: Number(form.get('max_attempts'))})
-    });
-    const result = await response.json();
-    output.textContent = response.ok ? `Queued ${result.id}` : (result.message || 'Request failed');
-    event.currentTarget.elements.token.value = '';
-  });
-</script>
-{% endblock %}
-

@@ -1,9 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Campaign {{ campaign.id }} · AgentForge{% endblock %}
 {% block content %}
-<section class="page-heading"><p class="eyebrow">{{ campaign.campaign_type }} campaign</p><h1>{{ campaign.category_scope or 'Automatically ranked scope' }}</h1><p class="mono">{{ campaign.id }}</p></section>
-<section class="stat-grid"><article><span>Status</span><strong class="text">{{ campaign.status }}</strong></article><article><span>Target</span><strong class="text">{{ campaign.target_alias }}</strong></article><article><span>Version</span><strong class="text mono">{{ campaign.target_version }}</strong></article><article><span>Budget</span><strong class="text">${{ campaign.actual_cost_usd }} / ${{ campaign.max_cost_usd }}</strong></article></section>
-<section class="panel"><h2>Attempts</h2><div class="table-wrap"><table><thead><tr><th>Status</th><th>Family</th><th>Category</th><th>Verdict</th><th>Trace</th></tr></thead><tbody>{% for item in attempts %}<tr><td>{{ item.status }}</td><td>{{ item.attack_family_id }}</td><td>{{ item.category }} / {{ item.subcategory }}</td><td>{{ verdicts[item.id].verdict if item.id in verdicts else 'pending' }}</td><td>{{ item.langfuse_trace_id or 'not exported' }}</td></tr>{% else %}<tr><td colspan="5">No attempts recorded.</td></tr>{% endfor %}</tbody></table></div></section>
-{% if campaign.sanitized_error %}<section class="panel danger"><h2>Sanitized error</h2><pre>{{ campaign.sanitized_error }}</pre></section>{% endif %}
-{% endblock %}
+<section class="page-heading">
+  <p class="eyebrow">{{ campaign.campaign_type }} campaign</p>
+  <h1>{{ campaign.category_scope or 'Automatically ranked scope' }}</h1>
+  <p class="mono">{{ campaign.id }}</p>
+</section>
+<section class="stat-grid">
+  <article><span>Status</span><strong class="text">{{ campaign.status }}</strong></article>
+  <article><span>Trigger</span><strong class="text">{{ campaign.trigger_type }}</strong></article>
+  <article><span>Target</span><strong class="text">{{ campaign.target_alias }}</strong></article>
+  <article><span>Version</span><strong class="text mono">{{ campaign.target_version }}</strong></article>
+  <article><span>Attempts</span><strong>{{ attempts | length }}</strong></article>
+  <article><span>Cost</span><strong class="text">${{ campaign.actual_cost_usd }} / ${{ campaign.max_cost_usd }}</strong></article>
+</section>
 
+<section class="panel two-column">
+  <div><h2>Scope and limits</h2><dl class="summary-list">
+    <div><dt>Category</dt><dd>{{ campaign.category_scope or 'automatic' }}</dd></div>
+    <div><dt>Subcategory</dt><dd>{{ campaign.subcategory_scope or 'automatic' }}</dd></div>
+    <div><dt>Maximum attempts</dt><dd>{{ campaign.max_attempts }}</dd></div>
+    <div><dt>Maximum duration</dt><dd>{{ campaign.max_duration_seconds }}s</dd></div>
+    <div><dt>Priority</dt><dd>{{ campaign.priority }}</dd></div>
+  </dl></div>
+  <div><h2>Timing</h2><dl class="summary-list">
+    <div><dt>Created</dt><dd>{{ campaign.created_at }}</dd></div>
+    <div><dt>Started</dt><dd>{{ campaign.started_at or 'not started' }}</dd></div>
+    <div><dt>Heartbeat</dt><dd>{{ campaign.heartbeat_at or 'not observed' }}</dd></div>
+    <div><dt>Completed</dt><dd>{{ campaign.completed_at or 'not completed' }}</dd></div>
+    <div><dt>Cancellation requested</dt><dd>{{ 'yes' if campaign.cancellation_requested else 'no' }}</dd></div>
+  </dl></div>
+</section>
+
+<section class="panel">
+  <h2>Lifecycle events</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Event</th><th>From</th><th>To</th><th>Worker</th><th>Details</th></tr></thead>
+    <tbody>{% for row in event_rows %}<tr>
+      <td>{{ row.event.created_at }}</td>
+      <td>{{ row.event.event_type | replace('_', ' ') }}</td>
+      <td>{{ row.event.from_status or 'new' }}</td>
+      <td>{{ row.event.to_status }}</td>
+      <td>{{ row.event.worker_name or '—' }}</td>
+      <td><code>{{ row.details }}</code></td>
+    </tr>{% else %}<tr><td colspan="6">No lifecycle events recorded.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel">
+  <h2>Attempts and results</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Status</th><th>Family</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
+    <tbody>{% for item in attempts %}<tr>
+      <td>{{ item.status }}</td>
+      <td>{{ item.attack_family_id }}</td>
+      <td>{{ item.category }} / {{ item.subcategory }}</td>
+      <td>{{ verdicts[item.id].verdict if item.id in verdicts else 'pending' }}</td>
+      <td>{{ item.latency_ms ~ 'ms' if item.latency_ms is not none else '—' }}</td>
+      <td>${{ item.estimated_cost_usd }}</td>
+      <td class="mono">{{ item.langfuse_trace_id or 'not available' }}</td>
+    </tr>{% else %}<tr><td colspan="7">No attempts recorded.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% if safe_error %}<section class="panel danger"><h2>Sanitized error</h2><pre>{{ safe_error }}</pre></section>{% endif %}
+{% endblock %}

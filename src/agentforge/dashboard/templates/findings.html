@@ -2,6 +2,16 @@
 {% block title %}Findings · AgentForge{% endblock %}
 {% block content %}
 <section class="page-heading"><p class="eyebrow">Human-reviewed lifecycle</p><h1>Findings</h1><p>{{ total }} evidence-backed record{{ '' if total == 1 else 's' }}.</p></section>
-<section class="panel"><div class="table-wrap"><table><thead><tr><th>Severity</th><th>Finding</th><th>Status</th><th>Category</th><th>Last seen</th></tr></thead><tbody>{% for item in findings %}<tr><td><span class="severity severity-{{ item.severity }}">{{ item.severity }}</span></td><td><a href="/dashboard/findings/{{ item.id }}">{{ item.title }}</a><small>{{ item.vulnerability_id }}</small></td><td>{{ item.status }}</td><td>{{ item.category }} / {{ item.subcategory }}</td><td>{{ item.last_seen_target_version }}</td></tr>{% else %}<tr><td colspan="5">No confirmed findings. This is not proof that no vulnerabilities exist.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel"><div class="table-wrap"><table>
+  <thead><tr><th>Severity</th><th>Finding</th><th>Status</th><th>Category</th><th>Reports</th><th>Last seen</th></tr></thead>
+  <tbody>{% for item in findings %}<tr>
+    <td><span class="severity severity-{{ item.severity }}">{{ item.severity }}</span></td>
+    <td><a href="/dashboard/findings/{{ item.id }}">{{ item.title }}</a><small>{{ item.vulnerability_id }}</small></td>
+    <td>{{ item.status }}</td>
+    <td>{{ item.category }} / {{ item.subcategory }}</td>
+    <td>{{ item.reports | length }}</td>
+    <td>{{ item.last_seen_target_version }}</td>
+  </tr>{% else %}<tr><td colspan="6">No confirmed findings. This is not proof that no vulnerabilities exist.</td></tr>{% endfor %}</tbody>
+</table></div></section>
+{% include "pagination.html" %}
 {% endblock %}
-

@@ -85,6 +85,23 @@ class CampaignDetailResponse(CampaignResponse):
     events: list[CampaignEventResponse] = Field(default_factory=list)
 
 
+class QueueStatusResponse(ApiModel):
+    depth: int
+    running: int
+    oldest_age_seconds: float
+    stale_running: int
+    worker_name: str | None
+    worker_status: str
+
+
+class OperationalSummaryResponse(ApiModel):
+    campaigns: dict[str, int]
+    queue: QueueStatusResponse
+    activity: dict[str, Any]
+    findings: dict[str, Any]
+    regressions: dict[str, Any]
+
+
 class RegressionRunCreateRequest(ApiModel):
     target_alias: Literal["local", "deployed"] = "local"
     target_version: str | None = Field(default=None, max_length=255)

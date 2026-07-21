@@ -20,6 +20,8 @@ from agentforge.api.schemas import (
     FindingPage,
     FindingResponse,
     FindingStatusUpdate,
+    OperationalSummaryResponse,
+    QueueStatusResponse,
     RegressionResultResponse,
     RegressionRunCreateRequest,
     RegressionRunPage,
@@ -35,6 +37,7 @@ from agentforge.persistence.repositories import (
     CampaignNotFound,
     CampaignRepository,
     FindingRepository,
+    OperationalRepository,
     RegressionRunRepository,
     ReportRepository,
 )
@@ -244,6 +247,36 @@ def list_campaigns(
     items, total = CampaignRepository(session).list(offset=offset, limit=limit)
     return CampaignPage(
         items=[_campaign(item) for item in items], total=total, offset=offset, limit=limit
+    )
+
+
+@router.get("/operations/summary", response_model=OperationalSummaryResponse)
+def get_operational_summary(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> OperationalSummaryResponse:
+    repository = OperationalRepository(session)
+    stale_after_seconds = request.app.state.settings.worker_stale_after_seconds
+    return OperationalSummaryResponse(
+        campaigns=repository.campaign_status_counts(),
+        queue=QueueStatusResponse(
+            **repository.queue_summary(stale_after_seconds=stale_after_seconds)
+        ),
+        activity=repository.activity_summary(),
+        findings=repository.finding_summary(),
+        regressions=repository.regression_summary(),
+    )
+
+
+@router.get("/operations/queue", response_model=QueueStatusResponse)
+def get_queue_status(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> QueueStatusResponse:
+    return QueueStatusResponse(
+        **OperationalRepository(session).queue_summary(
+            stale_after_seconds=request.app.state.settings.worker_stale_after_seconds
+        )
     )
 
 

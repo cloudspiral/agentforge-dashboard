@@ -2,6 +2,19 @@
 {% block title %}Regressions · AgentForge{% endblock %}
 {% block content %}
 <section class="page-heading"><p class="eyebrow">Versioned invariant replay</p><h1>Regression runs</h1><p>{{ total }} total run{{ '' if total == 1 else 's' }}.</p></section>
-<section class="panel"><div class="table-wrap"><table><thead><tr><th>Status</th><th>Target version</th><th>Trigger</th><th>Pass</th><th>Reproduced</th><th>Inconclusive/error</th></tr></thead><tbody>{% for item in runs %}<tr><td>{{ item.status }}</td><td class="mono">{{ item.target_version }}</td><td>{{ item.trigger }}</td><td>{{ item.passed_cases }}</td><td>{{ item.reproduced_cases }}</td><td>{{ item.inconclusive_cases + item.error_cases }}</td></tr>{% else %}<tr><td colspan="6">No regression runs yet.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel"><div class="table-wrap"><table>
+  <thead><tr><th>Status</th><th>Run</th><th>Target version</th><th>Trigger</th><th>Pass</th><th>Reproduced</th><th>Inconclusive/error</th><th>Duration</th><th>Cost</th></tr></thead>
+  <tbody>{% for item in runs %}<tr>
+    <td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td>
+    <td><a class="mono" href="/dashboard/regression-runs/{{ item.id }}">{{ item.id }}</a></td>
+    <td class="mono">{{ item.target_version }}</td>
+    <td>{{ item.trigger }}</td>
+    <td>{{ item.passed_cases }}</td>
+    <td>{{ item.reproduced_cases }}</td>
+    <td>{{ item.inconclusive_cases + item.error_cases }}</td>
+    <td>{% if item.started_at and item.completed_at %}{{ '%.1f' | format((item.completed_at - item.started_at).total_seconds()) }}s{% else %}—{% endif %}</td>
+    <td>${{ item.estimated_cost_usd }}</td>
+  </tr>{% else %}<tr><td colspan="9">No regression runs yet.</td></tr>{% endfor %}</tbody>
+</table></div></section>
+{% include "pagination.html" %}
 {% endblock %}
-
