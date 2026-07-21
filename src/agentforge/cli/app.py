@@ -25,6 +25,7 @@ from agentforge.evaluation import TaxonomyV1, load_seed_cases, load_taxonomy
 from agentforge.persistence import Database
 from agentforge.persistence.models import Campaign, RegressionRun
 from agentforge.persistence.repositories import CampaignRepository
+from agentforge.runners.playwright_runner import UISmokeResult, run_ui_smoke
 from agentforge.settings import Settings, get_settings
 from agentforge.target import (
     LoadedTargetProfile,
@@ -108,6 +109,19 @@ def _target_probe_message(result: TargetProbeResult) -> str:
         details.append(f"version {result.target_version}")
     details.append(f"{result.latency_ms:.1f} ms")
     return f"Target {result.target_alias} is reachable at {location} ({', '.join(details)})."
+
+
+def _target_ui_smoke_message(result: UISmokeResult) -> str:
+    if result.failed_step is not None:
+        return (
+            f"Local UI smoke failed at {result.failed_step.value}: "
+            f"{result.error_code} ({result.error_message})."
+        )
+    return (
+        f"Local UI smoke completed for {result.target_alias}: login succeeded, "
+        f"synthetic patient selected, and Clinical Co-Pilot is ready "
+        f"({result.total_latency_ms:.1f} ms)."
+    )
 
 
 @contextmanager
@@ -245,6 +259,66 @@ def target_probe(
     else:
         typer.echo(_target_probe_message(result), err=not result.reachable)
     if not result.reachable:
+        raise typer.Exit(code=1)
+
+
+@target_app.command("ui-smoke")
+def target_ui_smoke(
+    target: Annotated[
+        str,
+        typer.Option("--target", help="Local alias from the checked-in target profile."),
+    ] = "local",
+    headed: Annotated[
+        bool,
+        typer.Option("--headed", help="Show Chromium for local selector debugging."),
+    ] = False,
+    timeout_seconds: Annotated[
+        float | None,
+        typer.Option(
+            "--timeout-seconds",
+            min=0.1,
+            max=120.0,
+            help="Override the bounded browser navigation timeout.",
+        ),
+    ] = None,
+    failure_screenshot: Annotated[
+        bool,
+        typer.Option(
+            "--failure-screenshot",
+            help="Capture one sanitized artifact only if the smoke flow fails.",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the typed result as compact JSON."),
+    ] = False,
+) -> None:
+    """Verify local authenticated UI readiness without chat or upload actions."""
+
+    settings = get_settings()
+    try:
+        profile = load_target_profile(_project_path(settings.target_profile_path))
+    except (OSError, ValueError):
+        _abort("target profile could not be loaded")
+    result = asyncio.run(
+        run_ui_smoke(
+            loaded_profile=profile,
+            settings=settings,
+            target_alias=target,
+            repository_root=PROJECT_ROOT,
+            artifacts_dir=_project_path(settings.artifacts_dir),
+            timeout_seconds=(timeout_seconds or settings.target_ui_smoke_timeout_seconds),
+            headless=False if headed else settings.target_ui_smoke_headless,
+            screenshot_on_failure=(
+                failure_screenshot or settings.target_ui_smoke_screenshot_on_failure
+            ),
+        )
+    )
+    if json_output:
+        _emit(result.model_dump(mode="json"))
+    else:
+        typer.echo(_target_ui_smoke_message(result), err=result.failed_step is not None)
+    if result.failed_step is not None:
         raise typer.Exit(code=1)
 
 

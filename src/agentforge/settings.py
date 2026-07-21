@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     target_reset_token: SecretStr | None = None
     target_verify_tls: bool = True
     target_probe_timeout_seconds: float = Field(default=3.0, ge=0.1, le=30.0)
+    target_ui_smoke_timeout_seconds: float = Field(default=30.0, ge=0.1, le=120.0)
+    target_ui_smoke_headless: bool = True
+    target_ui_smoke_screenshot_on_failure: bool = False
 
     worker_enabled: bool = True
     worker_poll_seconds: float = Field(default=2, ge=0.1, le=60)
