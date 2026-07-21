@@ -22,3 +22,32 @@ evals/results/*
 !evals/results/.gitkeep
 reports/generated/*
 !reports/generated/.gitkeep
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+
+# Local OS/editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Browser credentials and generated traces
+playwright/.auth/
+**/storage-state*.json
+**/auth-state*.json
+artifacts/browser-traces/*
+artifacts/screenshots/*
