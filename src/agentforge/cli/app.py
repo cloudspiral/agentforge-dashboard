@@ -26,7 +26,12 @@ from agentforge.persistence import Database
 from agentforge.persistence.models import Campaign, RegressionRun
 from agentforge.persistence.repositories import CampaignRepository
 from agentforge.settings import Settings, get_settings
-from agentforge.target import LoadedTargetProfile, load_target_profile
+from agentforge.target import (
+    LoadedTargetProfile,
+    TargetProbeResult,
+    load_target_profile,
+    probe_target,
+)
 from agentforge.worker import serve_worker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -65,6 +70,7 @@ eval_app = typer.Typer(help="Queue versioned defensive seed evaluations.", no_ar
 reports_app = typer.Typer(help="Export controller-approved finding reports.", no_args_is_help=True)
 contracts_app = typer.Typer(help="Export versioned public JSON schemas.", no_args_is_help=True)
 worker_app = typer.Typer(help="Run the durable campaign queue worker.", no_args_is_help=True)
+target_app = typer.Typer(help="Inspect approved target connectivity.", no_args_is_help=True)
 
 app.add_typer(db_app, name="db")
 app.add_typer(campaign_app, name="campaign")
@@ -73,6 +79,7 @@ app.add_typer(eval_app, name="eval")
 app.add_typer(reports_app, name="reports")
 app.add_typer(contracts_app, name="contracts")
 app.add_typer(worker_app, name="worker")
+app.add_typer(target_app, name="target")
 
 
 def _project_path(path: Path | str) -> Path:
@@ -87,6 +94,20 @@ def _emit(value: Any) -> None:
 def _abort(message: str) -> None:
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(code=1)
+
+
+def _target_probe_message(result: TargetProbeResult) -> str:
+    location = result.sanitized_base_url or "configured host unavailable"
+    if not result.reachable:
+        return (
+            f"Target {result.target_alias} is unavailable at {location}: "
+            f"{result.error_code} ({result.error_message})."
+        )
+    details = [f"HTTP {result.http_status}"]
+    if result.target_version:
+        details.append(f"version {result.target_version}")
+    details.append(f"{result.latency_ms:.1f} ms")
+    return f"Target {result.target_alias} is reachable at {location} ({', '.join(details)})."
 
 
 @contextmanager
@@ -182,6 +203,49 @@ def _contract_exporter() -> Any:
     module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(module)
     return module.export_schemas
+
+
+@target_app.command("probe")
+def target_probe(
+    target: Annotated[
+        str,
+        typer.Option("--target", help="Alias from the checked-in target profile."),
+    ] = "local",
+    timeout_seconds: Annotated[
+        float | None,
+        typer.Option(
+            "--timeout-seconds",
+            min=0.1,
+            max=30.0,
+            help="Override the short target-probe timeout.",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the typed result as compact JSON."),
+    ] = False,
+) -> None:
+    """Make one credential-free read-only request to the approved health endpoint."""
+
+    settings = get_settings()
+    try:
+        profile = load_target_profile(_project_path(settings.target_profile_path))
+    except (OSError, ValueError):
+        _abort("target profile could not be loaded")
+    result = asyncio.run(
+        probe_target(
+            loaded_profile=profile,
+            settings=settings,
+            target_alias=target,
+            timeout_seconds=timeout_seconds or settings.target_probe_timeout_seconds,
+        )
+    )
+    if json_output:
+        _emit(result.model_dump(mode="json"))
+    else:
+        typer.echo(_target_probe_message(result), err=not result.reachable)
+    if not result.reachable:
+        raise typer.Exit(code=1)
 
 
 @db_app.command("upgrade")

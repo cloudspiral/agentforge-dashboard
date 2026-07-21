@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     target_reset_url: str | None = None
     target_reset_token: SecretStr | None = None
     target_verify_tls: bool = True
+    target_probe_timeout_seconds: float = Field(default=3.0, ge=0.1, le=30.0)
 
     worker_enabled: bool = True
     worker_poll_seconds: float = Field(default=2, ge=0.1, le=60)
