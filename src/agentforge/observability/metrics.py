@@ -249,9 +249,7 @@ def render_persistence_metrics(snapshot: dict[str, Any]) -> bytes:
     )
 
     for row in snapshot["campaign_counts"]:
-        campaigns.labels(status=row["status"], campaign_type=row["campaign_type"]).set(
-            row["count"]
-        )
+        campaigns.labels(status=row["status"], campaign_type=row["campaign_type"]).set(row["count"])
     queue = snapshot["queue"]
     queue_depth.set(queue["depth"])
     running.set(queue["running"])

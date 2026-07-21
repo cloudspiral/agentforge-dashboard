@@ -12,8 +12,14 @@ from agentforge.contracts.v1.actions import (
 from agentforge.contracts.v1.campaign import ProposedAttackV1
 from agentforge.contracts.v1.common import utc_now
 from agentforge.contracts.v1.evidence import AttackEvidenceV1
+from agentforge.orchestration.execution_gate import ValidatedAttackV1
 
-from .base import EvidenceRecorder, RunnerActionRejected, TargetExecutionContext
+from .base import (
+    EvidenceRecorder,
+    RunnerActionRejected,
+    TargetExecutionContext,
+    require_validated_attack,
+)
 from .http_runner import HttpAttackRunner
 from .playwright_runner import PlaywrightAttackRunner
 
@@ -32,9 +38,10 @@ class CompositeAttackRunner:
 
     async def execute(
         self,
-        attack: ProposedAttackV1,
+        attack: ValidatedAttackV1,
         context: TargetExecutionContext,
     ) -> AttackEvidenceV1:
+        proposal = require_validated_attack(attack, context)
         ui_actions = any(
             isinstance(
                 action,
@@ -45,15 +52,15 @@ class CompositeAttackRunner:
                     UploadApprovedFixtureActionV1,
                 ),
             )
-            for action in attack.ordered_actions
+            for action in proposal.ordered_actions
         )
         api_actions = [
             action
-            for action in attack.ordered_actions
+            for action in proposal.ordered_actions
             if isinstance(action, InvokeApprovedApiRequestActionV1)
         ]
         if ui_actions and api_actions:
-            return self._rejected_mixed_surface(attack, context)
+            return self._rejected_mixed_surface(proposal, context)
         if api_actions:
             return await self.http_runner.execute(attack, context)
         return await self.playwright_runner.execute(attack, context)

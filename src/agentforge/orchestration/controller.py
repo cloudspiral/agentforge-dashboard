@@ -13,7 +13,7 @@ import re
 import uuid
 from collections import Counter
 from contextlib import nullcontext
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
@@ -25,16 +25,21 @@ from agentforge.agents.base import AgentInvocationResult
 from agentforge.contracts.v1 import (
     AttackEvidenceV1,
     CampaignObjectiveV1,
+    ConfirmedFindingSnapshotV1,
+    DocumentationRequestV1,
+    EstimatedCostClassV1,
     EvidenceReferenceKindV1,
     EvidenceReferenceV1,
     ExploitabilityV1,
+    FindingStatusV1,
     JudgeRecommendedActionV1,
     JudgeVerdictKindV1,
     JudgeVerdictV1,
+    MinimalEvidencePackageV1,
     ProposedAttackV1,
     SeverityV1,
-    utc_now,
 )
+from agentforge.contracts.v1.common import utc_now
 from agentforge.evaluation import (
     JudgeRubricV1,
     SeedCaseV1,
@@ -42,6 +47,7 @@ from agentforge.evaluation import (
 )
 from agentforge.evaluation.deterministic import (
     DeterministicEvaluationV1,
+    evaluate_deterministically,
 )
 from agentforge.evaluation.judge_service import reconcile_judge_verdict
 from agentforge.observability import AgentForgeMetrics, LangfuseTelemetry, metrics
@@ -52,27 +58,55 @@ from agentforge.orchestration.budgets import (
     BudgetUsageV1,
     PricingConfigV1,
     TokenUsageV1,
+    load_pricing_config,
+    reconcile_actual_usage,
+    release_reservation,
+    reserve_worst_case,
 )
 from agentforge.orchestration.execution_gate import (
     CampaignExecutionContextV1,
     GateLimitsV1,
+    GateRejectionV1,
+    ValidatedAttackV1,
+    validate_attack,
 )
 from agentforge.orchestration.objectives import (
+    build_objective,
+    build_security_invariants,
     canonical_hash,
+    choose_seed_case,
+    deterministic_shortlist,
     endpoint_bindings,
+    proposal_from_seed,
+    validate_objective_choice,
 )
+from agentforge.orchestration.stopping import CampaignStopStateV1, evaluate_stopping
 from agentforge.orchestration.worker import CampaignProcessResult
 from agentforge.persistence import Database
 from agentforge.persistence.models import (
     AgentRun,
     AttackAttempt,
     Campaign,
+    Finding,
     JudgeVerdict,
+    RegressionCase,
+    RegressionRun,
     TargetVersion,
 )
+from agentforge.persistence.repositories import (
+    FindingRepository,
+    RegressionCaseRepository,
+    RegressionRunRepository,
+    ReportRepository,
+)
+from agentforge.regression import RegressionCaseV1, build_regression_case, evaluate_regression
+from agentforge.reports import export_stored_report, render_vulnerability_report
+from agentforge.runners import CompositeAttackRunner
+from agentforge.runners.base import TargetExecutionContext
 from agentforge.security.redaction import redact
 from agentforge.settings import Settings
 from agentforge.target import LoadedTargetProfile
+from agentforge.target.auth import credentials_from_settings
 from agentforge.target.profile import ResolvedTargetAlias
 from agentforge.target.version import DiscoveredTargetVersion, discover_target_version
 
@@ -279,10 +313,40 @@ class CampaignController:
             else nullcontext(None)
         )
         with scope as observation:
-            if campaign.campaign_type == "regression":
-                result = await self._process_regression(campaign_id, target_alias)
-            else:
-                result = await self._process_discovery(campaign_id, target_alias)
+            try:
+                if campaign.campaign_type == "regression":
+                    result = await self._process_regression(campaign_id, target_alias)
+                else:
+                    result = await self._process_discovery(campaign_id, target_alias)
+            except Exception as exc:
+                with self.database.session_factory() as failure_session:
+                    unfinished = list(
+                        failure_session.scalars(
+                            select(AttackAttempt)
+                            .where(AttackAttempt.campaign_id == campaign_id)
+                            .where(
+                                AttackAttempt.status.in_(
+                                    {"proposed", "executing", "evaluating", "documenting"}
+                                )
+                            )
+                        )
+                    )
+                    for attempt in unfinished:
+                        attempt.status = "error"
+                        attempt.completed_at = utc_now()
+                    failure_session.commit()
+                result = CampaignProcessResult(
+                    status="failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error=redact(
+                        {
+                            "code": "controller_workflow_failed",
+                            "type": type(exc).__name__,
+                            "message": "campaign workflow failed before a terminal result",
+                            "retryable": True,
+                        }
+                    ),
+                )
             if observation is not None:
                 observation.update(
                     output={"status": result.status, "actual_cost_usd": str(result.actual_cost_usd)}
@@ -383,6 +447,8 @@ class CampaignController:
                 model=model,
                 calls=1,
                 input_tokens=_MAX_INPUT_PER_CALL,
+                cached_input_tokens=0,
+                cache_write_tokens=0,
                 output_tokens=output_tokens,
             )
             for model, output_tokens in roles
@@ -431,6 +497,18 @@ class CampaignController:
                 role=result.role, model=result.model
             ).inc(result.estimated_cost_usd)
 
+    @staticmethod
+    def _update_attempt_usage(
+        attempt: AttackAttempt,
+        results: list[AgentInvocationResult[Any]],
+    ) -> None:
+        attempt.input_tokens = sum(result.usage.tokens.input_tokens for result in results)
+        attempt.output_tokens = sum(result.usage.tokens.output_tokens for result in results)
+        attempt.estimated_cost_usd = sum(
+            (_decimal(result.estimated_cost_usd) for result in results),
+            start=Decimal("0"),
+        )
+
     def _new_attempt(
         self,
         *,
@@ -469,6 +547,9 @@ class CampaignController:
         reservation: Any,
         deadline: datetime,
         sequence_counts: Counter[str],
+        patient_alias: str = "patient_a",
+        identity_alias: str = "physician_test",
+        expected_role: str = "physician",
     ) -> CampaignExecutionContextV1:
         return CampaignExecutionContextV1(
             campaign_id=str(campaign.id),
@@ -476,9 +557,9 @@ class CampaignController:
             selected_category=objective.selected_category,
             selected_subcategory=objective.selected_subcategory,
             allowed_category_subcategories=self.allowed_categories,
-            current_patient_alias="patient_a",
-            test_identity_alias="physician_test",
-            test_role="physician",
+            current_patient_alias=patient_alias,
+            test_identity_alias=identity_alias,
+            test_role=expected_role,
             endpoint_bindings=endpoint_bindings(self.loaded_profile.profile),
             chat_endpoint_id="copilot_chat_proxy",
             upload_surface_id="clinical_document_upload",
@@ -634,3 +715,907 @@ class CampaignController:
                 ),
             )
         )
+
+    def _execution_context(
+        self,
+        *,
+        campaign: Campaign,
+        attempt_id: uuid.UUID,
+        target_alias: ResolvedTargetAlias,
+        target_version: str,
+        validated: ValidatedAttackV1,
+    ) -> TargetExecutionContext:
+        fixtures = {
+            fixture.fixture_id: __import__(
+                "agentforge.target.fixtures", fromlist=["ApprovedFixtureAuthorization"]
+            ).ApprovedFixtureAuthorization(
+                fixture_id=fixture.fixture_id,
+                repository_relative_path=fixture.repository_relative_path,
+                document_type=fixture.document_type,
+                media_type=fixture.media_type,
+                size_bytes=fixture.size_bytes,
+                pages=fixture.pages,
+                sha256=fixture.sha256,
+            )
+            for fixture in validated.authorized_fixtures
+        }
+        credentials = credentials_from_settings(
+            profile=self.loaded_profile.profile,
+            settings=self.settings,
+            identity_alias="physician_test",
+            expected_role="physician",
+        )
+        artifacts = self.settings.artifacts_dir
+        artifacts_dir = artifacts if artifacts.is_absolute() else self.repository_root / artifacts
+        return TargetExecutionContext(
+            target_id=self.loaded_profile.profile.name,
+            campaign_id=str(campaign.id),
+            attempt_id=str(attempt_id),
+            target_version=target_version,
+            selected_patient_alias=validated.selected_patient_alias,
+            loaded_profile=self.loaded_profile,
+            target_alias=target_alias,
+            repository_root=self.repository_root,
+            artifacts_dir=artifacts_dir,
+            credentials=credentials,
+            max_upload_bytes=self.settings.max_upload_bytes,
+            approved_fixtures=fixtures,
+        )
+
+    def _reconcile_budget(
+        self,
+        *,
+        campaign: Campaign,
+        budget_state: BudgetStateV1,
+        reservation: Any,
+        results: list[AgentInvocationResult[Any]],
+    ) -> Decimal:
+        if results:
+            reconciliation = reconcile_actual_usage(
+                budget_state,
+                reservation,
+                [_usage_from_result(result) for result in results],
+                self.pricing,
+            )
+            campaign.actual_cost_usd += reconciliation.actual_total.cost_usd
+        else:
+            release_reservation(budget_state, reservation)
+        return campaign.actual_cost_usd
+
+    @staticmethod
+    def _evidence_reference(evidence: AttackEvidenceV1) -> EvidenceReferenceV1:
+        return EvidenceReferenceV1(
+            reference_id=f"evidence-{evidence.evidence_hash[:16]}",
+            kind=EvidenceReferenceKindV1.OTHER,
+            artifact_path=None,
+            description="Frozen sanitized evidence package persisted for this attempt.",
+        )
+
+    async def _process_discovery(
+        self,
+        campaign_id: uuid.UUID,
+        target_alias: ResolvedTargetAlias,
+    ) -> CampaignProcessResult:
+        attempt_id = uuid.uuid4()
+        agent_results: list[AgentInvocationResult[Any]] = []
+        with self.database.session_factory() as session:
+            campaign = session.scalar(
+                select(Campaign).where(Campaign.id == campaign_id).with_for_update()
+            )
+            if campaign is None:
+                return CampaignProcessResult(
+                    status="failed",
+                    sanitized_error={"code": "campaign_not_found", "message": "campaign not found"},
+                )
+            deadline = campaign.started_at + timedelta(seconds=campaign.max_duration_seconds)
+            budget_state = self._initial_budget_state(session, campaign)
+            stop = evaluate_stopping(
+                CampaignStopStateV1(
+                    attempts_completed=campaign.actual_attempts,
+                    max_attempts=campaign.max_attempts,
+                    campaign_started_at=campaign.started_at,
+                    evaluated_at=utc_now(),
+                    max_duration_seconds=campaign.max_duration_seconds,
+                    consecutive_no_signal_attempts=0,
+                    max_consecutive_no_signal_attempts=campaign.no_signal_limit,
+                    current_lineage_mutations=0,
+                    max_mutations_per_lineage=campaign.max_mutations,
+                    cancellation_requested=campaign.cancellation_requested,
+                    cleanup_failed=False,
+                    budget_state=budget_state,
+                )
+            )
+            if stop.stop_campaign:
+                return CampaignProcessResult(
+                    status="cancelled" if campaign.cancellation_requested else "failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error={
+                        "code": "campaign_stopped",
+                        "message": "campaign limits prevent another attempt",
+                        "reasons": [reason.value for reason in stop.reasons],
+                    },
+                )
+
+            reservation_result = reserve_worst_case(
+                budget_state,
+                campaign_id=str(campaign.id),
+                reservation_id=f"discovery-{attempt_id}",
+                worst_case_by_model=self._worst_case_usage(),
+                pricing=self.pricing,
+                reserved_at=utc_now(),
+            )
+            if not reservation_result.approved or reservation_result.reservation is None:
+                return CampaignProcessResult(
+                    status="failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error={
+                        "code": "budget_reservation_rejected",
+                        "message": "campaign budget could not reserve bounded role usage",
+                        "breaches": [item.value for item in reservation_result.breaches],
+                    },
+                )
+            budget_state = reservation_result.state
+            reservation = reservation_result.reservation
+
+            coverage = {
+                (category, subcategory): count
+                for category, subcategory, count in session.execute(
+                    select(
+                        AttackAttempt.category,
+                        AttackAttempt.subcategory,
+                        func.count(AttackAttempt.id),
+                    ).group_by(AttackAttempt.category, AttackAttempt.subcategory)
+                )
+            }
+            shortlist = deterministic_shortlist(
+                self.taxonomy,
+                category_scope=campaign.category_scope,
+                subcategory_scope=campaign.subcategory_scope,
+                coverage_counts=coverage,
+            )
+            if not shortlist:
+                return CampaignProcessResult(
+                    status="failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error={
+                        "code": "empty_objective_scope",
+                        "message": "campaign scope does not match the loaded taxonomy",
+                    },
+                )
+            category, subcategory = shortlist[0]
+            fallback_objective = build_objective(
+                campaign_id=str(campaign.id),
+                campaign_type=campaign.campaign_type,
+                target_version=campaign.target_version,
+                taxonomy=self.taxonomy,
+                category_id=category,
+                subcategory_id=subcategory,
+                remaining_cost_usd=campaign.max_cost_usd - campaign.actual_cost_usd,
+                remaining_attempts=campaign.max_attempts - campaign.actual_attempts,
+                remaining_duration_seconds=max(0, int((deadline - utc_now()).total_seconds())),
+                max_mutations=campaign.max_mutations,
+                no_signal_limit=campaign.no_signal_limit,
+            )
+            orchestrator_result = await self.orchestrator.invoke(
+                {
+                    "deterministic_shortlist": shortlist,
+                    "authoritative_objective": fallback_objective.model_dump(mode="json"),
+                },
+                campaign_id=str(campaign.id),
+                attempt_id=str(attempt_id),
+                category=category,
+                target_version=campaign.target_version,
+            )
+            agent_results.append(orchestrator_result)
+            objective = fallback_objective
+            if orchestrator_result.output is not None and validate_objective_choice(
+                orchestrator_result.output,
+                campaign_id=str(campaign.id),
+                target_version=campaign.target_version,
+                shortlist=shortlist,
+            ):
+                objective = orchestrator_result.output
+
+            seed = choose_seed_case(
+                self.seeds,
+                category=objective.selected_category,
+                subcategory=objective.selected_subcategory,
+                attempt_index=campaign.actual_attempts,
+            )
+            if seed is None:
+                self._persist_agent_runs(
+                    session,
+                    campaign_id=campaign.id,
+                    attempt_id=None,
+                    finding_id=None,
+                    results=agent_results,
+                )
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return CampaignProcessResult(
+                    status="failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error={
+                        "code": "no_approved_fixture_proposal",
+                        "message": "no approved deterministic proposal matches the objective",
+                    },
+                )
+            fallback_proposal = proposal_from_seed(
+                seed,
+                campaign_id=str(campaign.id),
+                taxonomy=self.taxonomy,
+                profile=self.loaded_profile.profile,
+            )
+            generator_result = await self.attack_generator.invoke(
+                {
+                    "objective": objective.model_dump(mode="json"),
+                    "authoritative_fallback": fallback_proposal.model_dump(mode="json"),
+                },
+                campaign_id=str(campaign.id),
+                attempt_id=str(attempt_id),
+                category=objective.selected_category,
+                target_version=campaign.target_version,
+            )
+            agent_results.append(generator_result)
+            proposal = generator_result.output or fallback_proposal
+            if (
+                proposal.category != objective.selected_category
+                or proposal.subcategory != objective.selected_subcategory
+            ):
+                proposal = fallback_proposal
+
+            attempt = self._new_attempt(
+                attempt_id=attempt_id,
+                campaign=campaign,
+                objective=objective,
+                proposal=proposal,
+                prompt_version=generator_result.prompt_version,
+            )
+            session.add(attempt)
+            session.flush()
+            self._persist_agent_runs(
+                session,
+                campaign_id=campaign.id,
+                attempt_id=attempt.id,
+                finding_id=None,
+                results=agent_results,
+            )
+            self._update_attempt_usage(attempt, agent_results)
+            session.commit()
+
+            gate_context = self._gate_context(
+                campaign=campaign,
+                objective=objective,
+                budget_state=budget_state,
+                reservation=reservation,
+                deadline=deadline,
+                sequence_counts=Counter(),
+            )
+            validated = validate_attack(
+                proposal,
+                self.loaded_profile.profile,
+                gate_context,
+                now=utc_now(),
+            )
+            if isinstance(validated, GateRejectionV1):
+                attempt.status = "rejected"
+                attempt.completed_at = utc_now()
+                attempt.evidence_summary = {"gate_rejection": validated.model_dump(mode="json")}
+                campaign.actual_attempts += 1
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return CampaignProcessResult(
+                    status="failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error={
+                        "code": "execution_gate_rejected",
+                        "message": "the deterministic execution gate rejected the proposal",
+                        "gate_code": validated.code.value,
+                        "retryable": validated.retryable_after_revision,
+                    },
+                )
+
+            attempt.status = "executing"
+            session.commit()
+            session.refresh(campaign)
+            if campaign.cancellation_requested or utc_now() >= deadline:
+                attempt.status = "cancelled" if campaign.cancellation_requested else "error"
+                attempt.completed_at = utc_now()
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return CampaignProcessResult(
+                    status="cancelled" if campaign.cancellation_requested else "failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error={
+                        "code": (
+                            "cancellation_requested"
+                            if campaign.cancellation_requested
+                            else "campaign_deadline_exceeded"
+                        ),
+                        "message": "campaign stopped before target execution",
+                    },
+                )
+            execution_context = self._execution_context(
+                campaign=campaign,
+                attempt_id=attempt.id,
+                target_alias=target_alias,
+                target_version=campaign.target_version,
+                validated=validated,
+            )
+            evidence = await self.runner.execute(validated, execution_context)
+            if (
+                evidence.campaign_id != str(campaign.id)
+                or evidence.attempt_id != str(attempt.id)
+                or evidence.target_version != campaign.target_version
+            ):
+                raise ValueError("runner evidence identifiers do not match the claimed attempt")
+            invariants = build_security_invariants(self.loaded_profile.profile)
+            deterministic = evaluate_deterministically(evidence, invariants)
+            evidence = _rehash_evidence(
+                evidence,
+                assertion_results=[
+                    item.model_dump(mode="python") for item in deterministic.assertion_results
+                ],
+            )
+            deterministic = evaluate_deterministically(evidence, invariants)
+            attempt.executed_sequence = {
+                "actions": [
+                    item.model_dump(mode="json") for item in evidence.executed_action_sequence
+                ]
+            }
+            attempt.evidence_payload = evidence.model_dump(mode="json")
+            attempt.evidence_summary = deterministic.model_dump(mode="json")
+            attempt.evidence_hash = evidence.evidence_hash
+            attempt.latency_ms = round(evidence.total_latency_ms)
+            attempt.langfuse_trace_id = evidence.langfuse_trace_id
+            attempt.status = "evaluating"
+            session.commit()
+
+            verdict, judge_result = await self._judge_evidence(
+                campaign=campaign,
+                attempt_id=attempt.id,
+                objective=objective,
+                proposal=proposal,
+                evidence=evidence,
+                deterministic=deterministic,
+                invariants=invariants,
+            )
+            agent_results.append(judge_result)
+            self._persist_verdict(session, attempt_id=attempt.id, verdict=verdict)
+            self._persist_agent_runs(
+                session,
+                campaign_id=campaign.id,
+                attempt_id=attempt.id,
+                finding_id=None,
+                results=[judge_result],
+            )
+            self._update_attempt_usage(attempt, agent_results)
+            attempt.completed_at = utc_now()
+            campaign.actual_attempts += 1
+
+            if not deterministic.proven_violation_ids:
+                attempt.status = "secure" if deterministic.secure_pass_eligible else "inconclusive"
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return CampaignProcessResult(
+                    status="completed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                )
+
+            fingerprint = _finding_fingerprint(proposal, deterministic)
+            finding, _ = FindingRepository(session).upsert_confirmed(
+                fingerprint=fingerprint,
+                source_attempt_id=attempt.id,
+                vulnerability_id=f"AF-{fingerprint[:20].upper()}",
+                title=f"Synthetic {proposal.category} invariant violation",
+                category=proposal.category,
+                subcategory=proposal.subcategory,
+                severity=verdict.severity.value,
+                description=verdict.observed_behavior,
+                clinical_impact=(
+                    "A confirmed synthetic security invariant violation may affect clinical "
+                    "decision-support isolation if reproduced outside this fixture."
+                ),
+                expected_behavior=verdict.expected_behavior,
+                observed_behavior=verdict.observed_behavior,
+                target_version=campaign.target_version,
+            )
+            attempt.status = "documenting"
+            session.commit()
+
+            evidence_reference = self._evidence_reference(evidence)
+            snapshot = ConfirmedFindingSnapshotV1(
+                finding_id=str(finding.id),
+                vulnerability_id=finding.vulnerability_id,
+                source_attempt_id=str(attempt.id),
+                deduplication_fingerprint=finding.fingerprint,
+                title=finding.title,
+                severity=verdict.severity,
+                status=FindingStatusV1(finding.status),
+                category=finding.category,
+                subcategory=finding.subcategory,
+                owasp_mappings=objective.owasp_mappings,
+                description=finding.description,
+                clinical_impact=finding.clinical_impact,
+                observed_behavior=finding.observed_behavior,
+                expected_behavior=finding.expected_behavior,
+                first_seen_target_version=finding.first_seen_target_version,
+                last_seen_target_version=finding.last_seen_target_version,
+                frozen_at=utc_now(),
+            )
+            documentation_request = DocumentationRequestV1(
+                schema_version="v1",
+                confirmed_finding_snapshot=snapshot,
+                minimal_evidence_package=MinimalEvidencePackageV1(
+                    evidence_hash=evidence.evidence_hash,
+                    target_version=evidence.target_version,
+                    exact_action_sequence=[
+                        item.action for item in evidence.executed_action_sequence
+                    ],
+                    transcript_excerpts=evidence.transcript[:30],
+                    deterministic_assertion_results=evidence.deterministic_assertion_results,
+                    evidence_references=[evidence_reference],
+                ),
+                reproduction_result_count=1,
+                target_versions=[evidence.target_version],
+                existing_validation_history=[],
+                required_report_status=snapshot.status,
+            )
+            try:
+                documentation_result = await self.documentation.invoke(
+                    documentation_request,
+                    campaign_id=str(campaign.id),
+                    attempt_id=str(attempt.id),
+                    category=proposal.category,
+                    target_version=campaign.target_version,
+                )
+            except Exception as exc:
+                attempt.status = "documentation_failed"
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return CampaignProcessResult(
+                    status="failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error=redact(
+                        {
+                            "code": "documentation_failed",
+                            "type": type(exc).__name__,
+                            "message": "documentation role failed before producing a report",
+                            "retryable": True,
+                        }
+                    ),
+                )
+            agent_results.append(documentation_result)
+            self._persist_agent_runs(
+                session,
+                campaign_id=campaign.id,
+                attempt_id=attempt.id,
+                finding_id=finding.id,
+                results=[documentation_result],
+            )
+            self._update_attempt_usage(attempt, agent_results)
+            if documentation_result.output is None:
+                attempt.status = "documentation_failed"
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return CampaignProcessResult(
+                    status="failed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                    sanitized_error={
+                        "code": "documentation_failed",
+                        "message": "documentation role returned a typed failure",
+                        "retryable": True,
+                    },
+                )
+
+            report_output = documentation_result.output
+            if (
+                report_output.vulnerability_id != finding.vulnerability_id
+                or report_output.category != finding.category
+                or report_output.subcategory != finding.subcategory
+            ):
+                session.rollback()
+                raise ValueError("documentation report does not match the frozen finding")
+            next_case_version = (
+                session.scalar(
+                    select(func.coalesce(func.max(RegressionCase.case_version), 0)).where(
+                        RegressionCase.finding_id == finding.id
+                    )
+                )
+                or 0
+            ) + 1
+            regression_case = build_regression_case(
+                finding_id=str(finding.id),
+                report=report_output,
+                source_evidence=evidence,
+                validated_attack=validated,
+                invariants=invariants,
+                case_version=next_case_version,
+                created_at=utc_now(),
+            )
+            report_output = report_output.model_copy(
+                update={"regression_case_id": regression_case.case_id}
+            )
+            markdown = render_vulnerability_report(
+                report_output,
+                _project_path(Path("config/report-template.md")),
+            )
+            stored_report = ReportRepository(session).create_versioned(
+                finding_id=finding.id,
+                structured_report=report_output.model_dump(mode="json"),
+                markdown_body=markdown,
+                validation_summary=deterministic.model_dump(mode="json"),
+                prompt_version=documentation_result.prompt_version,
+            )
+            stored_case = RegressionCaseRepository(session).create_versioned(
+                finding_id=finding.id,
+                case_payload=regression_case.model_dump(mode="python"),
+            )
+            finding.current_regression_case_id = stored_case.id
+            report_path = export_stored_report(
+                stored_report,
+                vulnerability_id=finding.vulnerability_id,
+                reports_dir=self.settings.reports_dir,
+            )
+            stored_report.markdown_path = str(report_path)
+            attempt.status = "confirmed"
+            self._reconcile_budget(
+                campaign=campaign,
+                budget_state=budget_state,
+                reservation=reservation,
+                results=agent_results,
+            )
+            session.commit()
+            return CampaignProcessResult(
+                status="completed",
+                actual_cost_usd=campaign.actual_cost_usd,
+            )
+
+    @staticmethod
+    def _regression_case(row: RegressionCase, finding: Finding) -> RegressionCaseV1:
+        return RegressionCaseV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "case_id": row.case_id,
+                    "finding_id": str(row.finding_id),
+                    "vulnerability_id": finding.vulnerability_id,
+                    "case_version": row.case_version,
+                    "active": row.active,
+                    "category": row.category,
+                    "subcategory": row.subcategory,
+                    "owasp_mappings": row.owasp_mappings,
+                    "setup": row.setup,
+                    "exact_ordered_sequence": row.ordered_sequence,
+                    "expected_security_invariants": row.expected_security_invariants,
+                    "deterministic_check_ids": row.deterministic_checks,
+                    "judge_required": row.judge_required,
+                    "target_requirements": row.target_requirements,
+                    "created_from_evidence_hash": row.created_from_evidence_hash,
+                    "sequence_hash": row.sequence_hash,
+                    "fingerprint": row.fingerprint,
+                    "created_at": row.created_at,
+                },
+                default=str,
+            )
+        )
+
+    async def _process_regression(
+        self,
+        campaign_id: uuid.UUID,
+        target_alias: ResolvedTargetAlias,
+    ) -> CampaignProcessResult:
+        with self.database.session_factory() as session:
+            campaign = session.scalar(
+                select(Campaign).where(Campaign.id == campaign_id).with_for_update()
+            )
+            if campaign is None:
+                return CampaignProcessResult(
+                    status="failed",
+                    sanitized_error={"code": "campaign_not_found", "message": "campaign not found"},
+                )
+            try:
+                run = RegressionRunRepository(session).for_campaign(campaign.id)
+            except LookupError:
+                return CampaignProcessResult(
+                    status="failed",
+                    sanitized_error={
+                        "code": "regression_run_not_found",
+                        "message": "regression campaign has no associated run",
+                    },
+                )
+            rows = RegressionCaseRepository(session).active()
+            run.status = "running"
+            run.started_at = utc_now()
+            run.total_cases = len(rows)
+            session.commit()
+            outcomes: Counter[str] = Counter()
+            total_cost = Decimal("0")
+
+            for row in rows:
+                finding = session.get(Finding, row.finding_id)
+                if finding is None:
+                    outcomes["error"] += 1
+                    continue
+                try:
+                    case = self._regression_case(row, finding)
+                    if (
+                        case.target_requirements.target_profile_version
+                        != self.loaded_profile.profile.profile_version
+                    ):
+                        raise ValueError("saved case target profile version is no longer active")
+                    attempt_id = uuid.uuid4()
+                    proposal = ProposedAttackV1(
+                        schema_version="v1",
+                        proposal_id=f"replay-{case.case_id}",
+                        category=case.category,
+                        subcategory=case.subcategory,
+                        attack_family_id=case.case_id,
+                        lineage_id=case.case_id,
+                        novelty_rationale="Exact replay of a saved versioned regression case.",
+                        prerequisites=["Approved synthetic regression setup"],
+                        ordered_actions=case.exact_ordered_sequence,
+                        expected_exploit_signals=["Saved invariant violation is observed"],
+                        expected_safe_behavior=["Every saved invariant remains satisfied"],
+                        stop_conditions=["Stop after the exact bounded replay"],
+                        risk_flags=[],
+                        estimated_turns=sum(
+                            action.action_type.value
+                            in {
+                                "send_chat_message",
+                                "upload_approved_fixture",
+                                "invoke_approved_api_request",
+                            }
+                            for action in case.exact_ordered_sequence
+                        ),
+                        estimated_cost_class=EstimatedCostClassV1.LOW,
+                    )
+                    objective = build_objective(
+                        campaign_id=str(campaign.id),
+                        campaign_type="regression",
+                        target_version=campaign.target_version,
+                        taxonomy=self.taxonomy,
+                        category_id=case.category,
+                        subcategory_id=case.subcategory,
+                        remaining_cost_usd=campaign.max_cost_usd - total_cost,
+                        remaining_attempts=max(0, len(rows) - sum(outcomes.values())),
+                        remaining_duration_seconds=campaign.max_duration_seconds,
+                        max_mutations=0,
+                        no_signal_limit=campaign.no_signal_limit,
+                    )
+                    budget_state = self._initial_budget_state(session, campaign)
+                    reservation_result = reserve_worst_case(
+                        budget_state,
+                        campaign_id=str(campaign.id),
+                        reservation_id=f"regression-{attempt_id}",
+                        worst_case_by_model=self._worst_case_usage(include_generation=False),
+                        pricing=self.pricing,
+                        reserved_at=utc_now(),
+                    )
+                    if not reservation_result.approved or reservation_result.reservation is None:
+                        raise ValueError("regression budget reservation was rejected")
+                    budget_state = reservation_result.state
+                    reservation = reservation_result.reservation
+                    deadline = campaign.started_at + timedelta(
+                        seconds=campaign.max_duration_seconds
+                    )
+                    gate_context = self._gate_context(
+                        campaign=campaign,
+                        objective=objective,
+                        budget_state=budget_state,
+                        reservation=reservation,
+                        deadline=deadline,
+                        sequence_counts=Counter(),
+                        patient_alias=case.setup.selected_patient_alias,
+                        identity_alias=case.setup.test_identity_alias,
+                        expected_role=case.setup.expected_role,
+                    )
+                    validated = validate_attack(
+                        proposal,
+                        self.loaded_profile.profile,
+                        gate_context,
+                        now=utc_now(),
+                    )
+                    if isinstance(validated, GateRejectionV1):
+                        raise ValueError(f"regression gate rejected case: {validated.code.value}")
+                    attempt = self._new_attempt(
+                        attempt_id=attempt_id,
+                        campaign=campaign,
+                        objective=objective,
+                        proposal=proposal,
+                        prompt_version=_CONTROLLER_PROMPT_VERSION,
+                    )
+                    attempt.status = "executing"
+                    session.add(attempt)
+                    session.commit()
+                    context = self._execution_context(
+                        campaign=campaign,
+                        attempt_id=attempt.id,
+                        target_alias=target_alias,
+                        target_version=campaign.target_version,
+                        validated=validated,
+                    )
+                    evidence = await self.runner.execute(validated, context)
+                    result = evaluate_regression(case, evidence)
+                    judge_result: AgentInvocationResult[Any] | None = None
+                    if case.judge_required and result.deterministic_evaluation is not None:
+                        _, judge_result = await self._judge_evidence(
+                            campaign=campaign,
+                            attempt_id=attempt.id,
+                            objective=objective,
+                            proposal=proposal,
+                            evidence=evidence,
+                            deterministic=result.deterministic_evaluation,
+                            invariants=case.expected_security_invariants,
+                        )
+                        result = evaluate_regression(
+                            case,
+                            evidence,
+                            semantic_judge_verdict=judge_result.output,
+                        )
+                        self._persist_agent_runs(
+                            session,
+                            campaign_id=campaign.id,
+                            attempt_id=attempt.id,
+                            finding_id=finding.id,
+                            results=[judge_result],
+                        )
+                    attempt.executed_sequence = {
+                        "actions": [
+                            item.model_dump(mode="json")
+                            for item in evidence.executed_action_sequence
+                        ]
+                    }
+                    attempt.evidence_payload = evidence.model_dump(mode="json")
+                    attempt.evidence_summary = (
+                        result.deterministic_evaluation.model_dump(mode="json")
+                        if result.deterministic_evaluation is not None
+                        else {"outcome": result.outcome.value, "summary": result.summary}
+                    )
+                    attempt.evidence_hash = evidence.evidence_hash
+                    attempt.status = result.outcome.value
+                    attempt.completed_at = utc_now()
+                    role_results = [judge_result] if judge_result is not None else []
+                    case_cost = (
+                        self._reconcile_budget(
+                            campaign=campaign,
+                            budget_state=budget_state,
+                            reservation=reservation,
+                            results=role_results,
+                        )
+                        - total_cost
+                    )
+                    total_cost += case_cost
+                    RegressionRunRepository(session).add_result(
+                        run_id=run.id,
+                        case_id=row.id,
+                        case_version=row.case_version,
+                        outcome=result.outcome.value,
+                        deterministic_results=(
+                            [
+                                item.model_dump(mode="json")
+                                for item in result.deterministic_evaluation.assertion_results
+                            ]
+                            if result.deterministic_evaluation is not None
+                            else []
+                        ),
+                        judge_result=(
+                            result.reconciled_judge_verdict.model_dump(mode="json")
+                            if result.reconciled_judge_verdict is not None
+                            else None
+                        ),
+                        evidence_references=[
+                            reference.reference_id for reference in evidence.artifact_references
+                        ],
+                        estimated_cost_usd=max(Decimal("0"), case_cost),
+                        latency_ms=round(evidence.total_latency_ms),
+                        trace_id=evidence.langfuse_trace_id,
+                    )
+                    if result.reopen_finding:
+                        FindingRepository(session).reopen(finding.id)
+                    outcomes[result.outcome.value] += 1
+                    campaign.actual_attempts += 1
+                    session.commit()
+                except Exception as exc:
+                    session.rollback()
+                    outcomes["error"] += 1
+                    RegressionRunRepository(session).add_result(
+                        run_id=run.id,
+                        case_id=row.id,
+                        case_version=row.case_version,
+                        outcome="error",
+                        deterministic_results=[],
+                        judge_result={
+                            "code": "regression_execution_error",
+                            "type": type(exc).__name__,
+                            "message": "saved regression case could not be completed",
+                        },
+                        evidence_references=[],
+                        estimated_cost_usd=Decimal("0"),
+                        latency_ms=None,
+                        trace_id=None,
+                    )
+                    session.commit()
+
+            run = session.get(RegressionRun, run.id)
+            run.passed_cases = outcomes["secure_pass"]
+            run.reproduced_cases = outcomes["vulnerability_reproduced"]
+            run.inconclusive_cases = outcomes["inconclusive"]
+            run.error_cases = outcomes["error"]
+            run.estimated_cost_usd = campaign.actual_cost_usd
+            run.status = "completed"
+            run.completed_at = utc_now()
+            session.commit()
+            return CampaignProcessResult(
+                status="completed",
+                actual_cost_usd=campaign.actual_cost_usd,
+            )
+
+
+def build_campaign_controller(
+    *,
+    database: Database,
+    settings: Settings,
+    metrics: AgentForgeMetrics | None = None,
+    telemetry: LangfuseTelemetry | None = None,
+) -> CampaignController:
+    """Construct the production controller without performing any external call."""
+
+    from agentforge.agents import (
+        AttackGeneratorAgent,
+        DocumentationAgent,
+        JudgeAgent,
+        OrchestratorAgent,
+    )
+    from agentforge.evaluation import load_judge_rubric, load_seed_cases, load_taxonomy
+    from agentforge.target import load_target_profile
+
+    return CampaignController(
+        database=database,
+        settings=settings,
+        loaded_profile=load_target_profile(_project_path(settings.target_profile_path)),
+        taxonomy=load_taxonomy(_project_path(settings.attack_taxonomy_path)),
+        rubric=load_judge_rubric(_project_path(settings.judge_rubric_path)),
+        seeds=load_seed_cases(PROJECT_ROOT / "evals" / "seed-cases"),
+        pricing=load_pricing_config(_project_path(settings.pricing_path)),
+        orchestrator=OrchestratorAgent(settings=settings, telemetry=telemetry),
+        attack_generator=AttackGeneratorAgent(settings=settings, telemetry=telemetry),
+        judge=JudgeAgent(settings=settings, telemetry=telemetry),
+        documentation=DocumentationAgent(settings=settings, telemetry=telemetry),
+        runner=CompositeAttackRunner(),
+        telemetry=telemetry,
+        metric_registry=metrics,
+    )
+
+
+__all__ = ["CampaignController", "VersionDiscoverer", "build_campaign_controller"]

@@ -42,6 +42,7 @@ from agentforge.contracts.v1.evidence import (
     AttackEvidenceV1,
     TranscriptRoleV1,
 )
+from agentforge.orchestration.execution_gate import ValidatedAttackV1
 from agentforge.target.fixtures import ApprovedFixture, resolve_approved_fixture
 from agentforge.target.version import (
     approved_browser_url,
@@ -55,6 +56,7 @@ from .base import (
     RunnerActionRejected,
     RunnerFailure,
     TargetExecutionContext,
+    require_validated_attack,
 )
 
 
@@ -409,23 +411,24 @@ class PlaywrightAttackRunner:
 
     async def execute(
         self,
-        attack: ProposedAttackV1,
+        attack: ValidatedAttackV1,
         context: TargetExecutionContext,
     ) -> AttackEvidenceV1:
+        proposal = require_validated_attack(attack, context)
         recorder = EvidenceRecorder(context)
         trace_requested = any(
             isinstance(action, CollectEvidenceActionV1)
             and EvidenceKindV1.BROWSER_TRACE in action.evidence_kinds
-            for action in attack.ordered_actions
+            for action in proposal.ordered_actions
         )
         trace_stopped = False
         try:
             async with self._session_factory(context, trace_requested) as session:
-                for index, action in enumerate(attack.ordered_actions):
+                for index, action in enumerate(proposal.ordered_actions):
                     started_at = utc_now()
                     response_timeout_seconds = context.request_timeout_seconds
-                    if index + 1 < len(attack.ordered_actions):
-                        next_action = attack.ordered_actions[index + 1]
+                    if index + 1 < len(proposal.ordered_actions):
+                        next_action = proposal.ordered_actions[index + 1]
                         if isinstance(next_action, WaitForResponseActionV1):
                             response_timeout_seconds = min(
                                 response_timeout_seconds,
@@ -451,7 +454,7 @@ class PlaywrightAttackRunner:
                         )
                         recorder.add_error(failure)
                         trace_stopped = await self._capture_failure_artifacts(
-                            attack=attack,
+                            attack=proposal,
                             context=context,
                             recorder=recorder,
                             session=session,
@@ -460,7 +463,7 @@ class PlaywrightAttackRunner:
                             authentication_failure=isinstance(action, AuthenticateActionV1),
                         )
                         for skipped_index, skipped in enumerate(
-                            attack.ordered_actions[index + 1 :], start=index + 1
+                            proposal.ordered_actions[index + 1 :], start=index + 1
                         ):
                             recorder.add_skipped(skipped_index, skipped)
                         break
@@ -478,7 +481,7 @@ class PlaywrightAttackRunner:
                         )
                         recorder.add_error(failure)
                         for skipped_index, skipped in enumerate(
-                            attack.ordered_actions[index + 1 :], start=index + 1
+                            proposal.ordered_actions[index + 1 :], start=index + 1
                         ):
                             recorder.add_skipped(skipped_index, skipped)
                         break
@@ -497,7 +500,7 @@ class PlaywrightAttackRunner:
                     "ephemeral browser session could not be initialized",
                     retryable=True,
                 )
-                first = attack.ordered_actions[0]
+                first = proposal.ordered_actions[0]
                 timestamp = utc_now()
                 recorder.add_action(
                     sequence_index=0,
@@ -507,7 +510,7 @@ class PlaywrightAttackRunner:
                     summary=failure.public_message,
                 )
                 recorder.add_error(failure)
-                for index, action in enumerate(attack.ordered_actions[1:], start=1):
+                for index, action in enumerate(proposal.ordered_actions[1:], start=1):
                     recorder.add_skipped(index, action)
         return recorder.finalize()
 

@@ -3,15 +3,23 @@ from __future__ import annotations
 import hashlib
 import json
 from contextlib import AbstractAsyncContextManager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 import pytest
 from pydantic import SecretStr
 
+from agentforge.contracts.v1 import ApprovedHttpMethodV1
 from agentforge.contracts.v1.campaign import ProposedAttackV1
 from agentforge.contracts.v1.errors import AgentErrorCodeV1
 from agentforge.contracts.v1.evidence import ActionExecutionStatusV1
+from agentforge.orchestration.execution_gate import (
+    ApprovedFixtureV1,
+    EndpointBindingV1,
+    EndpointPurposeV1,
+    ValidatedAttackV1,
+)
 from agentforge.runners.base import RunnerActionRejected, TargetExecutionContext
 from agentforge.runners.composite import CompositeAttackRunner
 from agentforge.runners.http_runner import HttpAttackRunner
@@ -89,12 +97,88 @@ def _context(
         campaign_id="campaign-1",
         attempt_id="attempt-1",
         target_version="test-sha",
+        selected_patient_alias="patient_a",
         loaded_profile=loaded,
         target_alias=alias,
         repository_root=tmp_path,
         artifacts_dir=tmp_path / "artifacts",
         credentials=resolved_credentials,
         approved_fixtures=approved_fixtures or {},
+    )
+
+
+def _validated(
+    attack: ProposedAttackV1,
+    context: TargetExecutionContext,
+    *,
+    expires_at: datetime | None = None,
+) -> ValidatedAttackV1:
+    bindings: dict[str, EndpointBindingV1] = {}
+    fixtures: list[ApprovedFixtureV1] = []
+    action_types = {action.action_type.value for action in attack.ordered_actions}
+    if "invoke_approved_api_request" in action_types:
+        bindings["status_health"] = EndpointBindingV1(
+            endpoint_id="status_health",
+            method=ApprovedHttpMethodV1.GET,
+            surface="status",
+            path="/health",
+            purpose=EndpointPurposeV1.STATUS,
+        )
+    if "send_chat_message" in action_types:
+        bindings["copilot_chat_proxy"] = EndpointBindingV1(
+            endpoint_id="copilot_chat_proxy",
+            method=ApprovedHttpMethodV1.POST,
+            surface="ui",
+            path="/interface/patient_file/clinical_copilot/proxy.php",
+            purpose=EndpointPurposeV1.CHAT,
+        )
+    if "upload_approved_fixture" in action_types:
+        for endpoint_id, path, purpose in (
+            (
+                "document_stage",
+                "/interface/patient_file/clinical_copilot/ingestion_stage.php",
+                EndpointPurposeV1.UPLOAD_STAGE,
+            ),
+            (
+                "document_reject",
+                "/interface/patient_file/clinical_copilot/ingestion_reject.php",
+                EndpointPurposeV1.UPLOAD_REJECT,
+            ),
+        ):
+            bindings[endpoint_id] = EndpointBindingV1(
+                endpoint_id=endpoint_id,
+                method=ApprovedHttpMethodV1.POST,
+                surface="ui",
+                path=path,
+                purpose=purpose,
+            )
+        for authorization in context.approved_fixtures.values():
+            fixtures.append(
+                ApprovedFixtureV1(
+                    fixture_id=authorization.fixture_id,
+                    repository_relative_path=authorization.repository_relative_path,
+                    document_type=authorization.document_type,
+                    extension=Path(authorization.repository_relative_path).suffix,
+                    media_type=authorization.media_type,
+                    size_bytes=authorization.size_bytes,
+                    pages=authorization.pages,
+                    sha256=authorization.sha256,
+                )
+            )
+    now = datetime.now(UTC)
+    canonical = json.dumps(attack.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return ValidatedAttackV1(
+        campaign_id=context.campaign_id,
+        proposal=attack,
+        target_alias=context.target_alias.name,
+        target_profile_version=context.profile.profile_version,
+        selected_patient_alias=context.selected_patient_alias,
+        authorized_endpoint_bindings=list(bindings.values()),
+        authorized_fixtures=fixtures,
+        sequence_hash=hashlib.sha256(canonical.encode()).hexdigest(),
+        authorized_at=now - timedelta(seconds=1),
+        expires_at=expires_at or now + timedelta(minutes=5),
+        budget_reservation_id="fixture-reservation",
     )
 
 
@@ -149,7 +233,8 @@ async def test_http_runner_calls_only_symbolic_status_endpoint(tmp_path: Path) -
         ]
     )
 
-    evidence = await runner.execute(attack, _context(tmp_path))
+    context = _context(tmp_path)
+    evidence = await runner.execute(_validated(attack, context), context)
 
     assert [request.url.path for request in requests] == ["/health"]
     assert all(
@@ -177,7 +262,9 @@ async def test_http_runner_rejects_chat_without_sending_request(tmp_path: Path) 
         )
     )
 
-    evidence = await runner.execute(_attack([_chat_action()]), _context(tmp_path))
+    context = _context(tmp_path)
+    attack = _attack([_chat_action()])
+    evidence = await runner.execute(_validated(attack, context), context)
 
     assert requests == []
     assert evidence.executed_action_sequence[0].status == ActionExecutionStatusV1.REJECTED
@@ -201,7 +288,9 @@ async def test_http_runner_records_and_rejects_redirect(tmp_path: Path) -> None:
         )
     )
 
-    evidence = await runner.execute(_attack([_status_action()]), _context(tmp_path))
+    context = _context(tmp_path)
+    attack = _attack([_status_action()])
+    evidence = await runner.execute(_validated(attack, context), context)
 
     assert evidence.executed_action_sequence[0].status == ActionExecutionStatusV1.REJECTED
     assert evidence.sanitized_http_metadata[0].response_status == 302
@@ -395,10 +484,9 @@ async def test_playwright_runner_uses_fake_ephemeral_session_and_captures_transc
     fake = FakeBrowserSession()
     runner = PlaywrightAttackRunner(lambda context, trace: fake)
 
-    evidence = await runner.execute(
-        _attack(_browser_actions()),
-        _context(tmp_path, credentials=True),
-    )
+    context = _context(tmp_path, credentials=True)
+    attack = _attack(_browser_actions())
+    evidence = await runner.execute(_validated(attack, context), context)
 
     assert fake.events[:4] == [
         "enter",
@@ -421,10 +509,9 @@ async def test_playwright_failure_capture_skips_later_actions_without_state_pers
     fake = FakeBrowserSession(fail_chat=True)
     runner = PlaywrightAttackRunner(lambda context, trace: fake)
 
-    evidence = await runner.execute(
-        _attack(_browser_actions(failure_capture=True)),
-        _context(tmp_path, credentials=True),
-    )
+    context = _context(tmp_path, credentials=True)
+    attack = _attack(_browser_actions(failure_capture=True))
+    evidence = await runner.execute(_validated(attack, context), context)
 
     assert evidence.executed_action_sequence[3].status == ActionExecutionStatusV1.REJECTED
     assert evidence.executed_action_sequence[4].status == ActionExecutionStatusV1.SKIPPED
@@ -467,14 +554,13 @@ async def test_playwright_upload_uses_authorized_fixture_and_only_stage_rejects(
     fake = FakeBrowserSession()
     runner = PlaywrightAttackRunner(lambda context, trace: fake)
 
-    evidence = await runner.execute(
-        _attack(actions),
-        _context(
-            tmp_path,
-            credentials=True,
-            approved_fixtures={"bounded-upload": authorization},
-        ),
+    context = _context(
+        tmp_path,
+        credentials=True,
+        approved_fixtures={"bounded-upload": authorization},
     )
+    attack = _attack(actions)
+    evidence = await runner.execute(_validated(attack, context), context)
 
     assert "stage-reject:bounded-upload" in fake.events
     assert all("confirm" not in event for event in fake.events)
@@ -486,8 +572,42 @@ async def test_composite_rejects_mixed_api_and_ui_before_running_either(tmp_path
     attack = _attack([_status_action(), _chat_action()])
     runner = CompositeAttackRunner()
 
-    evidence = await runner.execute(attack, _context(tmp_path))
+    context = _context(tmp_path)
+    evidence = await runner.execute(_validated(attack, context), context)
 
     assert evidence.executed_action_sequence[0].status == ActionExecutionStatusV1.REJECTED
     assert evidence.executed_action_sequence[1].status == ActionExecutionStatusV1.SKIPPED
     assert evidence.errors[0].code == AgentErrorCodeV1.ACTION_REJECTED
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_raw_expired_and_mismatched_envelopes_before_adapter(
+    tmp_path: Path,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, request=request)
+
+    runner = HttpAttackRunner(
+        lambda context: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    context = _context(tmp_path)
+    attack = _attack([_status_action()])
+
+    with pytest.raises(RunnerActionRejected, match="gate-approved"):
+        await runner.execute(attack, context)  # type: ignore[arg-type]
+
+    expired = _validated(
+        attack,
+        context,
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    with pytest.raises(RunnerActionRejected, match="not active"):
+        await runner.execute(expired, context)
+
+    mismatch = _validated(attack, context).model_copy(update={"campaign_id": "other-campaign"})
+    with pytest.raises(RunnerActionRejected, match="campaign"):
+        await runner.execute(mismatch, context)
+    assert requests == []

@@ -97,9 +97,7 @@ class Campaign(TimestampMixin, Base):
 
 class CampaignEvent(Base):
     __tablename__ = "campaign_events"
-    __table_args__ = (
-        Index("ix_campaign_events_campaign_created", "campaign_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_campaign_events_campaign_created", "campaign_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     campaign_id: Mapped[uuid.UUID] = mapped_column(
@@ -144,6 +142,7 @@ class AttackAttempt(TimestampMixin, Base):
     prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="proposed")
     evidence_summary: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    evidence_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     evidence_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -250,6 +249,7 @@ class RegressionCase(TimestampMixin, Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    case_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     finding_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("findings.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -263,11 +263,15 @@ class RegressionCase(TimestampMixin, Base):
     deterministic_checks: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON_TYPE, nullable=False, default=list
     )
+    judge_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     judge_rubric_subset: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
+    subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
     owasp_mappings: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
     target_requirements: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     created_from_evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
 
 class RegressionRun(TimestampMixin, Base):

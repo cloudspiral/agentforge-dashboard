@@ -13,7 +13,6 @@ from agentforge.contracts.v1.actions import (
     ResetSessionActionV1,
     WaitForResponseActionV1,
 )
-from agentforge.contracts.v1.campaign import ProposedAttackV1
 from agentforge.contracts.v1.common import utc_now
 from agentforge.contracts.v1.errors import AgentErrorCodeV1
 from agentforge.contracts.v1.evidence import (
@@ -21,6 +20,7 @@ from agentforge.contracts.v1.evidence import (
     AttackEvidenceV1,
     SanitizedHttpExchangeV1,
 )
+from agentforge.orchestration.execution_gate import ValidatedAttackV1
 from agentforge.security.allowlist import TargetRejected
 from agentforge.target.version import resolve_endpoint, same_origin
 
@@ -29,6 +29,7 @@ from .base import (
     RunnerActionRejected,
     RunnerFailure,
     TargetExecutionContext,
+    require_validated_attack,
     sanitized_summary,
 )
 
@@ -55,13 +56,14 @@ class HttpAttackRunner:
 
     async def execute(
         self,
-        attack: ProposedAttackV1,
+        attack: ValidatedAttackV1,
         context: TargetExecutionContext,
     ) -> AttackEvidenceV1:
+        proposal = require_validated_attack(attack, context)
         recorder = EvidenceRecorder(context)
         try:
             async with self._client_factory(context) as client:
-                for index, action in enumerate(attack.ordered_actions):
+                for index, action in enumerate(proposal.ordered_actions):
                     started_at = utc_now()
                     try:
                         summary = await self._execute_action(
@@ -81,7 +83,7 @@ class HttpAttackRunner:
                         )
                         recorder.add_error(failure)
                         for skipped_index, skipped in enumerate(
-                            attack.ordered_actions[index + 1 :], start=index + 1
+                            proposal.ordered_actions[index + 1 :], start=index + 1
                         ):
                             recorder.add_skipped(skipped_index, skipped)
                         break
@@ -99,7 +101,7 @@ class HttpAttackRunner:
                         )
                         recorder.add_error(failure)
                         for skipped_index, skipped in enumerate(
-                            attack.ordered_actions[index + 1 :], start=index + 1
+                            proposal.ordered_actions[index + 1 :], start=index + 1
                         ):
                             recorder.add_skipped(skipped_index, skipped)
                         break
@@ -118,7 +120,7 @@ class HttpAttackRunner:
                     "HTTP runner could not initialize an ephemeral target session",
                     retryable=True,
                 )
-                first = attack.ordered_actions[0]
+                first = proposal.ordered_actions[0]
                 timestamp = utc_now()
                 recorder.add_action(
                     sequence_index=0,
@@ -128,7 +130,7 @@ class HttpAttackRunner:
                     summary=failure.public_message,
                 )
                 recorder.add_error(failure)
-                for index, action in enumerate(attack.ordered_actions[1:], start=1):
+                for index, action in enumerate(proposal.ordered_actions[1:], start=1):
                     recorder.add_skipped(index, action)
         return recorder.finalize()
 

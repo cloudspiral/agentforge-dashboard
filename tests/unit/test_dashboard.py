@@ -136,9 +136,7 @@ def test_campaign_pages_show_ordered_events_and_redact_secrets(
     assert "fixture-v1" in listing.text
     assert detail.status_code == 200
     assert (
-        detail.text.index("created")
-        < detail.text.index("claimed")
-        < detail.text.index("finished")
+        detail.text.index("created") < detail.text.index("claimed") < detail.text.index("finished")
     )
     assert "fixture_failure" in detail.text
     assert secret not in detail.text

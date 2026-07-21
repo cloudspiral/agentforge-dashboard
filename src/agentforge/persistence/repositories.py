@@ -16,6 +16,7 @@ from agentforge.persistence.models import (
     CampaignEvent,
     Finding,
     JudgeVerdict,
+    RegressionCase,
     RegressionResult,
     RegressionRun,
     VulnerabilityReport,
@@ -309,14 +310,10 @@ class FindingRepository:
         include_reports: bool = False,
     ) -> tuple[list[Finding], int]:
         total = self.session.scalar(select(func.count()).select_from(Finding)) or 0
-        statement = (
-            select(Finding).order_by(Finding.updated_at.desc()).offset(offset).limit(limit)
-        )
+        statement = select(Finding).order_by(Finding.updated_at.desc()).offset(offset).limit(limit)
         if include_reports:
             statement = statement.options(selectinload(Finding.reports))
-        findings = list(
-            self.session.scalars(statement)
-        )
+        findings = list(self.session.scalars(statement))
         return findings, total
 
     def get(self, finding_id: uuid.UUID, *, include_reports: bool = False) -> Finding:
@@ -336,6 +333,69 @@ class FindingRepository:
         self.session.commit()
         return finding
 
+    def upsert_confirmed(
+        self,
+        *,
+        fingerprint: str,
+        source_attempt_id: uuid.UUID,
+        vulnerability_id: str,
+        title: str,
+        category: str,
+        subcategory: str,
+        severity: str,
+        description: str,
+        clinical_impact: str,
+        expected_behavior: str,
+        observed_behavior: str,
+        target_version: str,
+    ) -> tuple[Finding, bool]:
+        finding = self.session.scalar(
+            select(Finding).where(Finding.fingerprint == fingerprint).with_for_update()
+        )
+        created = finding is None
+        if finding is None:
+            finding = Finding(
+                vulnerability_id=vulnerability_id,
+                fingerprint=fingerprint,
+                source_attempt_id=source_attempt_id,
+                title=title,
+                category=category,
+                subcategory=subcategory,
+                severity=severity,
+                status="open",
+                description=description,
+                clinical_impact=clinical_impact,
+                expected_behavior=expected_behavior,
+                observed_behavior=observed_behavior,
+                first_seen_target_version=target_version,
+                last_seen_target_version=target_version,
+            )
+            self.session.add(finding)
+        else:
+            finding.source_attempt_id = source_attempt_id
+            finding.title = title
+            finding.severity = severity
+            finding.description = description
+            finding.clinical_impact = clinical_impact
+            finding.expected_behavior = expected_behavior
+            finding.observed_behavior = observed_behavior
+            finding.last_seen_target_version = target_version
+            if finding.status == "resolved":
+                finding.status = "reopened"
+        self.session.flush()
+        return finding, created
+
+    def reopen(self, finding_id: uuid.UUID) -> Finding:
+        finding = self.session.scalar(
+            select(Finding).where(Finding.id == finding_id).with_for_update()
+        )
+        if finding is None:
+            raise LookupError(str(finding_id))
+        if finding.status == "resolved":
+            finding.status = "reopened"
+        self.session.flush()
+        return finding
+
 
 class ReportRepository:
     def __init__(self, session: Session) -> None:
@@ -351,6 +411,101 @@ class ReportRepository:
         if report is None:
             raise LookupError(str(finding_id))
         return report
+
+    def create_versioned(
+        self,
+        *,
+        finding_id: uuid.UUID,
+        structured_report: dict[str, Any],
+        markdown_body: str,
+        validation_summary: dict[str, Any],
+        prompt_version: str,
+        status: str = "draft",
+    ) -> VulnerabilityReport:
+        version = (
+            self.session.scalar(
+                select(func.coalesce(func.max(VulnerabilityReport.report_version), 0)).where(
+                    VulnerabilityReport.finding_id == finding_id
+                )
+            )
+            or 0
+        ) + 1
+        report = VulnerabilityReport(
+            finding_id=finding_id,
+            report_version=version,
+            structured_report=structured_report,
+            markdown_body=markdown_body,
+            markdown_path=None,
+            status=status,
+            validation_summary=validation_summary,
+            prompt_version=prompt_version,
+            schema_version="v1",
+        )
+        self.session.add(report)
+        self.session.flush()
+        return report
+
+
+class RegressionCaseRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def active(self) -> list[RegressionCase]:
+        return list(
+            self.session.scalars(
+                select(RegressionCase)
+                .where(RegressionCase.active.is_(True))
+                .order_by(RegressionCase.created_at, RegressionCase.id)
+            )
+        )
+
+    def create_versioned(
+        self,
+        *,
+        finding_id: uuid.UUID,
+        case_payload: dict[str, Any],
+    ) -> RegressionCase:
+        current_version = (
+            self.session.scalar(
+                select(func.coalesce(func.max(RegressionCase.case_version), 0)).where(
+                    RegressionCase.finding_id == finding_id
+                )
+            )
+            or 0
+        )
+        expected_version = current_version + 1
+        if case_payload["case_version"] != expected_version:
+            raise ValueError("regression case version is not the next finding version")
+        for previous in self.session.scalars(
+            select(RegressionCase)
+            .where(RegressionCase.finding_id == finding_id)
+            .where(RegressionCase.active.is_(True))
+            .with_for_update()
+        ):
+            previous.active = False
+        case = RegressionCase(
+            case_id=case_payload["case_id"],
+            finding_id=finding_id,
+            case_version=expected_version,
+            active=case_payload["active"],
+            setup=case_payload["setup"],
+            ordered_sequence=case_payload["exact_ordered_sequence"],
+            expected_security_invariants=case_payload["expected_security_invariants"],
+            deterministic_checks=case_payload["deterministic_check_ids"],
+            judge_required=case_payload["judge_required"],
+            judge_rubric_subset=None,
+            category=case_payload["category"],
+            subcategory=case_payload["subcategory"],
+            owasp_mappings=case_payload["owasp_mappings"],
+            target_requirements=case_payload["target_requirements"],
+            created_from_evidence_hash=case_payload["created_from_evidence_hash"],
+            sequence_hash=case_payload["sequence_hash"],
+            fingerprint=case_payload["fingerprint"],
+            created_at=case_payload["created_at"],
+        )
+        self.session.add(case)
+        self.session.flush()
+        return case
 
 
 class RegressionRunRepository:
@@ -397,6 +552,44 @@ class RegressionRunRepository:
         if run is None:
             raise LookupError(str(run_id))
         return run
+
+    def for_campaign(self, campaign_id: uuid.UUID) -> RegressionRun:
+        run = self.session.scalar(
+            select(RegressionRun).where(RegressionRun.campaign_id == campaign_id).with_for_update()
+        )
+        if run is None:
+            raise LookupError(str(campaign_id))
+        return run
+
+    def add_result(
+        self,
+        *,
+        run_id: uuid.UUID,
+        case_id: uuid.UUID,
+        case_version: int,
+        outcome: str,
+        deterministic_results: list[dict[str, Any]],
+        judge_result: dict[str, Any] | None,
+        evidence_references: list[str],
+        estimated_cost_usd: Decimal,
+        latency_ms: int | None,
+        trace_id: str | None,
+    ) -> RegressionResult:
+        result = RegressionResult(
+            run_id=run_id,
+            case_id=case_id,
+            case_version=case_version,
+            outcome=outcome,
+            deterministic_results=deterministic_results,
+            judge_result=judge_result,
+            evidence_references=evidence_references,
+            estimated_cost_usd=estimated_cost_usd,
+            latency_ms=latency_ms,
+            trace_id=trace_id,
+        )
+        self.session.add(result)
+        self.session.flush()
+        return result
 
 
 class AgentRunRepository:
@@ -527,12 +720,15 @@ class OperationalRepository:
             .order_by(CampaignEvent.created_at.desc(), CampaignEvent.id.desc())
             .limit(1)
         ).first()
-        latest_worker = active_worker or self.session.execute(
-            select(CampaignEvent.worker_name, CampaignEvent.created_at)
-            .where(CampaignEvent.worker_name.is_not(None))
-            .order_by(CampaignEvent.created_at.desc(), CampaignEvent.id.desc())
-            .limit(1)
-        ).first()
+        latest_worker = (
+            active_worker
+            or self.session.execute(
+                select(CampaignEvent.worker_name, CampaignEvent.created_at)
+                .where(CampaignEvent.worker_name.is_not(None))
+                .order_by(CampaignEvent.created_at.desc(), CampaignEvent.id.desc())
+                .limit(1)
+            ).first()
+        )
         worker_name = latest_worker[0] if latest_worker else None
         return {
             "depth": row[0] or 0,
@@ -550,9 +746,9 @@ class OperationalRepository:
                 select(Finding.status, func.count(Finding.id)).group_by(Finding.status)
             )
         }
-        report_count = self.session.scalar(
-            select(func.count()).select_from(VulnerabilityReport)
-        ) or 0
+        report_count = (
+            self.session.scalar(select(func.count()).select_from(VulnerabilityReport)) or 0
+        )
         return {
             "total": sum(status_counts.values()),
             "active": sum(
@@ -609,9 +805,7 @@ class OperationalRepository:
             )
         ]
         if self.session.bind is not None and self.session.bind.dialect.name == "postgresql":
-            duration_expression = func.extract(
-                "epoch", Campaign.completed_at - Campaign.started_at
-            )
+            duration_expression = func.extract("epoch", Campaign.completed_at - Campaign.started_at)
         else:
             duration_expression = (
                 func.julianday(Campaign.completed_at) - func.julianday(Campaign.started_at)

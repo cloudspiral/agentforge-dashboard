@@ -7,9 +7,10 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -29,6 +30,10 @@ from agentforge.contracts.v1.evidence import (
     SanitizedHttpExchangeV1,
     TranscriptRoleV1,
     TranscriptTurnV1,
+)
+from agentforge.orchestration.execution_gate import (
+    EndpointPurposeV1,
+    ValidatedAttackV1,
 )
 from agentforge.security.allowlist import require_allowed_url
 from agentforge.target.fixtures import ApprovedFixtureAuthorization
@@ -56,6 +61,7 @@ class TargetExecutionContext:
     campaign_id: str
     attempt_id: str
     target_version: str
+    selected_patient_alias: Literal["patient_a", "patient_b"]
     loaded_profile: LoadedTargetProfile
     target_alias: ResolvedTargetAlias
     repository_root: Path
@@ -150,7 +156,7 @@ class TargetExecutionContext:
 class AttackRunner(Protocol):
     async def execute(
         self,
-        attack: ProposedAttackV1,
+        attack: ValidatedAttackV1,
         context: TargetExecutionContext,
     ) -> AttackEvidenceV1: ...
 
@@ -183,6 +189,104 @@ class RunnerActionRejected(RunnerFailure):
             status=ActionExecutionStatusV1.REJECTED,
             details=details,
         )
+
+
+def require_validated_attack(
+    attack: object,
+    context: TargetExecutionContext,
+    *,
+    now: datetime | None = None,
+) -> ProposedAttackV1:
+    """Fail closed unless the immutable gate envelope exactly matches execution context."""
+
+    if not isinstance(attack, ValidatedAttackV1):
+        raise RunnerActionRejected("runner requires a gate-approved attack envelope")
+    checked_at = now or datetime.now(UTC)
+    if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+        raise ValueError("runner authorization time must be timezone-aware")
+    if checked_at < attack.authorized_at or checked_at >= attack.expires_at:
+        raise RunnerActionRejected("gate-approved attack authorization is not active")
+    if attack.campaign_id != context.campaign_id:
+        raise RunnerActionRejected("approved campaign does not match execution context")
+    if attack.target_alias != context.target_alias.name:
+        raise RunnerActionRejected("approved target alias does not match execution context")
+    if attack.target_profile_version != context.profile.profile_version:
+        raise RunnerActionRejected(
+            "approved target profile version does not match execution context"
+        )
+    if attack.selected_patient_alias != context.selected_patient_alias:
+        raise RunnerActionRejected("approved synthetic patient does not match execution context")
+
+    proposal = attack.proposal
+    canonical = json.dumps(
+        proposal.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    if hashlib.sha256(canonical.encode()).hexdigest() != attack.sequence_hash:
+        raise RunnerActionRejected("approved attack sequence hash does not match its proposal")
+
+    selected_actions = [
+        action
+        for action in proposal.ordered_actions
+        if action.action_type.value == "select_synthetic_patient"
+    ]
+    if len(selected_actions) > 1 or (
+        selected_actions
+        and getattr(selected_actions[0], "patient_alias", None) != attack.selected_patient_alias
+    ):
+        raise RunnerActionRejected("approved synthetic patient does not match the action sequence")
+
+    bindings = {binding.endpoint_id: binding for binding in attack.authorized_endpoint_bindings}
+    if len(bindings) != len(attack.authorized_endpoint_bindings):
+        raise RunnerActionRejected("approved endpoint bindings contain duplicate identifiers")
+    profile_endpoints = {
+        (rule.method, rule.surface, rule.path) for rule in context.profile.allowed_endpoints
+    }
+    if any(
+        (binding.method.value, binding.surface, binding.path) not in profile_endpoints
+        for binding in bindings.values()
+    ):
+        raise RunnerActionRejected(
+            "approved endpoint metadata no longer matches the target profile"
+        )
+
+    required_endpoint_ids: set[str] = set()
+    required_purposes: set[EndpointPurposeV1] = set()
+    required_fixture_ids: set[str] = set()
+    for action in proposal.ordered_actions:
+        action_type = action.action_type.value
+        if action_type == "invoke_approved_api_request":
+            required_endpoint_ids.add(action.endpoint_id)
+        elif action_type == "send_chat_message":
+            required_purposes.add(EndpointPurposeV1.CHAT)
+        elif action_type == "upload_approved_fixture":
+            required_purposes.update(
+                {EndpointPurposeV1.UPLOAD_STAGE, EndpointPurposeV1.UPLOAD_REJECT}
+            )
+            required_fixture_ids.add(action.fixture_id)
+    if not required_endpoint_ids.issubset(bindings):
+        raise RunnerActionRejected("approved endpoint envelope omits an action endpoint")
+    if not required_purposes.issubset({binding.purpose for binding in bindings.values()}):
+        raise RunnerActionRejected("approved endpoint envelope omits a required execution surface")
+
+    fixtures = {fixture.fixture_id: fixture for fixture in attack.authorized_fixtures}
+    if len(fixtures) != len(attack.authorized_fixtures):
+        raise RunnerActionRejected("approved fixture metadata contains duplicate identifiers")
+    if set(fixtures) != required_fixture_ids:
+        raise RunnerActionRejected("approved fixture envelope does not match the action sequence")
+    for fixture_id, fixture in fixtures.items():
+        context_fixture = context.approved_fixtures.get(fixture_id)
+        if context_fixture is None or (
+            fixture.repository_relative_path != context_fixture.repository_relative_path
+            or fixture.document_type != context_fixture.document_type
+            or fixture.media_type != context_fixture.media_type
+            or fixture.size_bytes != context_fixture.size_bytes
+            or fixture.pages != context_fixture.pages
+            or fixture.sha256 != context_fixture.sha256
+        ):
+            raise RunnerActionRejected("approved fixture metadata does not match execution context")
+    return proposal
 
 
 class EvidenceRecorder:
