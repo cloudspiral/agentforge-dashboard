@@ -12,6 +12,7 @@ from agentforge.api.schemas import (
     AgentRunResponse,
     CampaignCreateRequest,
     CampaignDetailResponse,
+    CampaignEventResponse,
     CampaignPage,
     CampaignResponse,
     CoverageResponse,
@@ -261,6 +262,18 @@ def get_campaign(
     return CampaignDetailResponse(
         **_campaign(entity).model_dump(),
         attempts=[_attempt_summary(attempt) for attempt in entity.attempts],
+        events=[
+            CampaignEventResponse(
+                id=event.id,
+                event_type=event.event_type,
+                from_status=event.from_status,
+                to_status=event.to_status,
+                worker_name=event.worker_name,
+                details=event.details_json,
+                created_at=event.created_at,
+            )
+            for event in entity.events
+        ],
     )
 
 

@@ -88,6 +88,33 @@ class Campaign(TimestampMixin, Base):
         back_populates="campaign", cascade="all, delete-orphan"
     )
     agent_runs: Mapped[list[AgentRun]] = relationship(back_populates="campaign")
+    events: Mapped[list[CampaignEvent]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        order_by="CampaignEvent.created_at",
+    )
+
+
+class CampaignEvent(Base):
+    __tablename__ = "campaign_events"
+    __table_args__ = (
+        Index("ix_campaign_events_campaign_created", "campaign_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(32))
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    worker_name: Mapped[str | None] = mapped_column(String(128))
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    campaign: Mapped[Campaign] = relationship(back_populates="events")
 
 
 class AttackAttempt(TimestampMixin, Base):

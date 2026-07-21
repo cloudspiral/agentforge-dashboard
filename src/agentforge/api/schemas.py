@@ -70,8 +70,19 @@ class CampaignPage(ApiModel):
     limit: int
 
 
+class CampaignEventResponse(ApiModel):
+    id: uuid.UUID
+    event_type: str
+    from_status: str | None
+    to_status: str
+    worker_name: str | None
+    details: dict[str, Any]
+    created_at: datetime
+
+
 class CampaignDetailResponse(CampaignResponse):
     attempts: list[dict[str, Any]] = Field(default_factory=list)
+    events: list[CampaignEventResponse] = Field(default_factory=list)
 
 
 class RegressionRunCreateRequest(ApiModel):

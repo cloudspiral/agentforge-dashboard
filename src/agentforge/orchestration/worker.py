@@ -60,21 +60,23 @@ class CampaignWorker:
 
     def _claim(self) -> uuid.UUID | None:
         with self.database.session_factory() as session:
-            campaign = CampaignRepository(session).claim_next()
+            campaign = CampaignRepository(session).claim_next(worker_name=self.worker_name)
             return campaign.id if campaign else None
 
     def _heartbeat(self, campaign_id: uuid.UUID) -> None:
         with self.database.session_factory() as session:
             CampaignRepository(session).heartbeat(campaign_id)
 
-    def _finish(self, campaign_id: uuid.UUID, result: CampaignProcessResult) -> None:
+    def _finish(self, campaign_id: uuid.UUID, result: CampaignProcessResult) -> str:
         with self.database.session_factory() as session:
-            CampaignRepository(session).finish(
+            campaign = CampaignRepository(session).finish(
                 campaign_id,
                 status=result.status,
                 actual_cost_usd=result.actual_cost_usd,
                 sanitized_error=result.sanitized_error,
+                worker_name=self.worker_name,
             )
+            return campaign.status
 
     def _queue_stats(self) -> tuple[int, float]:
         with self.database.session_factory() as session:
@@ -127,9 +129,9 @@ class CampaignWorker:
             await heartbeat_task
             self.metrics.worker_active.labels(worker=self.worker_name).set(0)
 
-        await self._db(lambda: self._finish(campaign_id, result))
+        final_status = await self._db(lambda: self._finish(campaign_id, result))
         self.metrics.campaigns_total.labels(
-            status=result.status,
+            status=final_status,
             campaign_type="bounded",
         ).inc()
         if cancelled:
@@ -137,11 +139,14 @@ class CampaignWorker:
         return True
 
     async def run_forever(self) -> None:
-        recovered = await self._db(self._recover_stale)
-        if recovered:
-            LOGGER.warning("marked stale campaigns interrupted", extra={"count": recovered})
         while not self._stop.is_set():
             try:
+                recovered = await self._db(self._recover_stale)
+                if recovered:
+                    LOGGER.warning(
+                        "marked stale campaigns interrupted",
+                        extra={"count": recovered},
+                    )
                 depth, age = await self._db(self._queue_stats)
                 self.metrics.queue_depth.labels(queue="campaigns").set(depth)
                 self.metrics.queue_oldest_age_seconds.labels(queue="campaigns").set(age)

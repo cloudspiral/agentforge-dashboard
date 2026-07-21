@@ -142,6 +142,18 @@ def _campaign_payload(campaign: Campaign, *, include_attempts: bool = False) -> 
             }
             for attempt in sorted(campaign.attempts, key=lambda item: item.created_at)
         ]
+        payload["events"] = [
+            {
+                "id": str(event.id),
+                "event_type": event.event_type,
+                "from_status": event.from_status,
+                "to_status": event.to_status,
+                "worker_name": event.worker_name,
+                "details": event.details_json,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in campaign.events
+        ]
     return payload
 
 
@@ -256,7 +268,7 @@ def campaign_list(
 
 @campaign_app.command("show")
 def campaign_show(campaign_id: uuid.UUID) -> None:
-    """Show one campaign and its persisted attempt summaries."""
+    """Show one campaign with persisted attempt summaries and lifecycle events."""
 
     with _runtime() as runtime, runtime.database.session_factory() as session:
         campaign = CampaignRepository(session).get(campaign_id, include_attempts=True)

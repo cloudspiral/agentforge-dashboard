@@ -13,6 +13,7 @@ from agentforge.persistence.models import (
     AgentRun,
     AttackAttempt,
     Campaign,
+    CampaignEvent,
     Finding,
     JudgeVerdict,
     RegressionRun,
@@ -30,9 +31,30 @@ class CampaignNotFound(LookupError):
 
 class CampaignRepository:
     GLOBAL_QUEUE_LOCK = 2_145_117_049
+    TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
 
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    @staticmethod
+    def _event(
+        campaign: Campaign,
+        *,
+        event_type: str,
+        from_status: str | None,
+        to_status: str,
+        worker_name: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> CampaignEvent:
+        event = CampaignEvent(
+            event_type=event_type,
+            from_status=from_status,
+            to_status=to_status,
+            worker_name=worker_name,
+            details_json=details or {},
+        )
+        campaign.events.append(event)
+        return event
 
     def create(
         self,
@@ -66,6 +88,13 @@ class CampaignRepository:
             priority=priority,
             idempotency_key=idempotency_key,
         )
+        self._event(
+            campaign,
+            event_type="created",
+            from_status=None,
+            to_status="queued",
+            details={"trigger_type": trigger_type},
+        )
         self.session.add(campaign)
         try:
             self.session.commit()
@@ -83,7 +112,10 @@ class CampaignRepository:
     def get(self, campaign_id: uuid.UUID, *, include_attempts: bool = False) -> Campaign:
         statement = select(Campaign).where(Campaign.id == campaign_id)
         if include_attempts:
-            statement = statement.options(selectinload(Campaign.attempts))
+            statement = statement.options(
+                selectinload(Campaign.attempts),
+                selectinload(Campaign.events),
+            )
         campaign = self.session.scalar(statement)
         if not campaign:
             raise CampaignNotFound(str(campaign_id))
@@ -116,16 +148,34 @@ class CampaignRepository:
         return depth, age
 
     def cancel(self, campaign_id: uuid.UUID) -> Campaign:
-        campaign = self.get(campaign_id)
+        campaign = self.session.scalar(
+            select(Campaign).where(Campaign.id == campaign_id).with_for_update()
+        )
+        if not campaign:
+            raise CampaignNotFound(str(campaign_id))
         if campaign.status == "queued":
+            previous_status = campaign.status
             campaign.status = "cancelled"
             campaign.completed_at = datetime.now(UTC)
+            self._event(
+                campaign,
+                event_type="cancelled",
+                from_status=previous_status,
+                to_status=campaign.status,
+            )
         elif campaign.status == "running":
-            campaign.cancellation_requested = True
+            if not campaign.cancellation_requested:
+                campaign.cancellation_requested = True
+                self._event(
+                    campaign,
+                    event_type="cancellation_requested",
+                    from_status=campaign.status,
+                    to_status=campaign.status,
+                )
         self.session.commit()
         return campaign
 
-    def claim_next(self) -> Campaign | None:
+    def claim_next(self, *, worker_name: str | None = None) -> Campaign | None:
         if self.session.bind and self.session.bind.dialect.name == "postgresql":
             locked = self.session.scalar(
                 text("SELECT pg_try_advisory_xact_lock(:lock_id)"),
@@ -154,6 +204,13 @@ class CampaignRepository:
         campaign.status = "running"
         campaign.started_at = now
         campaign.heartbeat_at = now
+        self._event(
+            campaign,
+            event_type="claimed",
+            from_status="queued",
+            to_status=campaign.status,
+            worker_name=worker_name,
+        )
         self.session.commit()
         return campaign
 
@@ -169,14 +226,41 @@ class CampaignRepository:
         status: str,
         actual_cost_usd: Decimal | None = None,
         sanitized_error: dict[str, Any] | None = None,
+        worker_name: str | None = None,
     ) -> Campaign:
-        campaign = self.get(campaign_id)
-        campaign.status = status
+        if status not in self.TERMINAL_STATUSES:
+            raise ValueError(f"unsupported terminal campaign status: {status}")
+        campaign = self.session.scalar(
+            select(Campaign).where(Campaign.id == campaign_id).with_for_update()
+        )
+        if not campaign:
+            raise CampaignNotFound(str(campaign_id))
+        if campaign.status != "running":
+            self.session.commit()
+            return campaign
+        effective_status = "cancelled" if campaign.cancellation_requested else status
+        campaign.status = effective_status
         campaign.completed_at = datetime.now(UTC)
         campaign.heartbeat_at = campaign.completed_at
         if actual_cost_usd is not None:
             campaign.actual_cost_usd = actual_cost_usd
+        if effective_status == "cancelled" and sanitized_error is None:
+            sanitized_error = {
+                "code": "cancellation_requested",
+                "message": "campaign cancellation was requested",
+            }
         campaign.sanitized_error = sanitized_error
+        details: dict[str, Any] = {"actual_cost_usd": str(campaign.actual_cost_usd)}
+        if sanitized_error and sanitized_error.get("code"):
+            details["error_code"] = str(sanitized_error["code"])
+        self._event(
+            campaign,
+            event_type="finished",
+            from_status="running",
+            to_status=effective_status,
+            worker_name=worker_name,
+            details=details,
+        )
         self.session.commit()
         return campaign
 
@@ -186,17 +270,26 @@ class CampaignRepository:
             self.session.scalars(
                 select(Campaign)
                 .where(Campaign.status == "running")
+                .where(Campaign.heartbeat_at.is_not(None))
                 .where(Campaign.heartbeat_at < cutoff)
                 .with_for_update(skip_locked=True)
             )
         )
         for campaign in stale:
+            previous_status = campaign.status
             campaign.status = "interrupted"
             campaign.completed_at = datetime.now(UTC)
             campaign.sanitized_error = {
                 "code": "worker_heartbeat_stale",
                 "message": "worker stopped updating the campaign heartbeat",
             }
+            self._event(
+                campaign,
+                event_type="stale_recovered",
+                from_status=previous_status,
+                to_status=campaign.status,
+                details={"error_code": "worker_heartbeat_stale"},
+            )
         self.session.commit()
         return len(stale)
 
