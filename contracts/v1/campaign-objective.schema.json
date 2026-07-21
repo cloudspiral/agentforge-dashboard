@@ -1,0 +1,332 @@
+{
+  "$defs": {
+    "AttackSurfaceV1": {
+      "enum": [
+        "api",
+        "ui",
+        "upload",
+        "hybrid"
+      ],
+      "title": "AttackSurfaceV1",
+      "type": "string"
+    },
+    "CampaignTypeV1": {
+      "enum": [
+        "discovery",
+        "regression"
+      ],
+      "title": "CampaignTypeV1",
+      "type": "string"
+    },
+    "JsonValue": {},
+    "OwaspMappingsV1": {
+      "additionalProperties": false,
+      "description": "Explicitly versioned OWASP mappings; versions may not be implicit.",
+      "properties": {
+        "llm_top_10": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Llm Top 10",
+          "type": "array"
+        },
+        "llm_top_10_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Llm Top 10 Version",
+          "type": "string"
+        },
+        "web_top_10": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Web Top 10",
+          "type": "array"
+        },
+        "web_top_10_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Web Top 10 Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "web_top_10_version",
+        "llm_top_10_version"
+      ],
+      "title": "OwaspMappingsV1",
+      "type": "object"
+    },
+    "PriorAttemptOutcomeV1": {
+      "enum": [
+        "exploit_confirmed",
+        "partial_signal",
+        "attack_blocked",
+        "inconclusive",
+        "error"
+      ],
+      "title": "PriorAttemptOutcomeV1",
+      "type": "string"
+    },
+    "PriorAttemptSummaryV1": {
+      "additionalProperties": false,
+      "properties": {
+        "attack_family_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Attack Family Id",
+          "type": "string"
+        },
+        "attempt_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Attempt Id",
+          "type": "string"
+        },
+        "evidence_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Hash"
+        },
+        "lineage_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Lineage Id",
+          "type": "string"
+        },
+        "mutation_generation": {
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Mutation Generation",
+          "type": "integer"
+        },
+        "outcome": {
+          "$ref": "#/$defs/PriorAttemptOutcomeV1"
+        },
+        "sequence_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sequence Hash",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attempt_id",
+        "attack_family_id",
+        "lineage_id",
+        "mutation_generation",
+        "outcome",
+        "summary",
+        "sequence_hash"
+      ],
+      "title": "PriorAttemptSummaryV1",
+      "type": "object"
+    },
+    "RemainingBudgetAndLimitsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "max_consecutive_no_signal": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Max Consecutive No Signal",
+          "type": "integer"
+        },
+        "max_mutations_per_lineage": {
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Max Mutations Per Lineage",
+          "type": "integer"
+        },
+        "remaining_attempts": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Remaining Attempts",
+          "type": "integer"
+        },
+        "remaining_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Remaining Cost Usd"
+        },
+        "remaining_duration_seconds": {
+          "maximum": 86400,
+          "minimum": 0,
+          "title": "Remaining Duration Seconds",
+          "type": "integer"
+        },
+        "remaining_input_tokens": {
+          "minimum": 0,
+          "title": "Remaining Input Tokens",
+          "type": "integer"
+        },
+        "remaining_model_calls": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Remaining Model Calls",
+          "type": "integer"
+        },
+        "remaining_output_tokens": {
+          "minimum": 0,
+          "title": "Remaining Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "remaining_cost_usd",
+        "remaining_attempts",
+        "remaining_duration_seconds",
+        "remaining_model_calls",
+        "remaining_input_tokens",
+        "remaining_output_tokens",
+        "max_mutations_per_lineage",
+        "max_consecutive_no_signal"
+      ],
+      "title": "RemainingBudgetAndLimitsV1",
+      "type": "object"
+    },
+    "RequestedActionV1": {
+      "enum": [
+        "new_attack",
+        "mutation"
+      ],
+      "title": "RequestedActionV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attack_surface": {
+      "$ref": "#/$defs/AttackSurfaceV1"
+    },
+    "campaign_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "campaign_type": {
+      "$ref": "#/$defs/CampaignTypeV1"
+    },
+    "mutation_source_attempt_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mutation Source Attempt Id"
+    },
+    "objective": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Objective",
+      "type": "string"
+    },
+    "owasp_mappings": {
+      "$ref": "#/$defs/OwaspMappingsV1"
+    },
+    "relevant_prior_attempts": {
+      "items": {
+        "$ref": "#/$defs/PriorAttemptSummaryV1"
+      },
+      "maxItems": 20,
+      "title": "Relevant Prior Attempts",
+      "type": "array"
+    },
+    "relevant_target_profile_subset": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "maxProperties": 100,
+      "title": "Relevant Target Profile Subset",
+      "type": "object"
+    },
+    "remaining_budget_and_limits": {
+      "$ref": "#/$defs/RemainingBudgetAndLimitsV1"
+    },
+    "requested_action": {
+      "$ref": "#/$defs/RequestedActionV1"
+    },
+    "schema_version": {
+      "const": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "selected_category": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Selected Category",
+      "type": "string"
+    },
+    "selected_subcategory": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Selected Subcategory",
+      "type": "string"
+    },
+    "target_version": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Target Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "campaign_type",
+    "target_version",
+    "selected_category",
+    "selected_subcategory",
+    "owasp_mappings",
+    "attack_surface",
+    "objective",
+    "relevant_target_profile_subset",
+    "remaining_budget_and_limits",
+    "requested_action"
+  ],
+  "title": "CampaignObjectiveV1",
+  "type": "object"
+}

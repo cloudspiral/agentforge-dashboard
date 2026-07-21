@@ -1,0 +1,57 @@
+name: agentforge
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agentforge
+      POSTGRES_USER: agentforge
+      POSTGRES_PASSWORD: agentforge
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentforge -d agentforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - agentforge-postgres:/var/lib/postgresql/data
+
+  app:
+    build: .
+    init: true
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && exec uvicorn agentforge.main:app --host 0.0.0.0 --port 8080 --workers 1
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://agentforge:agentforge@postgres:5432/agentforge
+      WORKER_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2).read()
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 10
+    stop_grace_period: 30s
+    volumes:
+      - ./reports/generated:/app/reports/generated
+      - ./artifacts:/app/artifacts
+
+volumes:
+  agentforge-postgres:

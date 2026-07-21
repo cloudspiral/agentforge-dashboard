@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Campaign {{ campaign.id }} · AgentForge{% endblock %}
+{% block content %}
+<section class="page-heading"><p class="eyebrow">{{ campaign.campaign_type }} campaign</p><h1>{{ campaign.category_scope or 'Automatically ranked scope' }}</h1><p class="mono">{{ campaign.id }}</p></section>
+<section class="stat-grid"><article><span>Status</span><strong class="text">{{ campaign.status }}</strong></article><article><span>Target</span><strong class="text">{{ campaign.target_alias }}</strong></article><article><span>Version</span><strong class="text mono">{{ campaign.target_version }}</strong></article><article><span>Budget</span><strong class="text">${{ campaign.actual_cost_usd }} / ${{ campaign.max_cost_usd }}</strong></article></section>
+<section class="panel"><h2>Attempts</h2><div class="table-wrap"><table><thead><tr><th>Status</th><th>Family</th><th>Category</th><th>Verdict</th><th>Trace</th></tr></thead><tbody>{% for item in attempts %}<tr><td>{{ item.status }}</td><td>{{ item.attack_family_id }}</td><td>{{ item.category }} / {{ item.subcategory }}</td><td>{{ verdicts[item.id].verdict if item.id in verdicts else 'pending' }}</td><td>{{ item.langfuse_trace_id or 'not exported' }}</td></tr>{% else %}<tr><td colspan="5">No attempts recorded.</td></tr>{% endfor %}</tbody></table></div></section>
+{% if campaign.sanitized_error %}<section class="panel danger"><h2>Sanitized error</h2><pre>{{ campaign.sanitized_error }}</pre></section>{% endif %}
+{% endblock %}
+

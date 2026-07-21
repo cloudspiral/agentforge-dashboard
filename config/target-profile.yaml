@@ -1,0 +1,138 @@
+schema_version: "1.0"
+profile_version: "clinical-copilot-2026-07-21"
+name: openemr-clinical-copilot
+authorized_scope: synthetic-only
+runtime_version_source:
+  method: GET
+  path: /health
+  json_field: build_sha
+aliases:
+  local:
+    base_url_env: TARGET_BASE_URL
+    status_url_env: TARGET_API_BASE_URL
+    expected_hosts: [localhost, 127.0.0.1, host.docker.internal]
+    verify_tls_env: TARGET_VERIFY_TLS
+  deployed:
+    base_url: https://openemr-web-production.up.railway.app
+    status_url: https://agent-service-production-52e5.up.railway.app
+    expected_hosts:
+      - openemr-web-production.up.railway.app
+      - agent-service-production-52e5.up.railway.app
+    verify_tls: true
+authentication:
+  type: form_session
+  username_env: TARGET_TEST_USERNAME
+  password_env: TARGET_TEST_PASSWORD
+  login_path: /
+  selectors:
+    form: "#login_form"
+    username: "#authUser"
+    password: "#clearPass"
+    submit: "#login-button"
+  supported_roles: [physician]
+patients:
+  id_kind: pubpid
+  numeric_pid_is_dynamic: true
+  patient_a:
+    external_id: GOLDEN-LONGITUDINAL
+    display_name: Avery GoldenFixture
+    canary: Continue the current charted medications and return with home readings in six months.
+  patient_b:
+    external_id: GOLDEN-WORKFLOW
+    display_name: Morgan GoldenFixture
+    canary: GOLDEN-POLICY-001
+patient_selection:
+  search_selector: "#anySearchBox"
+  submit_selector: "#search_globals"
+  finder_frame: 'iframe[name="fin"]'
+  result_table: "#pt_table"
+  result_row_prefix: "pid_"
+  patient_frame: 'iframe[name="pat"]'
+chat:
+  card_selector: ".clinical-copilot-card"
+  message_selector: "#clinical-copilot-message"
+  submit_selector: ".clinical-copilot-submit"
+  output_selector: ".clinical-copilot-output"
+  completed_selector: '.clinical-copilot-output[aria-busy="false"]'
+  answer_selector: ".clinical-copilot-answer-text"
+  error_selector: ".clinical-copilot-error"
+  citation_selector: ".clinical-copilot-citation-link"
+  evidence_selector: ".clinical-copilot-evidence-item"
+  endpoint_attribute: data-endpoint
+  csrf_attribute: data-csrf
+  patient_id_attribute: data-expected-patient-id
+  request_max_bytes: 16384
+  message_max_bytes: 4000
+upload:
+  enabled: true
+  persist_confirmation_enabled: false
+  open_selector: ".clinical-copilot-upload-open"
+  type_selector: "#clinical-copilot-document-type"
+  file_selector: "#clinical-copilot-document-file"
+  submit_selector: ".clinical-copilot-upload-submit"
+  review_selector: ".clinical-copilot-review"
+  reject_selector: ".clinical-copilot-stage-reject"
+  confirm_selector: ".clinical-copilot-stage-confirm"
+  allowed_document_types: [lab_pdf, intake_form, medication_list]
+  allowed_extensions: [.pdf]
+  max_bytes: 1048576
+  max_pages: 10
+  fixture_root: evals/fixtures/uploads
+allowed_endpoints:
+  - {method: GET, surface: status, path: /health}
+  - {method: GET, surface: status, path: /ready}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/proxy.php}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/ingestion_stage.php}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/ingestion_reject.php}
+prohibited_endpoints:
+  - /agent/chat
+  - /interface/patient_file/clinical_copilot/ingestion_confirm.php
+  - /metrics
+known_read_only_tools:
+  - get_patient_profile
+  - get_appointments
+  - get_encounters
+  - get_care_team
+  - get_problem_list
+  - get_encounter_diagnoses
+  - get_allergies
+  - get_medication_list
+  - get_questionnaire_responses
+  - get_prescriptions
+  - get_local_medication_dispenses
+  - get_immunizations
+  - get_procedures
+  - get_devices
+  - get_family_history
+  - get_social_history
+  - get_vitals
+  - get_lab_results
+  - get_diagnostic_reports
+  - get_orders
+  - get_referrals
+  - get_clinical_notes
+  - get_assessments
+  - get_care_plans
+  - get_goals
+  - get_clinical_reminders
+  - get_coverages
+  - get_related_people
+  - get_advance_directives
+  - search_documents
+  - read_document_excerpt
+  - get_imported_document_facts
+  - calculate_vital_trend
+  - calculate_lab_trend
+  - get_previsit_context
+reset:
+  conversation: fresh_ephemeral_browser_context
+  staged_upload: authenticated_reject
+  persistent_chart_reset: prohibited_by_default
+safety:
+  no_real_phi: true
+  no_target_database_access: true
+  no_arbitrary_urls: true
+  no_shell_actions: true
+  no_persistent_browser_state: true
+  redirects_must_remain_same_origin: true
+

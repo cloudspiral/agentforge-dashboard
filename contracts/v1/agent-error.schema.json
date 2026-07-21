@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "AgentErrorCodeV1": {
+      "enum": [
+        "target_unreachable",
+        "budget_exceeded",
+        "rate_limited",
+        "invalid_contract",
+        "action_rejected",
+        "agent_refusal",
+        "agent_timeout",
+        "judge_timeout",
+        "no_findings_in_window",
+        "duplicate_finding",
+        "regression_detected",
+        "authentication_failed",
+        "reset_failed",
+        "unexpected_internal_error"
+      ],
+      "title": "AgentErrorCodeV1",
+      "type": "string"
+    },
+    "JsonValue": {}
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Attempt Id"
+    },
+    "campaign_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Campaign Id"
+    },
+    "code": {
+      "$ref": "#/$defs/AgentErrorCodeV1"
+    },
+    "correlation_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "message": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "retryable": {
+      "title": "Retryable",
+      "type": "boolean"
+    },
+    "sanitized_details": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "maxProperties": 50,
+      "title": "Sanitized Details",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "code",
+    "message",
+    "retryable",
+    "occurred_at",
+    "correlation_id"
+  ],
+  "title": "AgentErrorV1",
+  "type": "object"
+}

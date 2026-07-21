@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}AgentForge overview{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">Evidence-first security evaluation</p>
+  <h1>Clinical Co-Pilot assurance</h1>
+  <p>Models recommend. Deterministic gates authorize. Runners execute only versioned, allowlisted actions.</p>
+</section>
+
+<section class="stat-grid" aria-label="Platform summary">
+  <article><span>Queued</span><strong>{{ campaigns.get('queued', 0) }}</strong></article>
+  <article><span>Running</span><strong>{{ campaigns.get('running', 0) }}</strong></article>
+  <article><span>Completed</span><strong>{{ campaigns.get('completed', 0) }}</strong></article>
+  <article><span>Open findings</span><strong>{{ findings.values() | sum }}</strong></article>
+  <article><span>Confirmed</span><strong>{{ verdicts.get('exploit_confirmed', 0) }}</strong></article>
+  <article><span>Estimated cost</span><strong>${{ '%.4f' | format(estimated_cost) }}</strong></article>
+</section>
+
+<section class="panel two-column">
+  <div>
+    <h2>Start a bounded campaign</h2>
+    <form id="campaign-form">
+      <label>API token <input name="token" type="password" autocomplete="off" required></label>
+      <label>Target
+        <select name="target_alias"><option value="local">Local</option><option value="deployed">Deployed</option></select>
+      </label>
+      <label>Category
+        <select name="category">
+          <option value="prompt_injection">Prompt injection</option>
+          <option value="data_exfiltration">Data exfiltration</option>
+          <option value="tool_misuse">Tool misuse</option>
+        </select>
+      </label>
+      <label>Max attempts <input name="max_attempts" type="number" min="1" max="10" value="5"></label>
+      <button type="submit">Queue campaign</button>
+      <output id="campaign-result" aria-live="polite"></output>
+    </form>
+  </div>
+  <div>
+    <h2>Verdicts</h2>
+    <dl class="summary-list">
+      {% for name, value in verdicts.items() %}<div><dt>{{ name | replace('_', ' ') }}</dt><dd>{{ value }}</dd></div>{% else %}<p>No judged attempts yet.</p>{% endfor %}
+    </dl>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Recent campaigns</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Status</th><th>Type</th><th>Scope</th><th>Target</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for item in recent_campaigns %}
+      <tr><td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td><td><a href="/dashboard/campaigns/{{ item.id }}">{{ item.campaign_type }}</a></td><td>{{ item.category_scope or 'ranked automatically' }}</td><td>{{ item.target_alias }} · {{ item.target_version }}</td><td>{{ item.created_at }}</td></tr>
+      {% else %}<tr><td colspan="5">No campaigns yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel">
+  <h2>Category coverage</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Category</th><th>Subcategory</th><th>Version</th><th>Attempts</th><th>Confirmed</th><th>Partial</th></tr></thead>
+    <tbody>{% for row in coverage %}<tr><td>{{ row.category }}</td><td>{{ row.subcategory }}</td><td>{{ row.target_version }}</td><td>{{ row.attempts }}</td><td>{{ row.exploit_confirmed }}</td><td>{{ row.partial_signal }}</td></tr>{% else %}<tr><td colspan="6">Coverage begins with the first completed attempt.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelector('#campaign-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const output = document.querySelector('#campaign-result');
+    output.textContent = 'Queueing…';
+    const response = await fetch('/api/v1/campaigns', {
+      method: 'POST',
+      headers: {'Authorization': `Bearer ${form.get('token')}`, 'Content-Type': 'application/json'},
+      body: JSON.stringify({target_alias: form.get('target_alias'), category: form.get('category'), max_attempts: Number(form.get('max_attempts'))})
+    });
+    const result = await response.json();
+    output.textContent = response.ok ? `Queued ${result.id}` : (result.message || 'Request failed');
+    event.currentTarget.elements.token.value = '';
+  });
+</script>
+{% endblock %}
+

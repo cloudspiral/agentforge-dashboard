@@ -1,0 +1,649 @@
+{
+  "$defs": {
+    "ApprovedHttpMethodV1": {
+      "enum": [
+        "GET",
+        "POST"
+      ],
+      "title": "ApprovedHttpMethodV1",
+      "type": "string"
+    },
+    "AuthenticateActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "authenticate",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expected_role": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Expected Role",
+          "type": "string"
+        },
+        "session_source": {
+          "$ref": "#/$defs/AuthenticationSessionSourceV1"
+        },
+        "test_identity_alias": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Test Identity Alias",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "session_source",
+        "test_identity_alias",
+        "expected_role"
+      ],
+      "title": "AuthenticateActionV1",
+      "type": "object"
+    },
+    "AuthenticationSessionSourceV1": {
+      "enum": [
+        "environment_credentials",
+        "ephemeral_saved_test_session"
+      ],
+      "title": "AuthenticationSessionSourceV1",
+      "type": "string"
+    },
+    "CollectEvidenceActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "collect_evidence",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "capture_on": {
+          "default": "always",
+          "enum": [
+            "always",
+            "failure",
+            "confirmed_signal"
+          ],
+          "title": "Capture On",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "evidence_kinds": {
+          "items": {
+            "$ref": "#/$defs/EvidenceKindV1"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Evidence Kinds",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "evidence_kinds"
+      ],
+      "title": "CollectEvidenceActionV1",
+      "type": "object"
+    },
+    "EstimatedCostClassV1": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "EstimatedCostClassV1",
+      "type": "string"
+    },
+    "EvidenceKindV1": {
+      "enum": [
+        "transcript",
+        "http_metadata",
+        "tool_calls",
+        "side_effects",
+        "screenshot",
+        "browser_trace"
+      ],
+      "title": "EvidenceKindV1",
+      "type": "string"
+    },
+    "InvokeApprovedApiRequestActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "invoke_approved_api_request",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "body": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Body",
+          "type": "object"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "endpoint_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Endpoint Id",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/ApprovedHttpMethodV1"
+        },
+        "query": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "maxProperties": 25,
+          "title": "Query",
+          "type": "object"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "endpoint_id",
+        "method"
+      ],
+      "title": "InvokeApprovedApiRequestActionV1",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "ResetSessionActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "reset_session",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "require_clean_context": {
+          "default": true,
+          "title": "Require Clean Context",
+          "type": "boolean"
+        },
+        "reset_strategy_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Reset Strategy Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "reset_strategy_id"
+      ],
+      "title": "ResetSessionActionV1",
+      "type": "object"
+    },
+    "RiskFlagV1": {
+      "enum": [
+        "multi_turn",
+        "cross_patient_reference",
+        "file_upload",
+        "parameter_tampering",
+        "cost_amplification",
+        "privilege_boundary",
+        "human_review_recommended"
+      ],
+      "title": "RiskFlagV1",
+      "type": "string"
+    },
+    "SelectSyntheticPatientActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "select_synthetic_patient",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "patient_alias": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Patient Alias",
+          "type": "string"
+        },
+        "verify_selected_context": {
+          "default": true,
+          "title": "Verify Selected Context",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "patient_alias"
+      ],
+      "title": "SelectSyntheticPatientActionV1",
+      "type": "object"
+    },
+    "SendChatMessageActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "send_chat_message",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "await_response": {
+          "default": true,
+          "title": "Await Response",
+          "type": "boolean"
+        },
+        "conversation_alias": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Alias"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "message"
+      ],
+      "title": "SendChatMessageActionV1",
+      "type": "object"
+    },
+    "UploadApprovedFixtureActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "upload_approved_fixture",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "declared_media_type": {
+          "maxLength": 100,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+$",
+          "title": "Declared Media Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "fixture_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Fixture Id",
+          "type": "string"
+        },
+        "upload_surface_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Upload Surface Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "fixture_id",
+        "upload_surface_id",
+        "declared_media_type"
+      ],
+      "title": "UploadApprovedFixtureActionV1",
+      "type": "object"
+    },
+    "WaitForResponseActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "wait_for_response",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expected_event": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Event"
+        },
+        "timeout_seconds": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 120.0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "timeout_seconds"
+      ],
+      "title": "WaitForResponseActionV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attack_family_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Attack Family Id",
+      "type": "string"
+    },
+    "category": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Category",
+      "type": "string"
+    },
+    "estimated_cost_class": {
+      "$ref": "#/$defs/EstimatedCostClassV1"
+    },
+    "estimated_turns": {
+      "maximum": 20,
+      "minimum": 1,
+      "title": "Estimated Turns",
+      "type": "integer"
+    },
+    "expected_exploit_signals": {
+      "items": {
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Expected Exploit Signals",
+      "type": "array"
+    },
+    "expected_safe_behavior": {
+      "items": {
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Expected Safe Behavior",
+      "type": "array"
+    },
+    "lineage_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Lineage Id",
+      "type": "string"
+    },
+    "novelty_rationale": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Novelty Rationale",
+      "type": "string"
+    },
+    "ordered_actions": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "authenticate": "#/$defs/AuthenticateActionV1",
+            "collect_evidence": "#/$defs/CollectEvidenceActionV1",
+            "invoke_approved_api_request": "#/$defs/InvokeApprovedApiRequestActionV1",
+            "reset_session": "#/$defs/ResetSessionActionV1",
+            "select_synthetic_patient": "#/$defs/SelectSyntheticPatientActionV1",
+            "send_chat_message": "#/$defs/SendChatMessageActionV1",
+            "upload_approved_fixture": "#/$defs/UploadApprovedFixtureActionV1",
+            "wait_for_response": "#/$defs/WaitForResponseActionV1"
+          },
+          "propertyName": "action_type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ResetSessionActionV1"
+          },
+          {
+            "$ref": "#/$defs/AuthenticateActionV1"
+          },
+          {
+            "$ref": "#/$defs/SelectSyntheticPatientActionV1"
+          },
+          {
+            "$ref": "#/$defs/SendChatMessageActionV1"
+          },
+          {
+            "$ref": "#/$defs/UploadApprovedFixtureActionV1"
+          },
+          {
+            "$ref": "#/$defs/InvokeApprovedApiRequestActionV1"
+          },
+          {
+            "$ref": "#/$defs/WaitForResponseActionV1"
+          },
+          {
+            "$ref": "#/$defs/CollectEvidenceActionV1"
+          }
+        ]
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Ordered Actions",
+      "type": "array"
+    },
+    "parent_attempt_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Attempt Id"
+    },
+    "prerequisites": {
+      "items": {
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Prerequisites",
+      "type": "array"
+    },
+    "proposal_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "risk_flags": {
+      "items": {
+        "$ref": "#/$defs/RiskFlagV1"
+      },
+      "maxItems": 10,
+      "title": "Risk Flags",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "stop_conditions": {
+      "items": {
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Stop Conditions",
+      "type": "array"
+    },
+    "subcategory": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Subcategory",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "category",
+    "subcategory",
+    "attack_family_id",
+    "lineage_id",
+    "novelty_rationale",
+    "ordered_actions",
+    "expected_exploit_signals",
+    "expected_safe_behavior",
+    "stop_conditions",
+    "estimated_turns",
+    "estimated_cost_class"
+  ],
+  "title": "ProposedAttackV1",
+  "type": "object"
+}

@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Regressions · AgentForge{% endblock %}
+{% block content %}
+<section class="page-heading"><p class="eyebrow">Versioned invariant replay</p><h1>Regression runs</h1><p>{{ total }} total run{{ '' if total == 1 else 's' }}.</p></section>
+<section class="panel"><div class="table-wrap"><table><thead><tr><th>Status</th><th>Target version</th><th>Trigger</th><th>Pass</th><th>Reproduced</th><th>Inconclusive/error</th></tr></thead><tbody>{% for item in runs %}<tr><td>{{ item.status }}</td><td class="mono">{{ item.target_version }}</td><td>{{ item.trigger }}</td><td>{{ item.passed_cases }}</td><td>{{ item.reproduced_cases }}</td><td>{{ item.inconclusive_cases + item.error_cases }}</td></tr>{% else %}<tr><td colspan="6">No regression runs yet.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}
+

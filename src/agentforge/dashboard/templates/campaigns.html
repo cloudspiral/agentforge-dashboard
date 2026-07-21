@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Campaigns · AgentForge{% endblock %}
+{% block content %}
+<section class="page-heading"><p class="eyebrow">Durable queue</p><h1>Campaigns</h1><p>{{ total }} total campaign{{ '' if total == 1 else 's' }}.</p></section>
+<section class="panel"><div class="table-wrap"><table>
+  <thead><tr><th>Status</th><th>Campaign</th><th>Scope</th><th>Target</th><th>Attempts</th><th>Cost</th></tr></thead>
+  <tbody>{% for item in campaigns %}<tr><td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td><td><a href="/dashboard/campaigns/{{ item.id }}">{{ item.campaign_type }}</a><small>{{ item.id }}</small></td><td>{{ item.category_scope or 'automatic' }}</td><td>{{ item.target_alias }}<small>{{ item.target_version }}</small></td><td>{{ item.actual_attempts }} / {{ item.max_attempts }}</td><td>${{ item.actual_cost_usd }}</td></tr>{% else %}<tr><td colspan="6">No campaigns yet.</td></tr>{% endfor %}</tbody>
+</table></div></section>
+{% endblock %}
+

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}{{ finding.vulnerability_id }} · AgentForge{% endblock %}
+{% block content %}
+<section class="page-heading"><p class="eyebrow">{{ finding.vulnerability_id }}</p><h1>{{ finding.title }}</h1><p><span class="severity severity-{{ finding.severity }}">{{ finding.severity }}</span> · {{ finding.status }}</p></section>
+<section class="panel prose"><h2>Description</h2><p>{{ finding.description }}</p><h2>Clinical impact</h2><p>{{ finding.clinical_impact }}</p><h2>Observed</h2><p>{{ finding.observed_behavior }}</p><h2>Expected</h2><p>{{ finding.expected_behavior }}</p></section>
+{% if report %}<section class="panel"><h2>Report</h2><pre class="report">{{ report.markdown_body }}</pre></section>{% else %}<section class="panel"><p>No validated report has been generated.</p></section>{% endif %}
+{% endblock %}
+

@@ -1,0 +1,220 @@
+{
+  "$defs": {
+    "EvidenceReferenceKindV1": {
+      "enum": [
+        "transcript",
+        "http_metadata",
+        "tool_call",
+        "assertion",
+        "screenshot",
+        "browser_trace",
+        "langfuse_trace",
+        "report",
+        "other"
+      ],
+      "title": "EvidenceReferenceKindV1",
+      "type": "string"
+    },
+    "EvidenceReferenceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_path": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Path"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/EvidenceReferenceKindV1"
+        },
+        "reference_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Reference Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference_id",
+        "kind",
+        "description"
+      ],
+      "title": "EvidenceReferenceV1",
+      "type": "object"
+    },
+    "ExploitabilityV1": {
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "not_applicable"
+      ],
+      "title": "ExploitabilityV1",
+      "type": "string"
+    },
+    "JudgeRecommendedActionV1": {
+      "enum": [
+        "mutate",
+        "new_attack",
+        "reproduce",
+        "create_finding",
+        "run_regression",
+        "escalate_human_review",
+        "stop"
+      ],
+      "title": "JudgeRecommendedActionV1",
+      "type": "string"
+    },
+    "JudgeVerdictKindV1": {
+      "enum": [
+        "exploit_confirmed",
+        "partial_signal",
+        "attack_blocked",
+        "inconclusive"
+      ],
+      "title": "JudgeVerdictKindV1",
+      "type": "string"
+    },
+    "SeverityV1": {
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "informational",
+        "none"
+      ],
+      "title": "SeverityV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "add_regression_candidate": {
+      "title": "Add Regression Candidate",
+      "type": "boolean"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "create_or_update_finding": {
+      "title": "Create Or Update Finding",
+      "type": "boolean"
+    },
+    "deterministic_override_applied": {
+      "default": false,
+      "title": "Deterministic Override Applied",
+      "type": "boolean"
+    },
+    "deterministic_override_assertion_ids": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Deterministic Override Assertion Ids",
+      "type": "array"
+    },
+    "expected_behavior": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Expected Behavior",
+      "type": "string"
+    },
+    "exploitability": {
+      "$ref": "#/$defs/ExploitabilityV1"
+    },
+    "observed_behavior": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Observed Behavior",
+      "type": "string"
+    },
+    "recommended_next_action": {
+      "$ref": "#/$defs/JudgeRecommendedActionV1"
+    },
+    "reproduce_again": {
+      "title": "Reproduce Again",
+      "type": "boolean"
+    },
+    "rubric_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Rubric Hash",
+      "type": "string"
+    },
+    "rubric_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Rubric Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "severity": {
+      "$ref": "#/$defs/SeverityV1"
+    },
+    "supporting_evidence_references": {
+      "items": {
+        "$ref": "#/$defs/EvidenceReferenceV1"
+      },
+      "maxItems": 50,
+      "title": "Supporting Evidence References",
+      "type": "array"
+    },
+    "verdict": {
+      "$ref": "#/$defs/JudgeVerdictKindV1"
+    },
+    "violated_security_invariants": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Violated Security Invariants",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "verdict",
+    "severity",
+    "exploitability",
+    "confidence",
+    "observed_behavior",
+    "expected_behavior",
+    "recommended_next_action",
+    "reproduce_again",
+    "create_or_update_finding",
+    "add_regression_candidate",
+    "rubric_version",
+    "rubric_hash"
+  ],
+  "title": "JudgeVerdictV1",
+  "type": "object"
+}
