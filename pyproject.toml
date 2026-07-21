@@ -38,6 +38,16 @@ dev = [
   "ruff>=0.11,<1",
 ]
 
+# Keep the development tools in uv's default sync set as well as the public
+# extra above, so both `uv sync` and `pip install .[dev]` remain useful.
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.26,<2",
+  "pytest-cov>=6,<8",
+  "ruff>=0.11,<1",
+]
+
 [project.scripts]
 agentforge = "agentforge.cli.app:app"
 
@@ -60,6 +70,10 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "S"]
 ignore = ["B008", "S101"]
+
+[tool.ruff.lint.per-file-ignores]
+# Reports are Markdown, not HTML, so Jinja autoescaping would corrupt output.
+"src/agentforge/reports/renderer.py" = ["S701"]
 
 [tool.coverage.run]
 branch = true

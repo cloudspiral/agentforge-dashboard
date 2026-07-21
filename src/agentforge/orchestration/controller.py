@@ -13,7 +13,7 @@ import re
 import uuid
 from collections import Counter
 from contextlib import nullcontext
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
@@ -21,45 +21,30 @@ from typing import Any, Protocol
 import httpx
 from sqlalchemy import func, select
 
-from agentforge.agents import (
-    AttackGeneratorAgent,
-    DocumentationAgent,
-    JudgeAgent,
-    OrchestratorAgent,
-)
 from agentforge.agents.base import AgentInvocationResult
 from agentforge.contracts.v1 import (
     AttackEvidenceV1,
     CampaignObjectiveV1,
-    ConfirmedFindingSnapshotV1,
-    DocumentationRequestV1,
     EvidenceReferenceKindV1,
     EvidenceReferenceV1,
     ExploitabilityV1,
-    FindingStatusV1,
     JudgeRecommendedActionV1,
     JudgeVerdictKindV1,
     JudgeVerdictV1,
-    MinimalEvidencePackageV1,
     ProposedAttackV1,
     SeverityV1,
-    VulnerabilityReportV1,
     utc_now,
 )
 from agentforge.evaluation import (
     JudgeRubricV1,
     SeedCaseV1,
     TaxonomyV1,
-    load_judge_rubric,
-    load_seed_cases,
-    load_taxonomy,
 )
 from agentforge.evaluation.deterministic import (
     DeterministicEvaluationV1,
-    evaluate_deterministically,
 )
 from agentforge.evaluation.judge_service import reconcile_judge_verdict
-from agentforge.observability import AgentForgeMetrics, LangfuseTelemetry, get_telemetry, metrics
+from agentforge.observability import AgentForgeMetrics, LangfuseTelemetry, metrics
 from agentforge.orchestration.budgets import (
     BudgetAccountV1,
     BudgetLimitsV1,
@@ -67,27 +52,14 @@ from agentforge.orchestration.budgets import (
     BudgetUsageV1,
     PricingConfigV1,
     TokenUsageV1,
-    load_pricing_config,
-    reconcile_actual_usage,
-    release_reservation,
-    reserve_worst_case,
 )
 from agentforge.orchestration.execution_gate import (
     CampaignExecutionContextV1,
     GateLimitsV1,
-    GateRejectionV1,
-    ValidatedAttackV1,
-    validate_attack,
 )
 from agentforge.orchestration.objectives import (
-    build_objective,
-    build_security_invariants,
     canonical_hash,
-    choose_seed_case,
-    deterministic_shortlist,
     endpoint_bindings,
-    proposal_from_seed,
-    validate_objective_choice,
 )
 from agentforge.orchestration.worker import CampaignProcessResult
 from agentforge.persistence import Database
@@ -95,21 +67,12 @@ from agentforge.persistence.models import (
     AgentRun,
     AttackAttempt,
     Campaign,
-    Finding,
     JudgeVerdict,
-    RegressionCase,
-    RegressionResult,
-    RegressionRun,
     TargetVersion,
-    VulnerabilityReport,
 )
-from agentforge.regression import RegressionCaseV1, build_regression_case, evaluate_regression
-from agentforge.reports import export_stored_report, render_vulnerability_report
-from agentforge.runners import CompositeAttackRunner, TargetExecutionContext
 from agentforge.security.redaction import redact
 from agentforge.settings import Settings
-from agentforge.target import LoadedTargetProfile, load_target_profile
-from agentforge.target.auth import TargetAuthenticationError, credentials_from_settings
+from agentforge.target import LoadedTargetProfile
 from agentforge.target.profile import ResolvedTargetAlias
 from agentforge.target.version import DiscoveredTargetVersion, discover_target_version
 
@@ -555,7 +518,9 @@ class CampaignController:
             confidence=0.0,
             supporting_evidence_references=[],
             violated_security_invariants=[],
-            observed_behavior="Semantic judgment was unavailable; deterministic evidence remains authoritative.",
+            observed_behavior=(
+                "Semantic judgment was unavailable; deterministic evidence remains authoritative."
+            ),
             expected_behavior=expected_behavior,
             recommended_next_action=JudgeRecommendedActionV1.REPRODUCE,
             reproduce_again=True,
