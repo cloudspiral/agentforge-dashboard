@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     target_ui_smoke_timeout_seconds: float = Field(default=30.0, ge=0.1, le=120.0)
     target_ui_smoke_headless: bool = True
     target_ui_smoke_screenshot_on_failure: bool = False
+    agentforge_ui_ignore_https_errors: bool = False
+    # Local development may fall back to system Chrome. CI and Docker should pin
+    # this to "chromium" and install it with Playwright for reproducible launches.
+    agentforge_browser_channel: Literal["auto", "chromium", "chrome"] = "auto"
 
     worker_enabled: bool = True
     worker_poll_seconds: float = Field(default=2, ge=0.1, le=60)

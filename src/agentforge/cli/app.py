@@ -117,10 +117,11 @@ def _target_ui_smoke_message(result: UISmokeResult) -> str:
             f"Local UI smoke failed at {result.failed_step.value}: "
             f"{result.error_code} ({result.error_message})."
         )
+    warning = " Browser cleanup timed out." if "browser_cleanup_timeout" in result.warnings else ""
     return (
         f"Local UI smoke completed for {result.target_alias}: login succeeded, "
-        f"synthetic patient selected, and Clinical Co-Pilot is ready "
-        f"({result.total_latency_ms:.1f} ms)."
+        f"synthetic patient selected, and Clinical Co-Pilot is ready with a response "
+        f"({result.total_latency_ms:.1f} ms).{warning}"
     )
 
 
@@ -293,7 +294,7 @@ def target_ui_smoke(
         typer.Option("--json", help="Emit the typed result as compact JSON."),
     ] = False,
 ) -> None:
-    """Verify local authenticated UI readiness without chat or upload actions."""
+    """Verify local authenticated UI and benign Co-Pilot response readiness."""
 
     settings = get_settings()
     try:

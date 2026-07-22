@@ -11,17 +11,21 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from time import monotonic
-from typing import Protocol
+from typing import Literal, Protocol, cast
 from urllib.parse import unquote, urljoin, urlparse
 from uuid import uuid4
 
 from playwright.async_api import (
     Browser,
     BrowserContext,
+    Locator,
     Page,
     Playwright,
     PlaywrightContextManager,
     async_playwright,
+)
+from playwright.async_api import (
+    Error as PlaywrightError,
 )
 from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
@@ -69,6 +73,8 @@ from .base import (
     require_validated_attack,
 )
 
+BrowserLaunchMode = Literal["auto", "chromium", "chrome"]
+
 
 @dataclass(frozen=True, slots=True)
 class SelectedPatient:
@@ -97,6 +103,8 @@ class UISmokeStep(StrEnum):
     LOGIN = "login"
     SELECT_PATIENT = "select_patient"
     OPEN_COPILOT = "open_copilot"
+    SUBMIT_CHAT = "submit_chat"
+    RECEIVE_CHAT_RESPONSE = "receive_chat_response"
     CLOSE_BROWSER = "close_browser"
     COMPLETE = "complete"
 
@@ -111,6 +119,9 @@ class UISmokeResult(BaseModel):
     login_succeeded: bool
     patient_selected: bool
     copilot_opened: bool
+    chat_submitted: bool = False
+    response_received: bool = False
+    response_length: int = Field(default=0, ge=0)
     current_step: UISmokeStep
     failed_step: UISmokeStep | None
     sanitized_route: str | None
@@ -120,10 +131,157 @@ class UISmokeResult(BaseModel):
     error_code: str | None
     error_message: str | None
     failure_screenshot: str | None = None
+    warnings: list[str] = Field(default_factory=list, max_length=10)
 
 
 class _CrossHostNavigationRejected(RunnerActionRejected):
     """Raised without retaining the rejected destination URL."""
+
+
+class _ManagedChromiumUnavailable(RuntimeError):
+    """Raised when the Playwright-managed executable is specifically missing."""
+
+
+class _GoogleChromeUnavailable(RuntimeError):
+    """Raised when Playwright cannot find the requested system Chrome channel."""
+
+
+class _UIHttpsErrorsOverrideRejected(ValueError):
+    """Raised when the UI-only TLS override is requested outside loopback HTTPS."""
+
+
+class _SyntheticPatientNotFound(RunnerActionRejected):
+    """Raised with bounded, synthetic-only Patient Finder diagnostics."""
+
+
+class _CopilotResponseTimeout(RuntimeError):
+    """Raised when the smoke prompt does not produce a response in time."""
+
+
+class _CopilotEmptyResponse(RuntimeError):
+    """Raised when the completed smoke response has no rendered text."""
+
+
+class _CopilotUIError(RuntimeError):
+    """Raised without retaining error text rendered by the target UI."""
+
+
+_LOOPBACK_UI_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_SAFE_SYNTHETIC_EXTERNAL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$")
+_UI_SMOKE_CHAT_MESSAGE = "Briefly summarize the selected synthetic patient's chart."
+
+
+def _resolve_ui_ignore_https_errors(*, enabled: bool, base_url: str) -> bool:
+    if not enabled:
+        return False
+    parsed = urlparse(base_url)
+    hostname = (parsed.hostname or "").casefold()
+    if parsed.scheme.casefold() != "https" or hostname not in _LOOPBACK_UI_HOSTS:
+        raise _UIHttpsErrorsOverrideRejected
+    return True
+
+
+def _is_missing_managed_chromium(exc: Exception, executable_path: str) -> bool:
+    """Match only Playwright's missing-managed-executable launch failure."""
+
+    if not isinstance(exc, PlaywrightError):
+        return False
+    try:
+        if Path(executable_path).is_file():
+            return False
+    except OSError:
+        return False
+    message = str(exc).casefold()
+    return any(
+        marker in message
+        for marker in (
+            "executable doesn't exist",
+            "executable does not exist",
+            "executable not found",
+        )
+    )
+
+
+def _is_missing_google_chrome(exc: Exception) -> bool:
+    """Match Playwright's explicit missing Chrome-channel failure."""
+
+    if not isinstance(exc, PlaywrightError):
+        return False
+    message = str(exc).casefold()
+    return any(
+        marker in message
+        for marker in (
+            "distribution 'chrome' is not found",
+            'distribution "chrome" is not found',
+            "chrome channel is not found",
+        )
+    )
+
+
+async def _click_patient_link_by_external_id(
+    *,
+    table: Locator,
+    external_id: str,
+    finder_iframe_found: bool,
+    configured_external_ids: frozenset[str],
+    timeout_ms: float,
+) -> None:
+    deadline = monotonic() + (timeout_ms / 1_000)
+    while True:
+        rows = table.locator("tbody tr")
+        row_count = await rows.count()
+        matching_rows: list[Locator] = []
+        observed_cell_values: set[str] = set()
+        for index in range(row_count):
+            row = rows.nth(index)
+            cells = row.locator("td")
+            cell_values = [
+                (await cells.nth(cell_index).inner_text()).strip()
+                for cell_index in range(await cells.count())
+            ]
+            observed_cell_values.update(cell_values)
+            if external_id in cell_values:
+                matching_rows.append(row)
+        if matching_rows or monotonic() >= deadline:
+            break
+        await asyncio.sleep(min(0.1, max(0.0, deadline - monotonic())))
+
+    if len(matching_rows) != 1:
+        safe_external_id_values = sorted(
+            value
+            for value in observed_cell_values.intersection(configured_external_ids)
+            if _SAFE_SYNTHETIC_EXTERNAL_ID.fullmatch(value)
+        )
+        safe_values = ",".join(safe_external_id_values) or "none"
+        raise _SyntheticPatientNotFound(
+            "configured synthetic patient could not be selected; "
+            f"finder_iframe_found={str(finder_iframe_found).lower()}; "
+            f"table_rows={row_count}; sanitized_external_id_cells={safe_values}"
+        )
+
+    patient_links = matching_rows[0].locator("a:visible")
+    if await patient_links.count() < 1:
+        raise RunnerActionRejected("synthetic patient row did not contain a visible patient link")
+    await patient_links.first.click()
+
+
+async def _scroll_focus_fill_and_submit(
+    *,
+    message_input: Locator,
+    submit_button: Locator,
+    message: str,
+    timeout_ms: float,
+) -> None:
+    await message_input.scroll_into_view_if_needed(timeout=timeout_ms)
+    await message_input.wait_for(state="visible", timeout=timeout_ms)
+    deadline = monotonic() + (timeout_ms / 1_000)
+    while not await message_input.is_enabled():
+        if monotonic() >= deadline:
+            raise PlaywrightTimeoutError("Co-Pilot message input did not become enabled")
+        await asyncio.sleep(min(0.05, max(0.0, deadline - monotonic())))
+    await message_input.click(timeout=timeout_ms)
+    await message_input.fill(message, timeout=timeout_ms)
+    await submit_button.click(timeout=timeout_ms)
 
 
 class BrowserSession(Protocol):
@@ -171,6 +329,14 @@ class UISmokeBrowserSession(Protocol):
 
     async def verify_copilot_ready(self) -> None: ...
 
+    async def submit_ui_smoke_chat(self, message: str, timeout_seconds: float) -> int: ...
+
+    async def wait_for_ui_smoke_response(
+        self,
+        before_count: int,
+        timeout_seconds: float,
+    ) -> BrowserChatResult: ...
+
     async def capture_screenshot(self, path: Path) -> None: ...
 
     async def clear_sensitive_fields(self) -> None: ...
@@ -180,7 +346,8 @@ BrowserSessionFactory = Callable[
     [TargetExecutionContext, bool], AbstractAsyncContextManager[BrowserSession]
 ]
 UISmokeSessionFactory = Callable[
-    [TargetExecutionContext, bool], AbstractAsyncContextManager[UISmokeBrowserSession]
+    [TargetExecutionContext, bool, BrowserLaunchMode, bool],
+    AbstractAsyncContextManager[UISmokeBrowserSession],
 ]
 
 
@@ -193,10 +360,18 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
         trace_enabled: bool,
         *,
         headless: bool = True,
+        browser_mode: BrowserLaunchMode = "chromium",
+        ignore_https_errors: bool | None = None,
     ) -> None:
         self.execution = context
         self.trace_enabled = trace_enabled
         self.headless = headless
+        self.browser_mode = browser_mode
+        self.ignore_https_errors = (
+            not context.target_alias.verify_tls
+            if ignore_https_errors is None
+            else ignore_https_errors
+        )
         self._manager: PlaywrightContextManager | None = None
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
@@ -210,17 +385,25 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
 
     async def __aenter__(self) -> _LivePlaywrightSession:
         self._manager = async_playwright()
-        self._playwright = await self._manager.start()
-        self._browser = await self._playwright.chromium.launch(headless=self.headless)
-        self._context = await self._browser.new_context(
-            accept_downloads=False,
-            ignore_https_errors=not self.execution.target_alias.verify_tls,
-        )
-        await self._context.route("**/*", self._route_request)
-        self._page = await self._context.new_page()
-        return self
+        try:
+            self._playwright = await self._manager.start()
+            self._browser = await self._launch_browser()
+            self._context = await self._browser.new_context(
+                accept_downloads=False,
+                ignore_https_errors=self.ignore_https_errors,
+            )
+            await self._context.route("**/*", self._route_request)
+            self._page = await self._context.new_page()
+            return self
+        except Exception:
+            with suppress(Exception):
+                await self._cleanup()
+            raise
 
     async def __aexit__(self, exc_type, exc, traceback) -> None:  # type: ignore[no-untyped-def]
+        await self._cleanup()
+
+    async def _cleanup(self) -> None:
         try:
             if self._context is not None:
                 await self._context.close()
@@ -229,13 +412,48 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
                 if self._browser is not None:
                     await self._browser.close()
             finally:
-                if self._manager is not None:
-                    await self._manager.stop()
-                self._page = None
-                self._context = None
-                self._browser = None
-                self._playwright = None
-                self._manager = None
+                try:
+                    if self._manager is not None:
+                        await self._manager.stop()
+                finally:
+                    self._page = None
+                    self._context = None
+                    self._browser = None
+                    self._playwright = None
+                    self._manager = None
+
+    async def _launch_browser(self) -> Browser:
+        if self._playwright is None:
+            raise RuntimeError("Playwright is not initialized")
+        browser_type = self._playwright.chromium
+        if self.browser_mode == "chrome":
+            try:
+                return await browser_type.launch(headless=self.headless, channel="chrome")
+            except Exception as exc:
+                if _is_missing_google_chrome(exc):
+                    raise _GoogleChromeUnavailable from exc
+                raise
+        if self.browser_mode == "chromium":
+            try:
+                return await browser_type.launch(headless=self.headless)
+            except Exception as exc:
+                if _is_missing_managed_chromium(exc, browser_type.executable_path):
+                    raise _ManagedChromiumUnavailable from exc
+                raise
+        if self.browser_mode != "auto":
+            raise ValueError("unsupported browser launch mode")
+
+        try:
+            return await browser_type.launch(headless=self.headless)
+        except Exception as exc:
+            if not _is_missing_managed_chromium(exc, browser_type.executable_path):
+                raise
+        try:
+            return await browser_type.launch(headless=self.headless, channel="chrome")
+        except Exception as exc:
+            if _is_missing_google_chrome(exc):
+                raise _GoogleChromeUnavailable from exc
+            raise
 
     @property
     def page(self) -> Page:
@@ -378,34 +596,31 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
                 state="visible", timeout=timeout_ms
             )
 
-        rows = finder.locator(f'tr[id^="{selection.result_row_prefix}"]').filter(
-            has_text=patient.external_id
+        await _click_patient_link_by_external_id(
+            table=finder.locator(selection.result_table),
+            external_id=patient.external_id,
+            finder_iframe_found=(await self.page.locator(selection.finder_frame).count() > 0),
+            configured_external_ids=frozenset(
+                {
+                    self.execution.profile.patients.patient_a.external_id,
+                    self.execution.profile.patients.patient_b.external_id,
+                }
+            ),
+            timeout_ms=timeout_ms,
         )
-        if await rows.count() != 1:
-            raise RunnerActionRejected("synthetic patient lookup was not uniquely identified")
-        row = rows.first
-        row_text = (await row.inner_text()).casefold()
-        expected_tokens = patient.display_name.casefold().split()
-        if patient.external_id.casefold() not in row_text or not all(
-            token in row_text for token in expected_tokens
-        ):
-            raise RunnerActionRejected("synthetic patient result did not match exact ID and name")
-        row_id = await row.get_attribute("id")
-        prefix = selection.result_row_prefix
-        numeric_pid = row_id[len(prefix) :] if row_id and row_id.startswith(prefix) else ""
-        if not numeric_pid.isdigit() or int(numeric_pid) <= 0:
-            raise RunnerActionRejected("synthetic patient row did not expose a valid numeric PID")
-        await row.click()
+        await self.page.locator(selection.finder_frame).wait_for(state="hidden", timeout=timeout_ms)
 
         patient_frame = self.page.frame_locator(selection.patient_frame)
-        await patient_frame.locator(self.execution.profile.chat.card_selector).wait_for(
-            state="visible", timeout=timeout_ms
-        )
+        card = patient_frame.locator(self.execution.profile.chat.card_selector)
+        await card.wait_for(state="visible", timeout=timeout_ms)
+        dynamic_pid = await card.get_attribute(self.execution.profile.chat.patient_id_attribute)
+        if not dynamic_pid or len(dynamic_pid) > 128:
+            raise RunnerActionRejected("Clinical Co-Pilot card lacks a bounded patient binding")
         selected = SelectedPatient(
             patient_alias=patient_alias,
             external_id=patient.external_id,
             display_name=patient.display_name,
-            numeric_pid=numeric_pid,
+            numeric_pid=dynamic_pid,
         )
         self._selected = selected
         await self._bind_and_validate_card(first_binding=True)
@@ -456,6 +671,63 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
         ):
             await frame.locator(selector).wait_for(state="visible", timeout=timeout_ms)
         await self._bind_and_validate_card(first_binding=False)
+
+    async def submit_ui_smoke_chat(self, message: str, timeout_seconds: float) -> int:
+        if len(message.encode("utf-8")) > self.execution.profile.chat.message_max_bytes:
+            raise RunnerActionRejected("chat message exceeds the target profile byte limit")
+        await self._bind_and_validate_card(first_binding=False)
+        profile = self.execution.profile
+        frame = self.page.frame_locator(profile.patient_selection.patient_frame)
+        answers = frame.locator(f"{profile.chat.output_selector} {profile.chat.answer_selector}")
+        before_count = await answers.count()
+        timeout_ms = min(timeout_seconds, self.execution.request_timeout_seconds) * 1_000
+        await _scroll_focus_fill_and_submit(
+            message_input=frame.locator(profile.chat.message_selector),
+            submit_button=frame.locator(profile.chat.submit_selector),
+            message=message,
+            timeout_ms=timeout_ms,
+        )
+        return before_count
+
+    async def wait_for_ui_smoke_response(
+        self,
+        before_count: int,
+        timeout_seconds: float,
+    ) -> BrowserChatResult:
+        profile = self.execution.profile
+        frame = self.page.frame_locator(profile.patient_selection.patient_frame)
+        answers = frame.locator(f"{profile.chat.output_selector} {profile.chat.answer_selector}")
+        errors = frame.locator(profile.chat.error_selector)
+        timeout = min(timeout_seconds, self.execution.request_timeout_seconds)
+        deadline = asyncio.get_running_loop().time() + timeout
+        answer_count = before_count
+        while asyncio.get_running_loop().time() < deadline:
+            answer_count = await answers.count()
+            if answer_count > before_count:
+                break
+            if await errors.count():
+                raise _CopilotUIError("Clinical Co-Pilot returned a UI error")
+            await asyncio.sleep(0.05)
+        else:
+            raise _CopilotResponseTimeout(
+                "Clinical Co-Pilot response did not complete before the timeout"
+            )
+
+        remaining_ms = max(0.0, deadline - asyncio.get_running_loop().time()) * 1_000
+        try:
+            await frame.locator(profile.chat.completed_selector).wait_for(
+                state="visible", timeout=remaining_ms
+            )
+        except PlaywrightTimeoutError as exc:
+            raise _CopilotResponseTimeout(
+                "Clinical Co-Pilot response did not complete before the timeout"
+            ) from exc
+
+        response_text = (await answers.nth(answer_count - 1).inner_text()).strip()
+        if not response_text:
+            raise _CopilotEmptyResponse("Clinical Co-Pilot returned an empty response")
+        await self._bind_and_validate_card(first_binding=False)
+        return BrowserChatResult(response_text[:20_000])
 
     async def send_chat(self, message: str, timeout_seconds: float) -> BrowserChatResult:
         if len(message.encode("utf-8")) > self.execution.profile.chat.message_max_bytes:
@@ -557,10 +829,14 @@ def _ui_smoke_result(
     login_succeeded: bool = False,
     patient_selected: bool = False,
     copilot_opened: bool = False,
+    chat_submitted: bool = False,
+    response_received: bool = False,
+    response_length: int = 0,
     sanitized_route: str | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
     failure_screenshot: str | None = None,
+    warnings: list[str] | None = None,
 ) -> UISmokeResult:
     return UISmokeResult(
         target_alias=_sanitized_target_alias(target_alias),
@@ -568,6 +844,9 @@ def _ui_smoke_result(
         login_succeeded=login_succeeded,
         patient_selected=patient_selected,
         copilot_opened=copilot_opened,
+        chat_submitted=chat_submitted,
+        response_received=response_received,
+        response_length=response_length,
         current_step=current_step,
         failed_step=failed_step,
         sanitized_route=sanitized_route,
@@ -577,6 +856,7 @@ def _ui_smoke_result(
         error_code=error_code,
         error_message=error_message,
         failure_screenshot=failure_screenshot,
+        warnings=list(warnings or []),
     )
 
 
@@ -592,8 +872,18 @@ def _smoke_error(
             "cross_host_navigation_rejected",
             "browser navigation left the approved target origin",
         )
+    if isinstance(exc, _ManagedChromiumUnavailable):
+        return (
+            "chromium_not_installed",
+            "Playwright Chromium is unavailable; run `uv run playwright install chromium`",
+        )
+    if isinstance(exc, _GoogleChromeUnavailable):
+        return (
+            "chrome_not_installed",
+            "Google Chrome is unavailable for Playwright channel `chrome`",
+        )
     if step == UISmokeStep.LAUNCH_BROWSER:
-        return "browser_launch_failed", "Chromium could not be launched"
+        return "browser_launch_failed", "configured browser could not be launched"
     if step == UISmokeStep.NAVIGATE_LOGIN:
         if isinstance(exc, PlaywrightTimeoutError):
             return "navigation_timeout", "local target navigation timed out"
@@ -602,6 +892,8 @@ def _smoke_error(
         return "login_form_not_found", "approved OpenEMR login form was not found"
     if step == UISmokeStep.LOGIN:
         return "login_failed", "approved OpenEMR test login did not complete"
+    if step == UISmokeStep.SELECT_PATIENT and isinstance(exc, _SyntheticPatientNotFound):
+        return "synthetic_patient_not_found", exc.public_message
     if step == UISmokeStep.SELECT_PATIENT:
         return (
             "synthetic_patient_not_found",
@@ -609,6 +901,17 @@ def _smoke_error(
         )
     if step == UISmokeStep.OPEN_COPILOT:
         return "copilot_ui_not_found", "Clinical Co-Pilot UI was not ready"
+    if step == UISmokeStep.SUBMIT_CHAT:
+        return "copilot_chat_submission_failed", "Clinical Co-Pilot prompt was not submitted"
+    if step == UISmokeStep.RECEIVE_CHAT_RESPONSE:
+        if isinstance(exc, _CopilotEmptyResponse):
+            return "copilot_empty_response", "Clinical Co-Pilot returned an empty response"
+        if isinstance(exc, (_CopilotResponseTimeout, PlaywrightTimeoutError)):
+            return (
+                "copilot_response_timeout",
+                "Clinical Co-Pilot response did not complete before the timeout",
+            )
+        return "copilot_response_failed", "Clinical Co-Pilot response was not received"
     if step == UISmokeStep.CLOSE_BROWSER:
         return "browser_cleanup_failed", "ephemeral browser cleanup did not complete"
     return "ui_smoke_failed", "local UI smoke flow failed"
@@ -617,8 +920,16 @@ def _smoke_error(
 def _default_ui_smoke_session_factory(
     context: TargetExecutionContext,
     headless: bool,
+    browser_mode: BrowserLaunchMode,
+    ignore_https_errors: bool,
 ) -> AbstractAsyncContextManager[UISmokeBrowserSession]:
-    return _LivePlaywrightSession(context, trace_enabled=False, headless=headless)
+    return _LivePlaywrightSession(
+        context,
+        trace_enabled=False,
+        headless=headless,
+        browser_mode=browser_mode,
+        ignore_https_errors=ignore_https_errors,
+    )
 
 
 async def run_ui_smoke(
@@ -633,7 +944,7 @@ async def run_ui_smoke(
     screenshot_on_failure: bool = False,
     session_factory: UISmokeSessionFactory | None = None,
 ) -> UISmokeResult:
-    """Run a local-only, no-submit UI readiness flow in an ephemeral context."""
+    """Run a local-only UI readiness flow with one benign prompt."""
 
     timestamp = utc_now()
     started = monotonic()
@@ -685,6 +996,25 @@ async def run_ui_smoke(
             failed_step=UISmokeStep.VALIDATE_TARGET,
             error_code="target_url_rejected",
             error_message="configured local target URL failed approved-host validation",
+        )
+    try:
+        ignore_https_errors = _resolve_ui_ignore_https_errors(
+            enabled=settings.agentforge_ui_ignore_https_errors,
+            base_url=resolved_alias.base_url,
+        )
+    except _UIHttpsErrorsOverrideRejected:
+        timings[UISmokeStep.VALIDATE_TARGET.value] = round(
+            (monotonic() - validation_started) * 1_000, 3
+        )
+        return _ui_smoke_result(
+            target_alias=target_alias,
+            timestamp=timestamp,
+            started=started,
+            step_latencies_ms=timings,
+            current_step=UISmokeStep.VALIDATE_TARGET,
+            failed_step=UISmokeStep.VALIDATE_TARGET,
+            error_code="https_errors_override_rejected",
+            error_message="HTTPS error override is restricted to loopback HTTPS targets",
         )
     timings[UISmokeStep.VALIDATE_TARGET.value] = round(
         (monotonic() - validation_started) * 1_000, 3
@@ -751,8 +1081,12 @@ async def run_ui_smoke(
     login_succeeded = False
     patient_selected = False
     copilot_opened = False
+    chat_submitted = False
+    response_received = False
+    response_length = 0
     sanitized_route: str | None = None
     failure_screenshot: str | None = None
+    warnings: list[str] = []
     cleanup_started = monotonic()
 
     async def perform(
@@ -769,7 +1103,12 @@ async def run_ui_smoke(
 
     try:
         launch_started = monotonic()
-        async with factory(context, headless) as session:
+        async with factory(
+            context,
+            headless,
+            settings.agentforge_browser_channel,
+            ignore_https_errors,
+        ) as session:
             timings[UISmokeStep.LAUNCH_BROWSER.value] = round(
                 (monotonic() - launch_started) * 1_000, 3
             )
@@ -790,6 +1129,29 @@ async def run_ui_smoke(
                 await perform(UISmokeStep.OPEN_COPILOT, session.verify_copilot_ready)
                 copilot_opened = True
                 sanitized_route = "clinical_copilot_panel"
+                before_count = cast(
+                    int,
+                    await perform(
+                        UISmokeStep.SUBMIT_CHAT,
+                        lambda: session.submit_ui_smoke_chat(
+                            _UI_SMOKE_CHAT_MESSAGE,
+                            timeout_seconds,
+                        ),
+                    ),
+                )
+                chat_submitted = True
+                chat_result = cast(
+                    BrowserChatResult,
+                    await perform(
+                        UISmokeStep.RECEIVE_CHAT_RESPONSE,
+                        lambda: session.wait_for_ui_smoke_response(
+                            before_count,
+                            timeout_seconds,
+                        ),
+                    ),
+                )
+                response_received = True
+                response_length = len(chat_result.response_text)
             except Exception:
                 await session.clear_sensitive_fields()
                 if screenshot_on_failure:
@@ -815,23 +1177,32 @@ async def run_ui_smoke(
             timings[UISmokeStep.CLOSE_BROWSER.value] = round(
                 (monotonic() - cleanup_started) * 1_000, 3
             )
-        error_code, error_message = _smoke_error(current_step, exc)
-        return _ui_smoke_result(
-            target_alias=target_alias,
-            timestamp=timestamp,
-            started=started,
-            step_latencies_ms=timings,
-            current_step=current_step,
-            failed_step=current_step,
-            navigation_succeeded=navigation_succeeded,
-            login_succeeded=login_succeeded,
-            patient_selected=patient_selected,
-            copilot_opened=copilot_opened,
-            sanitized_route=sanitized_route,
-            error_code=error_code,
-            error_message=error_message,
-            failure_screenshot=failure_screenshot,
-        )
+        if current_step == UISmokeStep.CLOSE_BROWSER and isinstance(
+            exc, (PlaywrightTimeoutError, TimeoutError)
+        ):
+            warnings.append("browser_cleanup_timeout")
+        else:
+            error_code, error_message = _smoke_error(current_step, exc)
+            return _ui_smoke_result(
+                target_alias=target_alias,
+                timestamp=timestamp,
+                started=started,
+                step_latencies_ms=timings,
+                current_step=current_step,
+                failed_step=current_step,
+                navigation_succeeded=navigation_succeeded,
+                login_succeeded=login_succeeded,
+                patient_selected=patient_selected,
+                copilot_opened=copilot_opened,
+                chat_submitted=chat_submitted,
+                response_received=response_received,
+                response_length=response_length,
+                sanitized_route=sanitized_route,
+                error_code=error_code,
+                error_message=error_message,
+                failure_screenshot=failure_screenshot,
+                warnings=warnings,
+            )
 
     return _ui_smoke_result(
         target_alias=target_alias,
@@ -844,7 +1215,11 @@ async def run_ui_smoke(
         login_succeeded=True,
         patient_selected=True,
         copilot_opened=True,
+        chat_submitted=chat_submitted,
+        response_received=response_received,
+        response_length=response_length,
         sanitized_route=sanitized_route,
+        warnings=warnings,
     )
 
 
@@ -1123,6 +1498,7 @@ class PlaywrightAttackRunner:
 
 
 __all__ = [
+    "BrowserLaunchMode",
     "BrowserChatResult",
     "BrowserSession",
     "BrowserSessionFactory",
