@@ -11,6 +11,8 @@ from sqlalchemy import func, select
 from agentforge.agents.base import AgentInvocationResult, AgentUsage
 from agentforge.contracts.v1 import (
     ActionExecutionStatusV1,
+    AgentErrorCodeV1,
+    AgentErrorV1,
     JudgeVerdictV1,
     TokenUsageV1,
     TranscriptRoleV1,
@@ -21,7 +23,13 @@ from agentforge.evaluation import load_seed_case, load_taxonomy
 from agentforge.evaluation.live_local import run_live_local_case
 from agentforge.orchestration.execution_gate import ValidatedAttackV1
 from agentforge.persistence import Base, Database
-from agentforge.persistence.models import AttackAttempt, Campaign, JudgeVerdict, TargetVersion
+from agentforge.persistence.models import (
+    AgentRun,
+    AttackAttempt,
+    Campaign,
+    JudgeVerdict,
+    TargetVersion,
+)
 from agentforge.runners.base import (
     EvidenceRecorder,
     RunnerActionRejected,
@@ -128,11 +136,37 @@ class FakeBrowserRunner:
 
 
 class FakeJudge:
-    def __init__(self) -> None:
+    def __init__(self, *, contract_failures: int = 0) -> None:
         self.calls = 0
+        self.contract_failures = contract_failures
 
-    async def invoke(self, _payload: Any, **_kwargs: Any) -> AgentInvocationResult[JudgeVerdictV1]:
+    async def invoke(self, _payload: Any, **kwargs: Any) -> AgentInvocationResult[JudgeVerdictV1]:
         self.calls += 1
+        trace_id = f"judge-trace-{self.calls}"
+        if self.calls <= self.contract_failures:
+            return AgentInvocationResult(
+                role="judge",
+                model="fake-judge",
+                prompt_version="fake-judge-v1",
+                prompt_sha256="a" * 64,
+                payload_sha256="b" * 64,
+                usage=AgentUsage.zero(),
+                estimated_cost_usd=0.0,
+                latency_ms=1.0,
+                sdk_attempts=1,
+                langfuse_trace_id=trace_id,
+                error=AgentErrorV1(
+                    schema_version="v1",
+                    code=AgentErrorCodeV1.INVALID_CONTRACT,
+                    message="The model response did not satisfy the declared output contract.",
+                    retryable=False,
+                    occurred_at=utc_now(),
+                    correlation_id=f"judge-{self.calls}",
+                    campaign_id=kwargs["campaign_id"],
+                    attempt_id=kwargs["attempt_id"],
+                    sanitized_details={"agent_role": "judge", "reason": "model_behavior"},
+                ),
+            )
         verdict = JudgeVerdictV1.model_validate_json(
             """{
                 "schema_version":"v1",
@@ -164,7 +198,7 @@ class FakeJudge:
             estimated_cost_usd=0.001,
             latency_ms=1.0,
             sdk_attempts=1,
-            langfuse_trace_id=None,
+            langfuse_trace_id=trace_id,
             output=verdict,
         )
 
@@ -323,7 +357,13 @@ async def test_fixed_case_persists_evidence_verdict_and_secret_free_export(
             assert attempt is not None
             assert attempt.evidence_payload is not None
             assert attempt.evidence_hash == result.evidence.evidence_hash
+            assert attempt.langfuse_trace_id == "judge-trace-1"
             assert session.scalar(select(JudgeVerdict)) is not None
+            agent_run = session.scalar(select(AgentRun))
+            assert agent_run is not None
+            assert agent_run.status == "succeeded"
+            assert agent_run.langfuse_trace_id == "judge-trace-1"
+            assert agent_run.typed_error is None
 
         export_path = tmp_path / "results" / result.result_path
         exported = export_path.read_text(encoding="utf-8")
@@ -337,6 +377,83 @@ async def test_fixed_case_persists_evidence_verdict_and_secret_free_export(
             )
         assert '"outcome": "passed"' in exported
         assert "[REDACTED]" in exported
+    finally:
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_invalid_judge_contract_is_retried_once_and_audited(tmp_path: Path) -> None:
+    judge = FakeJudge(contract_failures=1)
+    database, result = await _run(
+        tmp_path,
+        runner=FakeBrowserRunner(),
+        judge=judge,
+    )
+
+    try:
+        assert result.successful is True
+        assert result.status == "completed"
+        assert judge.calls == 2
+        with database.session_factory() as session:
+            attempt = session.scalar(select(AttackAttempt))
+            assert attempt is not None
+            assert attempt.status == "completed"
+            assert attempt.langfuse_trace_id == "judge-trace-2"
+            runs = list(session.scalars(select(AgentRun).order_by(AgentRun.created_at)))
+            assert [run.status for run in runs] == ["failed", "succeeded"]
+            assert [run.langfuse_trace_id for run in runs] == [
+                "judge-trace-1",
+                "judge-trace-2",
+            ]
+            assert runs[0].typed_error is not None
+            assert runs[0].typed_error["code"] == "invalid_contract"
+            assert runs[0].typed_error["sanitized_details"]["reason"] == "model_behavior"
+            assert runs[1].typed_error is None
+    finally:
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_repeated_invalid_judge_contract_persists_specific_failure(
+    tmp_path: Path,
+) -> None:
+    judge = FakeJudge(contract_failures=2)
+    database, result = await _run(
+        tmp_path,
+        runner=FakeBrowserRunner(),
+        judge=judge,
+    )
+
+    try:
+        assert result.successful is False
+        assert result.status == "judge_failed"
+        assert result.error_code == "judge_failed"
+        assert result.error_message == (
+            "the Judge returned invalid structured output after one bounded retry"
+        )
+        assert judge.calls == 2
+        with database.session_factory() as session:
+            campaign = session.scalar(select(Campaign))
+            attempt = session.scalar(select(AttackAttempt))
+            assert campaign is not None
+            assert campaign.status == "failed"
+            assert campaign.sanitized_error == {
+                "code": "judge_failed",
+                "message": "the Judge returned invalid structured output after one bounded retry",
+                "reason": "invalid_contract",
+                "judge_invocations": 2,
+                "judge_error_code": "invalid_contract",
+                "judge_error_reason": "model_behavior",
+                "trace_id": "judge-trace-2",
+            }
+            assert attempt is not None
+            assert attempt.status == "error"
+            assert attempt.langfuse_trace_id == "judge-trace-2"
+            assert session.scalar(select(JudgeVerdict)) is None
+            runs = list(session.scalars(select(AgentRun).order_by(AgentRun.created_at)))
+            assert len(runs) == 2
+            assert all(run.status == "failed" for run in runs)
+            assert all(run.typed_error is not None for run in runs)
     finally:
         database.dispose()
 

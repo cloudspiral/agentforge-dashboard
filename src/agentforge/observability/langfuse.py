@@ -266,44 +266,29 @@ class LangfuseTelemetry:
         prompt_version: str | None = None,
         model: str | None = None,
     ) -> Iterator[ObservationHandle]:
-        """Attach role metadata to automatic OpenAI Agents SDK observations."""
+        """Create a role root span before automatic Agents SDK observations begin."""
 
-        if not self.enabled:
-            yield ObservationHandle(trace_id=None)
-            return
-
-        metadata = normalize_metadata(
-            dict(
-                iter_required_metadata(
-                    campaign_id=str(campaign_id),
-                    attempt_id=str(attempt_id),
-                    agent_role=agent_role,
-                    category=category,
-                    target_version=target_version,
-                    prompt_version=prompt_version,
-                    model=model,
-                )
+        metadata = dict(
+            iter_required_metadata(
+                campaign_id=str(campaign_id),
+                attempt_id=str(attempt_id),
+                agent_role=agent_role,
+                category=category,
+                target_version=target_version,
+                prompt_version=prompt_version,
+                model=model,
             )
         )
-        try:
-            attributes = propagate_attributes(
-                metadata=metadata,
-                version=prompt_version,
-                tags=normalize_tags([agent_role]),
-            )
-            attributes.__enter__()
-        except Exception as exc:
-            LOGGER.warning("Langfuse agent attribute scope failed (%s)", type(exc).__name__)
-            yield ObservationHandle(trace_id=self.current_trace_id)
-            return
-
-        try:
-            yield ObservationHandle(trace_id=self.current_trace_id)
-        finally:
-            try:
-                attributes.__exit__(None, None, None)
-            except Exception as exc:
-                LOGGER.warning("Langfuse agent attribute cleanup failed (%s)", type(exc).__name__)
+        with self._observation(
+            name=f"agentforge.{agent_role}",
+            as_type="agent",
+            metadata=metadata,
+            propagated_metadata=metadata,
+            tags=normalize_tags([agent_role]),
+            version=prompt_version,
+            trace_name=f"AgentForge {agent_role}",
+        ) as handle:
+            yield handle
 
     @contextmanager
     def runner(

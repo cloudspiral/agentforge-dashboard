@@ -196,6 +196,42 @@ def test_initialization_failure_degrades_and_closes_partial_client() -> None:
     assert client.shutdown_calls == 1
 
 
+def test_agent_scope_creates_trace_before_automatic_sdk_observations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attributes: list[dict[str, Any]] = []
+
+    def fake_propagate_attributes(**kwargs: Any) -> Any:
+        attributes.append(kwargs)
+        return nullcontext()
+
+    monkeypatch.setattr(langfuse_module, "propagate_attributes", fake_propagate_attributes)
+    client = FakeClient(trace_id="judge-trace-id")
+    telemetry = LangfuseTelemetry.from_settings(
+        _settings(),
+        client_factory=lambda **_kwargs: client,
+        instrumentor_factory=FakeInstrumentor,
+    )
+
+    with telemetry.agent_scope(
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+        agent_role="judge",
+        category="data_exfiltration",
+        target_version="target-sha",
+        prompt_version="judge-v1",
+        model="gpt-5.6-terra",
+    ) as span:
+        assert span.trace_id == "judge-trace-id"
+        assert telemetry.current_trace_id == "judge-trace-id"
+
+    assert telemetry.current_trace_id is None
+    assert client.starts[0]["name"] == "agentforge.judge"
+    assert client.starts[0]["as_type"] == "agent"
+    assert client.starts[0]["metadata"]["attemptId"] == "attempt-1"
+    assert attributes[0]["trace_name"] == "AgentForge judge"
+
+
 def test_campaign_attempt_and_runner_contexts_share_trace_and_redact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

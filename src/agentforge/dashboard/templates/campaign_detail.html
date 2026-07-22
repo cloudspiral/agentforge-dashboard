@@ -55,7 +55,7 @@
       <td>{{ item.status }}</td>
       <td>{{ item.attack_family_id }}</td>
       <td>{{ item.category }} / {{ item.subcategory }}</td>
-      <td>{{ verdicts[item.id].verdict if item.id in verdicts else 'pending' }}</td>
+      <td>{{ verdicts[item.id].verdict if item.id in verdicts else 'not produced' if item.status == 'error' else 'pending' }}</td>
       <td>{{ item.latency_ms ~ 'ms' if item.latency_ms is not none else '—' }}</td>
       <td>${{ item.estimated_cost_usd }}</td>
       <td class="mono">{{ item.langfuse_trace_id or 'not available' }}</td>
@@ -101,6 +101,7 @@
     <div><dt>Violated invariants</dt><dd>{{ result.verdict.violated_invariants | join(', ') or 'none' }}</dd></div>
     <div><dt>Recommendation</dt><dd>{{ result.verdict.next_recommendation }}</dd></div>
   </dl>
+  {% elif item.status == 'error' %}<p class="empty-state">The Judge did not produce a verdict.</p>
   {% else %}<p class="empty-state">The Judge verdict is pending.</p>{% endif %}
 </section>
 {% endfor %}

@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from agentforge.agents.base import AgentInvocationResult
 from agentforge.contracts.v1 import (
+    AgentErrorCodeV1,
     AttackEvidenceV1,
     CampaignObjectiveV1,
     DeterministicAssertionResultV1,
@@ -40,6 +41,7 @@ from agentforge.evaluation.deterministic import (
     evaluate_deterministically,
 )
 from agentforge.evaluation.judge_service import reconcile_judge_verdict
+from agentforge.observability import LangfuseTelemetry
 from agentforge.orchestration.budgets import (
     BudgetAccountV1,
     BudgetLimitsV1,
@@ -64,7 +66,13 @@ from agentforge.orchestration.objectives import (
     proposal_from_seed,
 )
 from agentforge.persistence import Database
-from agentforge.persistence.models import AttackAttempt, Campaign, JudgeVerdict, TargetVersion
+from agentforge.persistence.models import (
+    AgentRun,
+    AttackAttempt,
+    Campaign,
+    JudgeVerdict,
+    TargetVersion,
+)
 from agentforge.regression.invariants import SecurityInvariantV1
 from agentforge.runners.base import AttackRunner, TargetExecutionContext
 from agentforge.runners.playwright_runner import (
@@ -82,6 +90,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 RESULTS_DIRECTORY = Path("evals/results")
 _SAFE_FILENAME = re.compile(r"[^a-z0-9._-]+")
 _CASE_PROMPT_VERSION = "predefined-case-v1"
+_JUDGE_CONTRACT_MAX_INVOCATIONS = 2
 LiveTargetAlias = Literal["local", "deployed"]
 LiveRunMode = Literal["live_local", "live_deployed"]
 
@@ -300,11 +309,11 @@ def _budget_reservation(
         worst_case_by_model=[
             TokenUsageV1(
                 model=settings.openai_judge_model,
-                calls=1,
-                input_tokens=8_000,
+                calls=_JUDGE_CONTRACT_MAX_INVOCATIONS,
+                input_tokens=8_000 * _JUDGE_CONTRACT_MAX_INVOCATIONS,
                 cached_input_tokens=0,
                 cache_write_tokens=0,
-                output_tokens=1_000,
+                output_tokens=1_000 * _JUDGE_CONTRACT_MAX_INVOCATIONS,
             )
         ],
         pricing=pricing,
@@ -406,6 +415,137 @@ def _judge_payload(
         },
         evidence_reference_id,
     )
+
+
+def _retryable_judge_contract_failure(
+    result: AgentInvocationResult[JudgeVerdictV1],
+) -> bool:
+    error = result.error
+    return bool(
+        error is not None
+        and error.code == AgentErrorCodeV1.INVALID_CONTRACT
+        and error.sanitized_details.get("reason") in {"model_behavior", "output_validation"}
+    )
+
+
+async def _invoke_judge_with_contract_retry(
+    judge: JudgeInvoker,
+    payload: Mapping[str, Any],
+    *,
+    campaign_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+    category: str,
+    target_version: str,
+) -> list[AgentInvocationResult[JudgeVerdictV1]]:
+    results: list[AgentInvocationResult[JudgeVerdictV1]] = []
+    for _invocation in range(_JUDGE_CONTRACT_MAX_INVOCATIONS):
+        result = await judge.invoke(
+            payload,
+            campaign_id=str(campaign_id),
+            attempt_id=str(attempt_id),
+            correlation_id=f"judge-{attempt_id}",
+            category=category,
+            target_version=target_version,
+            escalate_to_sol=False,
+        )
+        results.append(result)
+        if result.output is not None or not _retryable_judge_contract_failure(result):
+            break
+    return results
+
+
+def _latest_trace_id(results: Sequence[AgentInvocationResult[Any]]) -> str | None:
+    return next(
+        (result.langfuse_trace_id for result in reversed(results) if result.langfuse_trace_id),
+        None,
+    )
+
+
+def _persist_agent_runs(
+    session: Any,
+    *,
+    campaign_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+    results: Sequence[AgentInvocationResult[Any]],
+) -> None:
+    for result in results:
+        session.add(
+            AgentRun(
+                campaign_id=campaign_id,
+                attempt_id=attempt_id,
+                finding_id=None,
+                role=result.role,
+                prompt_version=result.prompt_version,
+                model=result.model,
+                status="succeeded" if result.succeeded else "failed",
+                input_tokens=result.usage.tokens.input_tokens,
+                output_tokens=result.usage.tokens.output_tokens,
+                estimated_cost_usd=Decimal(str(result.estimated_cost_usd)),
+                latency_ms=round(result.latency_ms),
+                langfuse_trace_id=result.langfuse_trace_id,
+                typed_error=(
+                    result.error.model_dump(mode="json") if result.error is not None else None
+                ),
+            )
+        )
+
+
+def _apply_judge_usage(
+    attempt: AttackAttempt,
+    campaign: Campaign,
+    results: Sequence[AgentInvocationResult[Any]],
+) -> None:
+    attempt.input_tokens = sum(result.usage.tokens.input_tokens for result in results)
+    attempt.output_tokens = sum(result.usage.tokens.output_tokens for result in results)
+    attempt.estimated_cost_usd = sum(
+        (Decimal(str(result.estimated_cost_usd)) for result in results),
+        start=Decimal("0"),
+    )
+    trace_id = _latest_trace_id(results)
+    if trace_id is not None:
+        attempt.langfuse_trace_id = trace_id
+    campaign.actual_cost_usd = attempt.estimated_cost_usd
+
+
+def _judge_failure_reason(result: AgentInvocationResult[JudgeVerdictV1]) -> str:
+    error = result.error
+    if error is None:
+        return "missing_output"
+    if error.code == AgentErrorCodeV1.INVALID_CONTRACT:
+        return "invalid_contract"
+    return f"agent_{error.code.value}"
+
+
+def _judge_failure_message(reason: str, invocation_count: int) -> str:
+    if reason == "invalid_contract":
+        suffix = " after one bounded retry" if invocation_count > 1 else ""
+        return f"the Judge returned invalid structured output{suffix}"
+    if reason == "unknown_evidence_reference":
+        return "the Judge cited evidence outside the allowed package"
+    if reason == "invalid_verdict_contract":
+        return "the Judge verdict failed local evidence validation"
+    return "the Judge failed before returning a validated verdict"
+
+
+def _judge_failure_details(
+    results: Sequence[AgentInvocationResult[JudgeVerdictV1]],
+    *,
+    reason: str,
+) -> dict[str, Any]:
+    details: dict[str, Any] = {
+        "reason": reason,
+        "judge_invocations": len(results),
+    }
+    if results and results[-1].error is not None:
+        error = results[-1].error
+        details["judge_error_code"] = error.code.value
+        provider_reason = error.sanitized_details.get("reason")
+        if isinstance(provider_reason, str):
+            details["judge_error_reason"] = provider_reason
+    trace_id = _latest_trace_id(results)
+    if trace_id is not None:
+        details["trace_id"] = trace_id
+    return details
 
 
 def _persist_initial(
@@ -525,6 +665,8 @@ def _persist_failure(
     attempt_id: uuid.UUID,
     code: str,
     message: str,
+    judge_results: Sequence[AgentInvocationResult[JudgeVerdictV1]] = (),
+    error_details: Mapping[str, Any] | None = None,
 ) -> None:
     completed_at = utc_now()
     with database.session_factory() as session:
@@ -532,12 +674,23 @@ def _persist_failure(
         campaign = session.get(Campaign, campaign_id)
         if attempt is None or campaign is None:
             raise LookupError("live-local persistence records are missing")
+        _persist_agent_runs(
+            session,
+            campaign_id=campaign_id,
+            attempt_id=attempt_id,
+            results=judge_results,
+        )
+        _apply_judge_usage(attempt, campaign, judge_results)
         attempt.status = "error"
         attempt.completed_at = completed_at
         campaign.status = "failed"
         campaign.actual_attempts = 1
         campaign.completed_at = completed_at
-        campaign.sanitized_error = {"code": code, "message": message}
+        campaign.sanitized_error = {
+            "code": code,
+            "message": message,
+            **dict(error_details or {}),
+        }
         session.commit()
 
 
@@ -547,7 +700,7 @@ def _persist_verdict(
     campaign_id: uuid.UUID,
     attempt_id: uuid.UUID,
     verdict: JudgeVerdictV1,
-    judge_result: AgentInvocationResult[JudgeVerdictV1],
+    judge_results: Sequence[AgentInvocationResult[JudgeVerdictV1]],
     rubric_hash: str,
     rubric_version: str,
 ) -> None:
@@ -557,6 +710,14 @@ def _persist_verdict(
         campaign = session.get(Campaign, campaign_id)
         if attempt is None or campaign is None:
             raise LookupError("live-local persistence records are missing")
+        if not judge_results or judge_results[-1].output is None:
+            raise ValueError("a successful Judge result is required for verdict persistence")
+        _persist_agent_runs(
+            session,
+            campaign_id=campaign_id,
+            attempt_id=attempt_id,
+            results=judge_results,
+        )
         session.add(
             JudgeVerdict(
                 attempt_id=attempt_id,
@@ -579,13 +740,10 @@ def _persist_verdict(
                 ),
             )
         )
-        attempt.input_tokens = judge_result.usage.tokens.input_tokens
-        attempt.output_tokens = judge_result.usage.tokens.output_tokens
-        attempt.estimated_cost_usd = Decimal(str(judge_result.estimated_cost_usd))
+        _apply_judge_usage(attempt, campaign, judge_results)
         attempt.status = "completed"
         attempt.completed_at = completed_at
         campaign.actual_attempts = 1
-        campaign.actual_cost_usd = Decimal(str(judge_result.estimated_cost_usd))
         campaign.status = "completed"
         campaign.completed_at = completed_at
         session.commit()
@@ -691,6 +849,7 @@ async def run_live_local_case(
     pricing: PricingConfigV1 | None = None,
     runner: AttackRunner | None = None,
     judge: JudgeInvoker | None = None,
+    telemetry: LangfuseTelemetry | None = None,
     version_discoverer: VersionDiscoverer = _discover_version,
     on_campaign_persisted: CampaignPersistedCallback | None = None,
 ) -> LiveLocalEvaluationResultV1:
@@ -866,7 +1025,10 @@ async def run_live_local_case(
     if configured_judge is None:
         from agentforge.agents import JudgeAgent
 
-        configured_judge = JudgeAgent(settings=settings)
+        judge_options: dict[str, Any] = {"settings": settings}
+        if telemetry is not None:
+            judge_options["telemetry"] = telemetry
+        configured_judge = JudgeAgent(**judge_options)
     secrets = _secret_values(settings)
     result_directory = results_dir or repository / RESULTS_DIRECTORY
     destination = result_directory / _result_filename(case.id, attempt_id)
@@ -996,17 +1158,20 @@ async def run_live_local_case(
         rubric=configured_rubric,
         rubric_hash=rubric_hash,
     )
+    judge_results: list[AgentInvocationResult[JudgeVerdictV1]] = []
+    judge_failure_reason = "unexpected_judge_failure"
     try:
-        judge_result = await configured_judge.invoke(
+        judge_results = await _invoke_judge_with_contract_retry(
+            configured_judge,
             judge_payload,
-            campaign_id=str(campaign_id),
-            attempt_id=str(attempt_id),
-            correlation_id=f"judge-{attempt_id}",
+            campaign_id=campaign_id,
+            attempt_id=attempt_id,
             category=case.category,
             target_version=evidence.target_version,
-            escalate_to_sol=False,
         )
+        judge_result = judge_results[-1]
         if judge_result.output is None:
+            judge_failure_reason = _judge_failure_reason(judge_result)
             raise ValueError("Judge returned no verdict")
         known_references = {
             evidence_reference_id,
@@ -1016,7 +1181,9 @@ async def run_live_local_case(
             reference.reference_id not in known_references
             for reference in judge_result.output.supporting_evidence_references
         ):
+            judge_failure_reason = "unknown_evidence_reference"
             raise ValueError("Judge returned an unknown evidence reference")
+        judge_failure_reason = "invalid_verdict_contract"
         semantic = JudgeVerdictV1.model_validate(
             {
                 **judge_result.output.model_dump(mode="python"),
@@ -1027,13 +1194,18 @@ async def run_live_local_case(
         verdict = reconcile_judge_verdict(semantic, deterministic, invariants)
     except Exception:
         code = "judge_failed"
-        message = "the Judge did not return a valid evidence-backed verdict"
+        message = _judge_failure_message(judge_failure_reason, len(judge_results))
         _persist_failure(
             database,
             campaign_id=campaign_id,
             attempt_id=attempt_id,
             code=code,
             message=message,
+            judge_results=judge_results,
+            error_details=_judge_failure_details(
+                judge_results,
+                reason=judge_failure_reason,
+            ),
         )
         return _export_result(
             _build_result(
@@ -1064,7 +1236,7 @@ async def run_live_local_case(
         campaign_id=campaign_id,
         attempt_id=attempt_id,
         verdict=verdict,
-        judge_result=judge_result,
+        judge_results=judge_results,
         rubric_hash=rubric_hash,
         rubric_version=configured_rubric.rubric_version,
     )

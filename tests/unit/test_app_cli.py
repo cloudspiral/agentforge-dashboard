@@ -118,6 +118,7 @@ def test_app_wires_health_readiness_metrics_dashboard_api_and_shutdown(tmp_path:
         assert prometheus.status_code == 200
         assert prometheus.headers["content-type"].startswith("text/plain")
         assert "agentforge_queue_depth" in prometheus.text
+        assert client.app.state.evaluation_manager.telemetry is telemetry
         assert "agentforge_persisted_queue_depth" in prometheus.text
         assert dashboard.status_code == 200
         assert "Synthetic-data, authorized targets only" in dashboard.text

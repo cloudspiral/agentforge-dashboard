@@ -249,10 +249,13 @@ def test_seed_buttons_are_yaml_derived_and_redirect_to_campaign(client: TestClie
             PROJECT_ROOT / "evals" / "seed-cases" / "pi-direct-instruction-override.yaml",
         )
     ]
-    assert client.post(
-        "/dashboard/evaluations/AF-PI-001/run",
-        data={"csrf_token": "wrong"},
-    ).status_code == 403
+    assert (
+        client.post(
+            "/dashboard/evaluations/AF-PI-001/run",
+            data={"csrf_token": "wrong"},
+        ).status_code
+        == 403
+    )
 
 
 def test_campaign_page_polls_and_renders_persisted_evaluation_result(
@@ -337,3 +340,50 @@ def test_campaign_page_polls_and_renders_persisted_evaluation_result(
     assert "Stop; the target remained secure." in completed.text
     assert "window.setTimeout(poll, 2000)" not in completed.text
     assert status.json()["terminal"] is True
+
+
+def test_terminal_attempt_error_does_not_render_a_pending_verdict(
+    database: Database,
+    client: TestClient,
+) -> None:
+    campaign = _create(database, key="dashboard-judge-failure")
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        assert stored is not None
+        stored.trigger_type = "live_deployed"
+        stored.status = "failed"
+        stored.sanitized_error = {
+            "code": "judge_failed",
+            "message": "the Judge returned invalid structured output after one bounded retry",
+        }
+        stored.completed_at = datetime.now(UTC)
+        stored.attempts.append(
+            AttackAttempt(
+                attack_family_id="AF-DE-001",
+                mutation_generation=0,
+                category="data_exfiltration",
+                subcategory="cross_patient_exposure",
+                owasp_mappings=[],
+                objective="Preserve patient isolation",
+                proposed_sequence={},
+                taxonomy_version="unit-taxonomy",
+                profile_version="unit-profile",
+                prompt_version="unit-prompt",
+                status="error",
+                latency_ms=9009,
+                langfuse_trace_id="judge-trace-id",
+                started_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    detail = client.get(f"/dashboard/campaigns/{campaign.id}")
+
+    assert detail.status_code == 200
+    assert "not produced" in detail.text
+    assert ">pending<" not in detail.text
+    assert "The Judge did not produce a verdict." in detail.text
+    assert "The Judge verdict is pending." not in detail.text
+    assert "judge-trace-id" in detail.text
+    assert "invalid structured output after one bounded retry" in detail.text

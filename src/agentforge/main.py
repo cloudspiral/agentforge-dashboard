@@ -131,6 +131,7 @@ def create_app(
             database=configured_database,
             loaded_profile=application.state.target_profile,
             taxonomy=application.state.taxonomy,
+            telemetry=runtime_telemetry,
             repository_root=PROJECT_ROOT,
         )
         application.state.evaluation_manager = evaluation_manager

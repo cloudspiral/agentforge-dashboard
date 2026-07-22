@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from agentforge.evaluation.catalog import TaxonomyV1
 from agentforge.evaluation.live_local import LiveLocalEvaluationResultV1, run_live_local_case
+from agentforge.observability import LangfuseTelemetry
 from agentforge.persistence import Database
 from agentforge.persistence.repositories import CampaignRepository
 from agentforge.settings import Settings
@@ -52,6 +53,7 @@ class DashboardEvaluationManager:
         database: Database,
         loaded_profile: LoadedTargetProfile,
         taxonomy: TaxonomyV1,
+        telemetry: LangfuseTelemetry,
         repository_root: Path,
         runner: EvaluationRunner = run_live_local_case,
     ) -> None:
@@ -59,6 +61,7 @@ class DashboardEvaluationManager:
         self.database = database
         self.loaded_profile = loaded_profile
         self.taxonomy = taxonomy
+        self.telemetry = telemetry
         self.repository_root = repository_root
         self.runner = runner
         self._start_lock = asyncio.Lock()
@@ -96,6 +99,7 @@ class DashboardEvaluationManager:
                         database=self.database,
                         loaded_profile=self.loaded_profile,
                         taxonomy=self.taxonomy,
+                        telemetry=self.telemetry,
                         target_alias="deployed",
                         headed=False,
                         repository_root=self.repository_root,
