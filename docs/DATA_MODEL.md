@@ -2,7 +2,7 @@
 
 ## Authority and revision
 
-PostgreSQL is intended to be the operational source of truth. The current schema is represented by SQLAlchemy models and the initial Alembic revision `1b98633917fc`. The migration has not yet been proven in this checkout against a running PostgreSQL service, and there is no later revision.
+PostgreSQL is the operational source of truth. The current schema is represented by SQLAlchemy models and Alembic head `c71d9e5a4b20`. Empty-database upgrade/current/check and the explicit PostgreSQL integration suite have been exercised, and the deployed database persisted live campaign, attempt, assertion, Judge, AgentRun, usage, cost, latency, trace, and terminal records.
 
 ```mermaid
 erDiagram
@@ -57,8 +57,7 @@ Existing indexes cover queue/status time, target version, category/subcategory, 
 
 ## Known gaps
 
-- Migration execution is unverified in the current environment.
 - No schema-level enum/check constraints enforce status vocabularies.
 - No row-level access control, tenant boundary, retention job, or encryption policy is implemented.
-- The absent controller means lifecycle invariants are not proven end to end.
-- `target_versions` is modeled but not proven integrated into campaign startup.
+- Multi-worker kill/recovery and backup/restore exercises remain outstanding.
+- The process-local dashboard evaluation path persists a valid lifecycle but intentionally bypasses controller Finding/Documentation Agent creation.

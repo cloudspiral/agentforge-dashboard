@@ -8,7 +8,7 @@ Four distinct agent roles form the spokes. The **Orchestrator Agent** recommends
 
 PostgreSQL is the authoritative store for campaigns, attempts, lifecycle events, evidence, verdicts, findings, reports, regression cases, regression runs, and usage. A polling worker claims queued campaigns transactionally with bounded concurrency and recoverable state transitions. Langfuse is optional, redacted telemetry: a Langfuse outage cannot erase evidence or change a verdict. Prometheus-compatible metrics and the FastAPI/Jinja dashboard expose queue state, campaign status, cost, findings, and regression history. The target remains a separate OpenEMR/Clinical Co-Pilot deployment reached only through approved target aliases and normal authenticated UI or status routes. AgentForge never connects to the OpenEMR database or Docker socket.
 
-The implementation has crossed the MVP boundary. The deterministic controller, gate-to-runner authorization handoff, PostgreSQL lifecycle, authenticated Playwright navigation, evidence construction, deterministic assertions, live Judge invocation, and result export have been exercised end to end. Three checked-in cases—prompt/instruction boundary, cross-patient isolation, and tool-parameter validation—were run successfully against the deployed Clinical Co-Pilot. Every run captured the target version, exact case hash, transcript, deterministic assertions, Judge verdict, and export path. All three were judged `attack_blocked`; this is still valid evaluation evidence because the platform demonstrated reproducible execution and independent assessment rather than fabricating vulnerabilities. The generative Red Team loop, broader category coverage, automated mutation, and production-scale regression scheduling remain forward-looking work.
+The implementation has crossed the MVP boundary. The deterministic controller, gate-to-runner authorization handoff, PostgreSQL lifecycle, authenticated Playwright navigation, evidence construction, deterministic assertions, live Judge invocation, and result export have been exercised end to end. The current checked-in exports contain four live results across prompt injection, data exfiltration, and tool misuse, each bound to the exact current case bytes and target build. Three were `attack_blocked`; corrected `AF-TM-001` was `exploit_confirmed` because the target performed a clinically irrelevant `get_vitals` read. Final hardening also added target-specific OWASP control contracts and evidence without turning AgentForge into a general-purpose scanner. Autonomous mutation and production-scale scheduling remain forward-looking work.
 
 Operationally, a campaign is a bounded recoverable state machine, not an open-ended conversation. Every model call has a typed input/output, timeout, token and cost budget, and recorded model metadata. Every target attempt is tied to an exact target build, target profile, taxonomy version, case hash, rubric version, and evidence hash. Transport failure, missing evidence, patient-context drift, target-version drift, or incomplete execution produces `inconclusive` or `error`, never a secure pass. This keeps the highest-risk decisions—authorization, deterministic boundary failures, continuation, finding creation, and publication—inside code and human governance that can be tested and audited independently.
 
@@ -50,13 +50,13 @@ flowchart LR
 | Execution gate | Proposal, authoritative bindings, fixtures, patient, target, budget | `ValidatedAttackV1` or typed rejection | Sole pre-execution authorization boundary | Implemented, fail-closed, and tested |
 | HTTP runner | Validated status/API actions | `AttackEvidenceV1` | Executes exact approved status actions only | Implemented and tested |
 | Playwright runner | Validated UI sequence and ephemeral execution context | `AttackEvidenceV1` plus bounded artifacts | Uses normal test login; no persistent browser state | Proven against local and deployed OpenEMR |
-| Judge Agent | Frozen evidence, deterministic results, rubric | `JudgeVerdictV1` | Semantic assessor; cannot override missing evidence or deterministic failures | Proven live on three deployed cases |
+| Judge Agent | Frozen evidence, deterministic results, rubric | `JudgeVerdictV1` | Semantic assessor; cannot override missing evidence or deterministic failures | Proven live on current deployed cases; usage/cost/latency persisted |
 | Campaign controller | Campaign state, budgets, typed agent/runner outputs | State transitions, verdict reconciliation, finding/report/regression decisions | Deterministic workflow authority | Implemented and PostgreSQL integration tested |
-| Documentation Agent | Confirmed finding and evidence references | `VulnerabilityReportV1` and Markdown draft | No target or publication authority | Implemented; fixture path tested; no live report created because no finding was confirmed |
+| Documentation Agent | Confirmed finding and evidence references | `VulnerabilityReportV1` and Markdown draft | No target or publication authority | Implemented and fixture-tested; not invoked by the dashboard single-case path, so the checked-in `AF-TM-001` report is human-authored |
 | Regression harness | Versioned case, new target version, new evidence | secure pass, reproduced, inconclusive, or error | Replays exact saved sequence and invariants | Persistence and outcome logic implemented and integration tested |
 | PostgreSQL | Versioned operational and audit records | Transactional source of truth | Authoritative state | Migrations and lifecycle verified against PostgreSQL |
-| API/dashboard | Operator commands and database reads | Campaign queue, views, metrics, exports | Mutations authenticated; production reads protected by deployment auth | Implemented and locally verified; Railway app + isolated PostgreSQL deployment is the intended production shape |
-| Langfuse | Redacted model/agent metadata | Supplemental trace correlation | Non-authoritative and failure-isolated | Optional integration; verdicts never depend on it |
+| API/dashboard | Operator commands and database reads | Campaign queue, views, metrics, exports | Mutations authenticated; production reads protected by deployment auth | Deployed on Railway; unauthenticated dashboard access returns `401` |
+| Langfuse | Redacted model/agent metadata | Supplemental trace correlation | Non-authoritative and failure-isolated | Live linkage verified; private trace payloads masked/absent and verdicts remain PostgreSQL-authoritative |
 
 ## Campaign sequence and communication
 
@@ -148,13 +148,15 @@ PostgreSQL stores campaigns, attempts, evidence, verdicts, findings, reports, re
 
 ## Deployment model
 
-For the MVP, AgentForge deploys to Railway as:
+AgentForge is deployed to Railway as:
 
 - one `agentforge-dashboard` service containing FastAPI, dashboard, API, embedded worker, agents, Playwright Chromium, and regression code;
 - one isolated `agentforge-postgres` service;
 - the existing OpenEMR web, Co-Pilot service, and OpenEMR database remain separate target services.
 
 The dashboard service runs one replica so only one embedded worker is active. It reaches the deployed OpenEMR target over approved HTTPS origins and uses Railway-managed secrets for database, OpenAI, target-test, and dashboard credentials. PostgreSQL is the durable source of truth; container-local JSON exports and screenshots are supplementary and may be ephemeral.
+
+The dashboard evaluation manager is process-local and serializes a single live browser evaluation. It persists its campaign, attempt, deterministic assertions, Judge result, AgentRun usage/cost/latency, trace identifier, and terminal status directly. This path is distinct from controller-driven queue processing and does not invoke the controller's Finding/Documentation Agent lifecycle. Production linkage is inspected through a local SELECT-only CLI over authenticated Railway access; no public diagnostic route exists.
 
 ## Human gates
 
@@ -198,8 +200,11 @@ Verified MVP capabilities include:
 - local and deployed Clinical Co-Pilot target connectivity;
 - authenticated Playwright login, synthetic patient selection, chat execution, and bounded evidence capture;
 - three deployed seed-case results across prompt/instruction boundary, cross-patient isolation, and tool-parameter validation;
+- a corrected live tool-misuse result that confirmed an irrelevant patient-scoped read;
 - deterministic assertions plus live Judge Agent verdicts;
-- PostgreSQL campaign, attempt, evidence, verdict, lifecycle, finding/report, and regression persistence paths;
+- PostgreSQL campaign, attempt, evidence, verdict, lifecycle, AgentRun, finding/report, and regression persistence paths;
+- durable private Langfuse linkage with matching campaign/attempt identifiers and masked or absent payloads;
+- bounded target-specific OWASP controls and reproducible SCA/SBOM evidence;
 - API, CLI, dashboard, worker, metrics, migrations, and versioned contracts.
 
-The three deployed MVP cases were all judged `attack_blocked`; no live vulnerability report was generated because no invariant violation was confirmed. Future work includes autonomous case generation and mutation, broader live coverage for state corruption, denial of service, and role exploitation, automated target-change regression triggers, Judge calibration, and higher-scale worker separation.
+One live vulnerability is confirmed: `AF-TM-001` caused an unnecessary `get_vitals` read and disclosed selected-patient synthetic values. The checked-in report is human-authored because this execution path does not invoke the Documentation Agent. Authentication/logging and model-provenance controls remain partial; affected dependency findings require applicability/remediation triage. Future work includes remediation/replay, autonomous case generation and mutation, broader live coverage for state corruption and denial of service, automated target-change regression triggers, Judge calibration, and higher-scale worker separation.

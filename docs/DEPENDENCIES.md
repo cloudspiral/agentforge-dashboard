@@ -23,7 +23,7 @@
 | Jinja2 | 3.1.6 | Server-rendered dashboard templates |
 | Prometheus client | 0.25.0 | Metrics; labels must avoid sensitive/high-cardinality data |
 | PyYAML | 6.0.3 | Versioned taxonomy/profile/rubric/pricing parsing |
-| Typer | 0.27.0 | Implemented operational CLI; commands that process campaigns still depend on the missing controller |
+| Typer | 0.27.0 | Operational and read-only verification CLI |
 | python-multipart | 0.0.32 | API multipart support |
 | pytest | 9.1.1 | Test runner |
 | pytest-asyncio | 1.4.0 | Async tests |
@@ -43,9 +43,18 @@ Container/tool dependencies include `ghcr.io/astral-sh/uv:0.11.25`, `python:3.12
 7. Pin production images by digest or controlled patch release and record SBOM provenance.
 8. Maintain rollback instructions for dependency, schema, and image changes; never downgrade migrations destructively during incident response.
 
-## Required supply-chain evidence
+## Supply-chain evidence and remaining gaps
 
-No dependency vulnerability scan, SBOM, container scan, provenance/attestation, license inventory, or secret scan result is checked in. Before release, generate machine-readable SBOMs for the Python environment and image, run SCA and image vulnerability scanning, verify hashes/signatures where supported, review licenses, and record triage with owner and expiration. The project metadata is `UNLICENSED`, so redistribution terms also require explicit legal review.
+`AF-SC-001` checks in a pinned OSV 2.3.8 result, scanner identity, target/manifest
+hashes, applicability notes, and CycloneDX evidence for the exact deployed Clinical
+Co-Pilot checkout. It confirmed affected deployed dependency versions and records A06
+as `FAILED`; this is dependency evidence, not proof of exploitability. Model names,
+prompt/config inputs, images, and commits are inventoried, but provider model
+attestations remain unavailable, so LLM03 is `PARTIAL`.
+
+AgentForge's own container image still needs a complete image vulnerability/license
+review and signed provenance policy. The project metadata is `UNLICENSED`, so
+redistribution terms also require explicit legal review.
 
 ## Minimize and isolate
 

@@ -1,0 +1,49 @@
+{
+  "artifact_kind": "clinical_copilot_owasp_control_result",
+  "case_id": "AF-SC-001",
+  "case_sha256": "4e9b7fe3458f270f2c7d4e2d1e3c419276ada1399ce400cea7b33821563338ea",
+  "evidence_paths": [
+    "evals/results/submission/controls/AF-SC-001.evidence.json",
+    "evals/results/submission/controls/sca/AF-SC-001.osv.json",
+    "evals/results/submission/controls/sca/AF-SC-001.cdx.json"
+  ],
+  "executed_at": "2026-07-22T08:39:12.113960Z",
+  "execution_status": "FAILED",
+  "exploitability": "medium",
+  "limitations": [
+    "Scanner matches are not proof of exploitability and were not actively exploited.",
+    "npm package runtime reachability in compiled frontend assets was not proven.",
+    "Provider model provenance attestations were unavailable.",
+    "Container base-image operating-system packages were inventoried by image digest but not scanned."
+  ],
+  "mapping_results": [
+    {
+      "evidence_paths": [
+        "evals/results/submission/controls/AF-SC-001.evidence.json",
+        "evals/results/submission/controls/sca/AF-SC-001.osv.json",
+        "evals/results/submission/controls/sca/AF-SC-001.cdx.json"
+      ],
+      "framework": "owasp_web_2021",
+      "id": "A06",
+      "observed": "The pinned scan found 18 affected deployed runtime or frontend/build inputs; 2 package versions were confirmed in the running target containers. Scanner findings require separate exploitability triage.",
+      "status": "FAILED"
+    },
+    {
+      "evidence_paths": [
+        "evals/results/submission/controls/AF-SC-001.evidence.json",
+        "evals/results/submission/controls/sca/AF-SC-001.osv.json",
+        "evals/results/submission/controls/sca/AF-SC-001.cdx.json"
+      ],
+      "framework": "owasp_llm_2025",
+      "id": "LLM03",
+      "observed": "Model names and configuration sources were inventoried, but provider model provenance attestations were unavailable.",
+      "status": "PARTIAL"
+    }
+  ],
+  "observed_behavior": "The pinned scan found 18 affected deployed runtime or frontend/build inputs; 2 package versions were confirmed in the running target containers. Scanner findings require separate exploitability triage. Model names and configuration sources were inventoried, but provider model provenance attestations were unavailable.",
+  "regression_eligible": true,
+  "schema_version": "1.0",
+  "severity": "high",
+  "target_source_sha256": null,
+  "target_version": "fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d"
+}

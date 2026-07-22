@@ -31,6 +31,8 @@ from agentforge.persistence.models import (  # noqa: E402
 from agentforge.settings import Settings  # noqa: E402
 
 _SAFE_IDENTIFIER: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$")
+_SAFE_NAME: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,254}$")
+_FULL_MASK_MARKER: Final = "<fully masked due to failed mask function>"
 
 
 def _money(value: Decimal) -> str:
@@ -41,6 +43,18 @@ def _safe_identifier(value: str | None) -> str | None:
     if value is None:
         return None
     return value if _SAFE_IDENTIFIER.fullmatch(value) else "invalid"
+
+
+def _safe_name(value: object) -> str | None:
+    return value if isinstance(value, str) and _SAFE_NAME.fullmatch(value) else None
+
+
+def _payload_state(value: object) -> str:
+    if value is None:
+        return "absent"
+    if value == _FULL_MASK_MARKER:
+        return "fully_masked"
+    return "unexpected_present"
 
 
 def _assertion_count(payload: object) -> int:
@@ -208,25 +222,65 @@ def verify_langfuse_trace(settings: Settings, trace_id: str) -> dict[str, object
         metadata_keys = (
             sorted(str(key) for key in metadata) if isinstance(metadata, Mapping) else []
         )
+        linkage_keys = (
+            "campaignId",
+            "attemptId",
+            "agentRole",
+            "category",
+            "model",
+            "promptVersion",
+            "targetVersion",
+        )
+        linkage = {
+            key: _safe_identifier(str(metadata[key]))
+            for key in linkage_keys
+            if isinstance(metadata, Mapping) and key in metadata
+        }
+        trace_input_state = _payload_state(getattr(trace, "input", None))
+        trace_output_state = _payload_state(getattr(trace, "output", None))
+        observations_without_payloads = all(
+            getattr(item, "input", None) is None and getattr(item, "output", None) is None
+            for item in observations
+        )
+        trace_private = getattr(trace, "public", None) is False
         return {
             "status": "VERIFIED",
             "trace_id": _safe_identifier(str(getattr(trace, "id", trace_id))),
-            "trace_name": _safe_identifier(str(getattr(trace, "name", "unknown"))),
+            "trace_name": _safe_name(getattr(trace, "name", None)),
             "metadata_keys": metadata_keys,
+            "linkage": linkage,
             "observation_count": len(observations),
             "observation_names": sorted(
                 {
-                    _safe_identifier(str(getattr(item, "name", "unknown"))) or "unknown"
+                    name
                     for item in observations
+                    if (name := _safe_name(getattr(item, "name", None))) is not None
                 }
             ),
-            "trace_input_present": getattr(trace, "input", None) is not None,
-            "trace_output_present": getattr(trace, "output", None) is not None,
+            "observation_types": sorted(
+                {
+                    value
+                    for item in observations
+                    if (value := _safe_identifier(str(getattr(item, "type", ""))))
+                    not in {None, "invalid"}
+                }
+            ),
+            "trace_input_state": trace_input_state,
+            "trace_output_state": trace_output_state,
             "observations_with_input": sum(
                 getattr(item, "input", None) is not None for item in observations
             ),
             "observations_with_output": sum(
                 getattr(item, "output", None) is not None for item in observations
+            ),
+            "trace_private": trace_private,
+            "content_safety_status": (
+                "VERIFIED"
+                if trace_input_state in {"absent", "fully_masked"}
+                and trace_output_state in {"absent", "fully_masked"}
+                and observations_without_payloads
+                and trace_private
+                else "PARTIAL"
             ),
         }
     except Exception as exc:

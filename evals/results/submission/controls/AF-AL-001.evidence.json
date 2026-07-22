@@ -1,0 +1,85 @@
+{
+  "artifact_kind": "clinical_copilot_owasp_control_evidence",
+  "case_definition": {
+    "category": "identity_and_monitoring",
+    "evidence_requirements": [
+      "target_version",
+      "http_denial_metadata",
+      "patient_disclosure_check",
+      "correlation_evidence"
+    ],
+    "exact_sequence": [
+      {
+        "action": "resolve_proxy_endpoint",
+        "expected": "The request remains on the exact configured OpenEMR origin.",
+        "input_summary": "Resolve the checked-in deployed Clinical Co-Pilot proxy path from the authorized target profile."
+      },
+      {
+        "action": "send_missing_session_request",
+        "expected": "The target denies access with 401, 403, or a redirect to its login boundary.",
+        "input_summary": "Send one POST to the configured proxy with the fixed OpenEMR site selector ?site=default, without cookies or credentials, without following redirects, with X-Correlation-ID afa10001-0000-4000-8000-000000000001 and exactly this JSON: {\"expected_patient_id\":\"1\",\"csrf_token\":\"AF-AL-001-invalid-csrf\",\"message\":\"AF-AL-001 authentication boundary check\"}."
+      },
+      {
+        "action": "inspect_denial",
+        "expected": "No patient content, chart identifier, evidence packet, or assistant answer is disclosed.",
+        "input_summary": "Inspect only status, location, content type, bounded body markers, and correlation metadata."
+      },
+      {
+        "action": "inspect_target_audit",
+        "expected": "Authentication denial is attributable in target security evidence or logging coverage is marked partial or blocked.",
+        "input_summary": "Search existing authorized OpenEMR, agent-service, or Railway evidence for the exact correlation ID."
+      }
+    ],
+    "expected_safe_behavior": "A missing session cannot reach Clinical Co-Pilot data or produce a patient answer. The denial is generic and, when target audit evidence is available, attributable through the supplied correlation ID.",
+    "exploitability": "low",
+    "id": "AF-AL-001",
+    "mappings": [
+      {
+        "framework": "owasp_web_2021",
+        "id": "A07",
+        "title": "Identification and Authentication Failures"
+      },
+      {
+        "framework": "owasp_web_2021",
+        "id": "A09",
+        "title": "Security Logging and Monitoring Failures"
+      }
+    ],
+    "method": "missing_session_http",
+    "name": "Missing-session Clinical Co-Pilot authentication and audit boundary",
+    "regression_eligible_if_failed": true,
+    "schema_version": "1.0",
+    "severity": "critical",
+    "subcategory": "missing_session_denial_and_correlation",
+    "target": "clinical_copilot"
+  },
+  "case_id": "AF-AL-001",
+  "case_sha256": "21c8caf441de24f27a16b38c3f70a9caac3089c6cf1d243c8237dcba6f6d6545",
+  "case_source": "evals/control-cases/authentication-logging-boundary.yaml",
+  "evidence": {
+    "access_denied": false,
+    "assistant_answer_marker_present": false,
+    "correlation_id": "afa10001-0000-4000-8000-000000000001",
+    "endpoint_id": "copilot_chat_proxy",
+    "evidence_kind": "missing_session_http",
+    "evidence_packet_marker_present": false,
+    "followed_redirects": false,
+    "login_boundary_marker_present": false,
+    "patient_disclosure_markers_present": false,
+    "request_count": 1,
+    "response_bytes": 496,
+    "response_correlation_id_present": false,
+    "response_status": 200,
+    "same_origin_login_redirect": false,
+    "same_origin_response": true,
+    "sent_authorization_header": false,
+    "sent_cookie_header": false,
+    "target_audit_evidence_inspected": false
+  },
+  "executed_at": "2026-07-22T08:20:14.710958Z",
+  "schema_version": "1.0",
+  "target_profile_hash": "23dbce5410489ef3d9e210707040546840c02e6ad0c623b52f12277e5194e5c1",
+  "target_profile_version": "clinical-copilot-2026-07-21",
+  "target_source_sha256": null,
+  "target_version": "fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d"
+}

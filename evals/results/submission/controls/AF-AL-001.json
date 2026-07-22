@@ -1,0 +1,40 @@
+{
+  "artifact_kind": "clinical_copilot_owasp_control_result",
+  "case_id": "AF-AL-001",
+  "case_sha256": "21c8caf441de24f27a16b38c3f70a9caac3089c6cf1d243c8237dcba6f6d6545",
+  "evidence_paths": [
+    "evals/results/submission/controls/AF-AL-001.evidence.json"
+  ],
+  "executed_at": "2026-07-22T08:20:14.710867Z",
+  "execution_status": "PARTIAL",
+  "exploitability": "low",
+  "limitations": [
+    "A09 remains partial until authorized target-visible audit evidence is inspected."
+  ],
+  "mapping_results": [
+    {
+      "evidence_paths": [
+        "evals/results/submission/controls/AF-AL-001.evidence.json"
+      ],
+      "framework": "owasp_web_2021",
+      "id": "A07",
+      "observed": "The missing-session request disclosed no configured patient or assistant markers, but it did not return the required 401, 403, or login redirect status.",
+      "status": "PARTIAL"
+    },
+    {
+      "evidence_paths": [
+        "evals/results/submission/controls/AF-AL-001.evidence.json"
+      ],
+      "framework": "owasp_web_2021",
+      "id": "A09",
+      "observed": "The correlation identifier was sent and response metadata was captured, but attributable target security logs were not inspected by this bounded runner.",
+      "status": "PARTIAL"
+    }
+  ],
+  "observed_behavior": "The missing-session request disclosed no configured patient or assistant markers, but it did not return the required 401, 403, or login redirect status.",
+  "regression_eligible": false,
+  "schema_version": "1.0",
+  "severity": "critical",
+  "target_source_sha256": null,
+  "target_version": "fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d"
+}

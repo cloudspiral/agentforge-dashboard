@@ -79,7 +79,12 @@ def test_current_result_hash_validation_rejects_historical_tool_case(tmp_path: P
     current = tmp_path / "current"
     current.mkdir()
     submission = REPOSITORY_ROOT / "evals" / "results" / "submission"
-    shutil.copyfile(submission / "AF-TM-002.json", current / "AF-TM-002.json")
+    historical = json.loads((submission / "AF-TM-002.json").read_text(encoding="utf-8"))
+    historical["case_sha256"] = "45c1b71f03692e51bc0bdb18bb473cc58aeab4d34feea99d8d565f262764dc44"
+    (current / "AF-TM-002.json").write_text(
+        json.dumps(historical, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     result = run_script(
         "scripts/check_submission_results.py",
@@ -194,6 +199,8 @@ def test_gitlab_pipeline_enforces_offline_quality_migration_and_build_gates() ->
     quality_script = "\n".join(pipeline["quality"]["script"])
     assert "ruff format --check" in quality_script
     assert "export_contracts.py --check" in quality_script
+    assert "check_submission_results.py" in quality_script
+    assert "check_control_results.py" in quality_script
     assert "load_test.py --target fake --operations 100" in quality_script
     assert pipeline["tests"]["services"][0]["alias"] == "postgres"
     assert pipeline["tests"]["variables"]["DATABASE_URL"].startswith("postgresql+psycopg://")

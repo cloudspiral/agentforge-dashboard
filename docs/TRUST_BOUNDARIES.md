@@ -51,7 +51,12 @@ Authority narrows as it moves through the system:
 
 ### Current exposure
 
-The campaign, regression, finding, report, coverage, agent-run read APIs and the server-rendered dashboard currently have no route-level authentication. Local Compose binds the API to loopback, which is a useful local containment, but a Railway service is not private merely because mutations require tokens. Until read authorization is implemented and verified, W3 must be network-private and treated as unsuitable for public deployment. Reports and finding details may contain security-sensitive synthetic evidence.
+The deployed server-rendered dashboard and protected read/action surfaces require
+deployment authentication; an unauthenticated dashboard-root request returned `401`.
+Health and readiness are public and contain only bounded status. Local Compose remains
+loopback-bound by default. Reports and finding details still contain security-sensitive
+synthetic evidence, so authentication does not replace least privilege, retention,
+secret rotation, or per-user authorization review.
 
 ## Boundary 2: API/worker to PostgreSQL
 

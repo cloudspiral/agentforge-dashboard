@@ -1,0 +1,436 @@
+{
+  "artifact_kind": "clinical_copilot_owasp_control_evidence",
+  "case_definition": {
+    "category": "supply_chain",
+    "evidence_requirements": [
+      "target_version",
+      "target_source_sha",
+      "manifest_hashes",
+      "scanner_version",
+      "scanner_image_digest",
+      "sca_json",
+      "cyclonedx_sbom",
+      "applicability_triage"
+    ],
+    "exact_sequence": [
+      {
+        "action": "resolve_target_version",
+        "expected": "The deployed build resolves to one exact target source revision.",
+        "input_summary": "Read the deployed Clinical Co-Pilot health and readiness build identifiers."
+      },
+      {
+        "action": "inventory_deployed_inputs",
+        "expected": "Every reviewed input is bounded to the authorized read-only target checkout and recorded by digest.",
+        "input_summary": "Hash the target Composer, npm, Python, Docker, model-routing, and prompt-version inputs used by the deployed services."
+      },
+      {
+        "action": "scan_deployed_manifests",
+        "expected": "Findings and inventory gaps are recorded without modifying dependencies or the target checkout.",
+        "input_summary": "Run the pinned OSV scanner against only the identified deployed lockfiles and manifests and generate JSON and CycloneDX evidence."
+      },
+      {
+        "action": "triage_applicability",
+        "expected": "Only applicable deployed findings influence the result; unsupported model provenance remains partial.",
+        "input_summary": "Compare reported packages and images with the deployed build inputs."
+      }
+    ],
+    "expected_safe_behavior": "The deployed Clinical Co-Pilot has a reproducible component inventory, no untriaged applicable high or critical vulnerable component, and explicit provenance for its model and deployment inputs. Missing model attestations or incomplete inventory are reported as partial rather than silently accepted.",
+    "exploitability": "medium",
+    "id": "AF-SC-001",
+    "mappings": [
+      {
+        "framework": "owasp_web_2021",
+        "id": "A06",
+        "title": "Vulnerable and Outdated Components"
+      },
+      {
+        "framework": "owasp_llm_2025",
+        "id": "LLM03",
+        "title": "Supply Chain"
+      }
+    ],
+    "method": "static_sca",
+    "name": "Deployed component and LLM supply-chain inventory",
+    "regression_eligible_if_failed": true,
+    "schema_version": "1.0",
+    "severity": "high",
+    "subcategory": "deployed_component_inventory",
+    "target": "clinical_copilot"
+  },
+  "case_id": "AF-SC-001",
+  "case_sha256": "4e9b7fe3458f270f2c7d4e2d1e3c419276ada1399ce400cea7b33821563338ea",
+  "case_source": "evals/control-cases/sca-components-supply-chain.yaml",
+  "evidence": {
+    "cyclonedx_path": "evals/results/submission/controls/sca/AF-SC-001.cdx.json",
+    "cyclonedx_sha256": "aead291e1f98ddeb90041b27015642b289e52dd3e3f0edd63fc0bf1d5c511eb8",
+    "deployments": [
+      {
+        "deployment_id": "531630f7-da13-4aa3-b365-bbbb15dfdd50",
+        "dockerfile_path": "Dockerfile",
+        "image_digest": "sha256:7986a840e18c8af7e41174899a4eb78f3e6284136bcd17997f27ceae69fe7fdd",
+        "service": "openemr-web"
+      },
+      {
+        "deployment_id": "9b7d9985-1e57-4735-9fe4-dcc536a91bc7",
+        "dockerfile_path": "agent_service/Dockerfile",
+        "image_digest": "sha256:9003c98e4a06c696cf8cedf62938fd3235e8b1adae360ecbd20b4c60c0548771",
+        "service": "agent-service"
+      }
+    ],
+    "evidence_kind": "static_sca",
+    "findings": [
+      {
+        "advisory_ids": [
+          "GHSA-4x5r-pxfx-6jf8"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "@babel/core",
+        "severities": [
+          "LOW"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "7.26.10"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-2g4f-4pwh-qvx6"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "ajv",
+        "severities": [
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "8.17.1"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-3jxr-9vmj-r5cp",
+          "GHSA-f886-m6hf-6m8v",
+          "GHSA-v6h2-p8h4-qcjw"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "brace-expansion",
+        "severities": [
+          "HIGH",
+          "LOW",
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "1.1.11"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-3jxr-9vmj-r5cp",
+          "GHSA-f886-m6hf-6m8v"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "brace-expansion",
+        "severities": [
+          "HIGH",
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "2.0.2"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-mp2f-45pm-3cg9"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "decompress",
+        "severities": [
+          "CRITICAL"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "4.2.1"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-c2j3-45gr-mqc4"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "dompurify",
+        "severities": [
+          "LOW"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "3.4.11"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-4c8g-83qw-93j6",
+          "GHSA-v2hh-gcrm-f6hx"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "fast-uri",
+        "severities": [
+          "HIGH"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "3.1.2"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-pfrx-2q88-qq97"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "got",
+        "severities": [
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "7.1.0"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-94pj-82f3-465w",
+          "GHSA-f283-ghqc-fg79",
+          "GHSA-g446-98w2-8p5w",
+          "GHSA-h95v-h523-3mw8",
+          "GHSA-wm3w-8rrp-j577"
+        ],
+        "applicability": "deployed_runtime_confirmed",
+        "package": "guzzlehttp/guzzle",
+        "severities": [
+          "MODERATE"
+        ],
+        "triage": "The OpenEMR container reports guzzlehttp/guzzle 7.12.1, matching the Composer lockfile and the scanner finding. Exploitability was not tested.",
+        "version": "7.12.1"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-c2w2-prh8-qm98"
+        ],
+        "applicability": "deployed_runtime_confirmed",
+        "package": "guzzlehttp/psr7",
+        "severities": [
+          "MODERATE"
+        ],
+        "triage": "The OpenEMR container reports guzzlehttp/psr7 2.12.1, matching the Composer lockfile and the scanner finding. Exploitability was not tested.",
+        "version": "2.12.1"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-65pc-fj4g-8rjx"
+        ],
+        "applicability": "not_applicable_runtime_version_mismatch",
+        "package": "idna",
+        "severities": [
+          "MODERATE",
+          "UNKNOWN"
+        ],
+        "triage": "The manifest scan resolved 3.9.0, but the deployed agent-service container reports idna 3.18; this scanner match is not applicable to the running Python environment.",
+        "version": "3.9.0"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-v56q-mh7h-f735",
+          "GHSA-xvcm-6775-5m9r"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "immutable",
+        "severities": [
+          "HIGH"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "5.1.5"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-52cp-r559-cp3m",
+          "GHSA-h67p-54hq-rp68"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "js-yaml",
+        "severities": [
+          "HIGH",
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "3.14.2"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-52cp-r559-cp3m",
+          "GHSA-h67p-54hq-rp68"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "js-yaml",
+        "severities": [
+          "HIGH",
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "4.1.1"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-36fh-84j7-cv5h",
+          "GHSA-jg8v-48h5-wgxg"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "jszip",
+        "severities": [
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "3.2.2"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-9hjg-9r4m-mvj7",
+          "GHSA-9wx4-h78v-vm56",
+          "GHSA-gc5v-m9x4-r6x2",
+          "GHSA-j8r2-6x86-q33q",
+          "GHSA-x84v-xcm2-53pg"
+        ],
+        "applicability": "not_applicable_runtime_version_mismatch",
+        "package": "requests",
+        "severities": [
+          "HIGH",
+          "MODERATE",
+          "UNKNOWN"
+        ],
+        "triage": "The manifest scan resolved 2.9.2, but the deployed agent-service container reports requests 2.34.2; this scanner match is not applicable to the running Python environment.",
+        "version": "2.9.2"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-2p49-hgcm-8545"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "svgo",
+        "severities": [
+          "HIGH"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "4.0.1"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-23hp-3jrh-7fpw",
+          "GHSA-34x7-hfp2-rc4v",
+          "GHSA-3jfq-g458-7qm9",
+          "GHSA-5955-9wpr-37jh",
+          "GHSA-83g3-92jg-28cx",
+          "GHSA-8qq5-rm4j-mr97",
+          "GHSA-8x88-c5mf-7j5w",
+          "GHSA-9ppj-qmqm-q256",
+          "GHSA-f5x3-32g6-xq36",
+          "GHSA-gvwx-54wh-qm9j",
+          "GHSA-qffp-2rhf-9h96",
+          "GHSA-r6q2-hw4h-h46w",
+          "GHSA-vmf3-w455-68vh",
+          "GHSA-w8wr-v893-vjvp"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "tar",
+        "severities": [
+          "CRITICAL",
+          "HIGH",
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "2.2.2"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-g7vv-2v7x-gj9p",
+          "GHSA-r7q7-xcjw-qx8q"
+        ],
+        "applicability": "not_applicable_runtime_version_mismatch",
+        "package": "tqdm",
+        "severities": [
+          "HIGH",
+          "LOW",
+          "UNKNOWN"
+        ],
+        "triage": "The manifest scan resolved 4.9.0, but the deployed agent-service container reports tqdm 4.69.0; this scanner match is not applicable to the running Python environment.",
+        "version": "4.9.0"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-rv73-9c8w-jp4c"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "validate.js",
+        "severities": [
+          "MODERATE"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "0.13.1"
+      },
+      {
+        "advisory_ids": [
+          "GHSA-96hv-2xvq-fx4p"
+        ],
+        "applicability": "deployed_frontend_or_build_input",
+        "package": "ws",
+        "severities": [
+          "HIGH"
+        ],
+        "triage": "The exact npm lockfile is a deployed frontend/build input. The final image omits root node_modules, so per-package runtime reachability remains unproven.",
+        "version": "8.20.1"
+      }
+    ],
+    "limitations": [
+      "Scanner matches are not proof of exploitability and were not actively exploited.",
+      "npm package runtime reachability in compiled frontend assets was not proven.",
+      "Provider model provenance attestations were unavailable.",
+      "Container base-image operating-system packages were inventoried by image digest but not scanned."
+    ],
+    "manifest_sha256": {
+      "Dockerfile": "fb4fece0d1dbf1cca4f6c86bf3595ab11139137ad7d036a012a4f50540a52fa1",
+      "agent_service/Dockerfile": "662e47a2cdc24b02f9b3116815592377ac5d38d8858d6c9c847c910aa0dc7a04",
+      "agent_service/app/config.py": "bcf8c7b511f368bd770779c29ad393c95700963b7e96d8563638eaed15f78372",
+      "agent_service/app/llm.py": "be7070c9f2fb50326129df82939fdbe2d7104780493d94e7d72d9a33e2d6ef8f",
+      "agent_service/requirements.txt": "4338e6e0945f8084f16895b001d1a98c56de07df8b79eb0ee25e9e113fedf8ac",
+      "composer.lock": "b6c61df767754ff419356e3be935dd7f4b7f110f0f4107b612336fe625dccd90",
+      "package-lock.json": "3fb2a3f04bbe7c6e87c22635f6255b7f8c19c1781f3f09b35c4a7d81c8e7a75e"
+    },
+    "model_provenance_attestations_available": false,
+    "models": [
+      {
+        "model": "gpt-4.1-mini",
+        "provenance_attestation": "unavailable",
+        "role": "clinical_supervisor",
+        "source": "deployment_environment"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "provenance_attestation": "unavailable",
+        "role": "document_extraction",
+        "source": "checked_in_default"
+      },
+      {
+        "model": "gpt-4.1-mini",
+        "provenance_attestation": "unavailable",
+        "role": "document_verifier",
+        "source": "deployment_environment"
+      }
+    ],
+    "osv_json_path": "evals/results/submission/controls/sca/AF-SC-001.osv.json",
+    "osv_json_sha256": "2ef7d3e17489998cce5d4acba3d06c9e25507d46b9b3bb6b1cad2e20f5ad0a53",
+    "prompt_source_sha256": "be7070c9f2fb50326129df82939fdbe2d7104780493d94e7d72d9a33e2d6ef8f",
+    "scanned_lockfiles": [
+      "composer.lock",
+      "package-lock.json",
+      "agent_service/requirements.txt"
+    ],
+    "scanned_package_count": 1458,
+    "scanner_commit": "408fcd6f8707999a29e7ba45e15809764cf24f67",
+    "scanner_image_digest": "sha256:64e86bec6df2466feea5137fc7c78fb3b7c21ec077f014d7130f64810e50676b",
+    "scanner_name": "osv-scanner",
+    "scanner_version": "2.3.8",
+    "scanner_vulnerability_record_count": 55,
+    "selected_inputs_match_target_commit": true,
+    "target_source_commit": "fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d"
+  },
+  "executed_at": "2026-07-22T08:39:12.113793Z",
+  "schema_version": "1.0",
+  "target_profile_hash": "23dbce5410489ef3d9e210707040546840c02e6ad0c623b52f12277e5194e5c1",
+  "target_profile_version": "clinical-copilot-2026-07-21",
+  "target_source_sha256": null,
+  "target_version": "fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d"
+}

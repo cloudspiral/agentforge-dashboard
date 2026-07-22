@@ -42,6 +42,8 @@ quality:
     - uv run ruff check .
     - uv run python scripts/export_contracts.py --check
     - uv run python scripts/export_evals.py --validate-only
+    - uv run python scripts/check_submission_results.py
+    - uv run python scripts/check_control_results.py
     - mkdir -p .ci-artifacts
     - uv run python scripts/export_evals.py --output .ci-artifacts/agentforge-seed-catalog.json
     - uv run python scripts/load_test.py --target fake --operations 100 --max-seconds 30 --max-cost-usd 0 --max-target-requests 0 --output .ci-artifacts/agentforge-load-test.json

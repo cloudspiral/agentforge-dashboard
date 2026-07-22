@@ -27,7 +27,7 @@ This reviewer consumes coverage, severity/status, cost, residual-risk, dependenc
 
 ## Operator or SRE
 
-The operator configures secrets outside Git, runs PostgreSQL migrations, controls API/worker deployment, protects the public surface, monitors queue health and costs, and executes incident recovery. Langfuse is diagnostic only; PostgreSQL and artifact retention are the operational authority. The operator must keep W3 private until read and dashboard authentication is fixed.
+The operator configures secrets outside Git, runs PostgreSQL migrations, controls API/worker deployment, protects the public surface, monitors queue health and costs, and executes incident recovery. Langfuse is diagnostic only; PostgreSQL and artifact retention are the operational authority. Production dashboard reads and actions require deployment authentication; health and readiness remain intentionally public and contain no evidence.
 
 ## Developer or evaluator
 
@@ -49,4 +49,4 @@ Models can explore natural-language variations and summarize complex evidence fa
 
 ## Current limitations
 
-The repository does not yet provide a runnable end-to-end campaign platform. The ASGI entrypoint and CLI now exist, but the default worker imports an absent concrete campaign controller, gate-to-runner type closure is incomplete, and current read/dashboard routes lack authentication. The implemented component tests are useful engineering evidence, but users must not interpret them as proof of a live campaign, deployment, or vulnerability scan.
+The repository provides both the controller/worker lifecycle and a serialized dashboard single-case execution path. The latter is the proven deployed path for the current result exports; it persists attempts and Judge runs but does not create controller findings or invoke the Documentation Agent. Current evidence confirms one live excessive-agency weakness, not a comprehensive vulnerability scan. Authentication/logging and model-provenance coverage remain partial, affected dependency versions require triage, and target-visible evidence must be treated as inconclusive whenever a required channel cannot be inspected.

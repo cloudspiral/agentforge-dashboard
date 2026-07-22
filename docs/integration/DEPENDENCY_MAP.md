@@ -6,7 +6,7 @@ flowchart TD
     App --> Config["Settings plus versioned YAML"]
     API --> PG[("PostgreSQL")]
     Worker["Campaign worker"] --> PG
-    Worker --> Controller["Missing concrete campaign processor"]
+    Worker --> Controller["Deterministic campaign controller"]
     Controller --> Agents["OpenAI Agents SDK roles"]
     Agents --> OpenAI["OpenAI API"]
     Controller --> Gate["Deterministic gate"]
@@ -26,6 +26,6 @@ flowchart TD
 | W1 OpenEMR | exact target-profile alias and version | Required for live attempt | Fail closed on host/version/session/patient/cleanup uncertainty |
 | Browser binary | Playwright-matched Chromium | Required for UI runner | Attempt error/inconclusive; no HTTP shortcut for chat |
 | Reports/artifacts filesystem | configured bounded directories | Required for export/artifacts | Store typed error; do not claim publication or complete evidence |
-| Railway/Compose | deployment configuration | Optional runtime choices | Current startup references missing modules; not verified |
+| Railway/Compose | deployment configuration | Optional runtime choices | Railway automatic deployment and Compose configuration verified; readiness fails closed on database/worker configuration |
 
 The platform must not depend on the target database, Docker socket, arbitrary web access, model-chosen URLs, saved browser state, or Langfuse for evidence recovery.
