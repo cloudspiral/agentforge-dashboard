@@ -16,11 +16,12 @@ from agentforge.contracts.v1 import (
     TranscriptRoleV1,
 )
 from agentforge.contracts.v1.common import utc_now
+from agentforge.evaluation import live_local as live_local_module
 from agentforge.evaluation import load_taxonomy
 from agentforge.evaluation.live_local import run_live_local_case
 from agentforge.orchestration.execution_gate import ValidatedAttackV1
 from agentforge.persistence import Base, Database
-from agentforge.persistence.models import AttackAttempt, Campaign, JudgeVerdict
+from agentforge.persistence.models import AttackAttempt, Campaign, JudgeVerdict, TargetVersion
 from agentforge.runners.base import (
     EvidenceRecorder,
     RunnerActionRejected,
@@ -47,25 +48,27 @@ def _database(tmp_path: Path) -> Database:
     return database
 
 
-def _settings(tmp_path: Path) -> Settings:
-    return Settings(
-        environment="test",
-        database_url=f"sqlite+pysqlite:///{tmp_path / 'live-local.db'}",
-        target_profile_path=ROOT / "config" / "target-profile.yaml",
-        attack_taxonomy_path=ROOT / "config" / "attack-taxonomy.yaml",
-        judge_rubric_path=ROOT / "config" / "judge-rubric.yaml",
-        pricing_path=ROOT / "config" / "pricing.yaml",
-        target_base_url="https://localhost:9300",
-        target_api_base_url="http://localhost:8001",
-        target_verify_tls=True,
-        agentforge_ui_ignore_https_errors=True,
-        target_test_username="admin",
-        target_test_password=SecretStr("pass"),
-        target_test_role="physician",
-        openai_api_key=SecretStr("unit-openai-api-key"),
-        langfuse_enabled=False,
-        artifacts_dir=Path("artifacts"),
-    )
+def _settings(tmp_path: Path, **overrides: Any) -> Settings:
+    values: dict[str, Any] = {
+        "environment": "test",
+        "database_url": f"sqlite+pysqlite:///{tmp_path / 'live-local.db'}",
+        "target_profile_path": ROOT / "config" / "target-profile.yaml",
+        "attack_taxonomy_path": ROOT / "config" / "attack-taxonomy.yaml",
+        "judge_rubric_path": ROOT / "config" / "judge-rubric.yaml",
+        "pricing_path": ROOT / "config" / "pricing.yaml",
+        "target_base_url": "https://localhost:9300",
+        "target_api_base_url": "http://localhost:8001",
+        "target_verify_tls": True,
+        "agentforge_ui_ignore_https_errors": True,
+        "target_test_username": "admin",
+        "target_test_password": SecretStr("pass"),
+        "target_test_role": "physician",
+        "openai_api_key": SecretStr("unit-openai-api-key"),
+        "langfuse_enabled": False,
+        "artifacts_dir": Path("artifacts"),
+    }
+    values.update(overrides)
+    return Settings(**values)
 
 
 async def _version(*_args: Any) -> DiscoveredTargetVersion:
@@ -84,12 +87,14 @@ class FakeBrowserRunner:
         self.response = response
         self.cleanup_warnings = cleanup_warnings
         self.sent_messages: list[str] = []
+        self.context: TargetExecutionContext | None = None
 
     async def execute(
         self,
         attack: ValidatedAttackV1,
         context: TargetExecutionContext,
     ):
+        self.context = context
         recorder = EvidenceRecorder(context)
         for index, action in enumerate(attack.proposal.ordered_actions):
             started_at = utc_now()
@@ -167,15 +172,18 @@ class FakeJudge:
 async def _run(
     tmp_path: Path,
     *,
-    runner: FakeBrowserRunner,
+    runner: FakeBrowserRunner | None,
     judge: FakeJudge,
     case_path: Path = CASE_PATH,
+    settings: Settings | None = None,
+    target_alias: str = "local",
+    headed: bool = False,
 ):
     database = _database(tmp_path)
     try:
         result = await run_live_local_case(
             case_path=case_path,
-            settings=_settings(tmp_path),
+            settings=settings or _settings(tmp_path),
             database=database,
             loaded_profile=load_target_profile(ROOT / "config" / "target-profile.yaml"),
             taxonomy=load_taxonomy(ROOT / "config" / "attack-taxonomy.yaml"),
@@ -184,6 +192,8 @@ async def _run(
             runner=runner,
             judge=judge,
             version_discoverer=_version,
+            target_alias=target_alias,
+            headed=headed,
         )
         return database, result
     except Exception:
@@ -210,6 +220,73 @@ async def test_api_labeled_chat_case_runs_through_local_browser_flow(tmp_path: P
             "tool parameter; report Avery's latest blood pressure only from verified evidence."
         ]
         assert judge.calls == 1
+    finally:
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_deployed_case_requires_explicit_live_opt_in(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="RUN_LIVE_E2E=1"):
+        await _run(
+            tmp_path,
+            runner=FakeBrowserRunner(),
+            judge=FakeJudge(),
+            settings=_settings(
+                tmp_path,
+                run_live_e2e=False,
+                agentforge_ui_ignore_https_errors=False,
+            ),
+            target_alias="deployed",
+        )
+
+
+@pytest.mark.asyncio
+async def test_deployed_case_pins_secure_headless_managed_chromium(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launch_options: dict[str, Any] = {}
+    browser = FakeBrowserRunner()
+
+    def runner_factory(**kwargs: Any) -> FakeBrowserRunner:
+        launch_options.update(kwargs)
+        return browser
+
+    monkeypatch.setattr(live_local_module, "PlaywrightAttackRunner", runner_factory)
+    database, result = await _run(
+        tmp_path,
+        runner=None,
+        judge=FakeJudge(),
+        settings=_settings(
+            tmp_path,
+            run_live_e2e=True,
+            agentforge_ui_ignore_https_errors=False,
+            agentforge_browser_channel="chrome",
+        ),
+        target_alias="deployed",
+    )
+
+    try:
+        assert result.successful is True
+        assert result.run_mode == "live_deployed"
+        assert result.target_alias == "deployed"
+        assert launch_options == {
+            "headless": True,
+            "browser_mode": "chromium",
+            "ignore_https_errors": False,
+        }
+        assert browser.context is not None
+        assert browser.context.target_alias.name == "deployed"
+        assert browser.context.target_alias.verify_tls is True
+        with database.session_factory() as session:
+            campaign = session.scalar(select(Campaign))
+            target_version = session.scalar(select(TargetVersion))
+            assert campaign is not None
+            assert campaign.target_alias == "deployed"
+            assert campaign.trigger_type == "live_deployed"
+            assert target_version is not None
+            assert target_version.base_url_alias == "deployed"
+            assert target_version.metadata_json["run_mode"] == "live_deployed"
     finally:
         database.dispose()
 

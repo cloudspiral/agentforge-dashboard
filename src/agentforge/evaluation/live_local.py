@@ -71,6 +71,7 @@ from agentforge.runners.playwright_runner import (
     PlaywrightAttackRunner,
     resolve_ui_ignore_https_errors,
 )
+from agentforge.security.allowlist import require_allowed_url
 from agentforge.security.redaction import redact
 from agentforge.settings import Settings
 from agentforge.target.auth import credentials_from_settings
@@ -81,6 +82,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 RESULTS_DIRECTORY = Path("evals/results")
 _SAFE_FILENAME = re.compile(r"[^a-z0-9._-]+")
 _CASE_PROMPT_VERSION = "predefined-case-v1"
+LiveTargetAlias = Literal["local", "deployed"]
+LiveRunMode = Literal["live_local", "live_deployed"]
 
 
 class JudgeInvoker(Protocol):
@@ -113,14 +116,14 @@ class LiveLocalEvaluationResultV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal["1.0"] = "1.0"
-    run_mode: Literal["live_local"] = "live_local"
+    run_mode: LiveRunMode = "live_local"
     status: Literal["completed", "execution_failed", "judge_failed"]
     successful: bool
     case_id: str
     case_version: str
     case_source: str
     case_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    target_alias: Literal["local"] = "local"
+    target_alias: LiveTargetAlias = "local"
     target_version: str
     target_profile_version: str
     target_profile_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -417,9 +420,11 @@ def _persist_initial(
     started_at: AwareDatetime,
     proposal: Any,
     objective: Any,
+    target_alias: LiveTargetAlias,
+    run_mode: LiveRunMode,
 ) -> None:
     with database.session_factory() as session:
-        version_label = f"local:{target_version.version}"
+        version_label = f"{target_alias}:{target_version.version}"
         if (
             session.scalar(
                 select(TargetVersion).where(TargetVersion.version_label == version_label)
@@ -432,22 +437,22 @@ def _persist_initial(
                     version_label=version_label,
                     git_sha=None,
                     deployment_id=None,
-                    base_url_alias="local",
+                    base_url_alias=target_alias,
                     target_profile_hash=loaded_profile.profile_hash,
                     metadata_json={
                         "version_endpoint_id": target_version.endpoint_id,
                         "version_status_code": target_version.status_code,
                         "authorized_scope": "synthetic-only",
-                        "run_mode": "live_local",
+                        "run_mode": run_mode,
                     },
                 )
             )
         campaign = Campaign(
             id=campaign_id,
             campaign_type="discovery",
-            trigger_type="live_local",
+            trigger_type=run_mode,
             status="running",
-            target_alias="local",
+            target_alias=target_alias,
             target_version=target_version.version,
             category_scope=case.category,
             subcategory_scope=case.subcategory,
@@ -488,6 +493,7 @@ def _persist_evidence(
     case: SeedCaseV1,
     evidence: AttackEvidenceV1,
     deterministic: DeterministicEvaluationV1,
+    run_mode: LiveRunMode,
 ) -> None:
     with database.session_factory() as session:
         attempt = session.get(AttackAttempt, attempt_id)
@@ -499,7 +505,7 @@ def _persist_evidence(
         }
         attempt.evidence_payload = evidence.model_dump(mode="json")
         attempt.evidence_summary = {
-            "run_mode": "live_local",
+            "run_mode": run_mode,
             "case_id": case.id,
             "case_version": case.schema_version,
             "deterministic": deterministic.model_dump(mode="json"),
@@ -624,6 +630,8 @@ def _build_result(
     warnings: Sequence[str] = (),
     error_code: str | None = None,
     error_message: str | None = None,
+    target_alias: LiveTargetAlias = "local",
+    run_mode: LiveRunMode = "live_local",
 ) -> LiveLocalEvaluationResultV1:
     completed_at = utc_now()
     sent, responses = _message_capture(evidence) if evidence is not None else ([], [])
@@ -635,12 +643,14 @@ def _build_result(
         else None
     )
     return LiveLocalEvaluationResultV1(
+        run_mode=run_mode,
         status=status,
         successful=status == "completed",
         case_id=case.id,
         case_version=case.schema_version,
         case_source=case_source,
         case_sha256=hashlib.sha256(case_bytes).hexdigest(),
+        target_alias=target_alias,
         target_version=target_version,
         target_profile_version=loaded_profile.profile.profile_version,
         target_profile_hash=loaded_profile.profile_hash,
@@ -682,10 +692,16 @@ async def run_live_local_case(
     judge: JudgeInvoker | None = None,
     version_discoverer: VersionDiscoverer = _discover_version,
 ) -> LiveLocalEvaluationResultV1:
-    """Execute, judge, persist, and export one unmodified checked-in case."""
+    """Execute, judge, persist, and export one checked-in local or deployed case."""
 
-    if target_alias != "local":
-        raise ValueError("live-local evaluation is restricted to the local target alias")
+    if target_alias not in {"local", "deployed"}:
+        raise ValueError("single-case evaluation requires a configured live target alias")
+    if target_alias == "deployed" and not settings.run_live_e2e:
+        raise ValueError("deployed evaluation requires RUN_LIVE_E2E=1")
+    if target_alias == "deployed" and headed:
+        raise ValueError("deployed evaluation requires headless browser execution")
+    live_target_alias: LiveTargetAlias = target_alias
+    run_mode: LiveRunMode = "live_deployed" if target_alias == "deployed" else "live_local"
     repository = repository_root.resolve()
     resolved_case_path, relative_case_path = _case_path(case_path, repository)
     case_bytes = resolved_case_path.read_bytes()
@@ -706,7 +722,12 @@ async def run_live_local_case(
         if settings.pricing_path.is_absolute()
         else repository / settings.pricing_path
     )
-    resolved_alias = loaded_profile.resolve_alias("local", settings)
+    resolved_alias = loaded_profile.resolve_alias(target_alias, settings)
+    allow_http = target_alias == "local"
+    for url in (resolved_alias.base_url, resolved_alias.status_url):
+        require_allowed_url(url, resolved_alias.expected_hosts, allow_http=allow_http)
+    if target_alias == "deployed" and not resolved_alias.verify_tls:
+        raise ValueError("deployed evaluation requires normal TLS certificate verification")
     ignore_https_errors = resolve_ui_ignore_https_errors(
         enabled=settings.agentforge_ui_ignore_https_errors,
         base_url=resolved_alias.base_url,
@@ -754,7 +775,7 @@ async def run_live_local_case(
     }
     gate_context = CampaignExecutionContextV1(
         campaign_id=str(campaign_id),
-        target_alias="local",
+        target_alias=target_alias,
         selected_category=case.category,
         selected_subcategory=case.subcategory,
         allowed_category_subcategories=allowed_categories,
@@ -803,6 +824,8 @@ async def run_live_local_case(
         started_at=started_at,
         proposal=proposal,
         objective=objective,
+        target_alias=live_target_alias,
+        run_mode=run_mode,
     )
 
     max_case_timeout = max(
@@ -829,8 +852,10 @@ async def run_live_local_case(
         max_upload_bytes=settings.max_upload_bytes,
     )
     configured_runner = runner or PlaywrightAttackRunner(
-        headless=not headed,
-        browser_mode=settings.agentforge_browser_channel,
+        headless=True if target_alias == "deployed" else not headed,
+        browser_mode=(
+            "chromium" if target_alias == "deployed" else settings.agentforge_browser_channel
+        ),
         ignore_https_errors=ignore_https_errors,
     )
     configured_judge = judge
@@ -875,6 +900,7 @@ async def run_live_local_case(
             case=case,
             evidence=evidence,
             deterministic=deterministic,
+            run_mode=run_mode,
         )
     except Exception:
         warnings.extend(getattr(configured_runner, "cleanup_warnings", ()))
@@ -905,6 +931,8 @@ async def run_live_local_case(
                 warnings=warnings,
                 error_code=code,
                 error_message=message,
+                target_alias=live_target_alias,
+                run_mode=run_mode,
             ),
             destination=destination,
             secrets=secrets,
@@ -947,6 +975,8 @@ async def run_live_local_case(
                 warnings=warnings,
                 error_code=code,
                 error_message=message,
+                target_alias=live_target_alias,
+                run_mode=run_mode,
             ),
             destination=destination,
             secrets=secrets,
@@ -1018,6 +1048,8 @@ async def run_live_local_case(
                 warnings=warnings,
                 error_code=code,
                 error_message=message,
+                target_alias=live_target_alias,
+                run_mode=run_mode,
             ),
             destination=destination,
             secrets=secrets,
@@ -1048,6 +1080,8 @@ async def run_live_local_case(
             deterministic=deterministic,
             verdict=verdict,
             warnings=warnings,
+            target_alias=live_target_alias,
+            run_mode=run_mode,
         ),
         destination=destination,
         secrets=secrets,

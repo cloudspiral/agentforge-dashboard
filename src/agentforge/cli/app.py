@@ -127,14 +127,15 @@ def _target_ui_smoke_message(result: UISmokeResult) -> str:
 
 
 def _live_local_eval_message(result: LiveLocalEvaluationResultV1) -> str:
+    mode = "deployed" if result.run_mode == "live_deployed" else "local"
     if result.successful:
         warning = f" Warnings: {', '.join(result.warnings)}." if result.warnings else ""
         return (
-            f"Live local evaluation {result.case_id} completed and was persisted; "
+            f"Live {mode} evaluation {result.case_id} completed and was persisted; "
             f"result exported to {result.result_path}.{warning}"
         )
     return (
-        f"Live local evaluation {result.case_id} failed at {result.failed_step}: "
+        f"Live {mode} evaluation {result.case_id} failed at {result.failed_step}: "
         f"{result.error_code} ({result.error_message}); result exported to {result.result_path}."
     )
 
@@ -592,7 +593,7 @@ def eval_run(
                 )
             )
         except (OSError, ValueError):
-            _abort("live-local evaluation failed before a typed result could be returned")
+            _abort("single-case live evaluation failed before a typed result could be returned")
     if json_output:
         _emit(result.model_dump(mode="json"))
     else:
