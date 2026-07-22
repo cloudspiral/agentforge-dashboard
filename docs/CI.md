@@ -1,13 +1,19 @@
-# GitLab CI verification gate
+# GitLab CI verification check
 
-GitLab CI verifies proposed repository changes. It does **not** deploy AgentForge.
+GitLab CI verifies the accepted repository state. It does **not** deploy AgentForge.
 Production deployment follows the independent GitLab-to-GitHub mirror and Railway's
 GitHub `main` integration.
 
 ## When it runs
 
-The pipeline runs for merge requests and for updates to the default branch. Other
-branch pushes, schedules, and manually created pipelines are intentionally excluded.
+The pipeline runs only for updates to the protected default branch. Merge-request
+pipelines, other branch pushes, schedules, and manually created pipelines are
+intentionally excluded.
+
+Gauntlet's only available shared runner is administrator-managed and configured as a
+protected runner. GitLab therefore prevents it from executing jobs from ordinary,
+unprotected merge-request branches. Restricting this project to the protected default
+branch avoids hour-long stuck jobs and misleading failure notifications.
 
 ## What it runs
 
@@ -37,9 +43,11 @@ package layers outside the project for efficiency, subject to runner cleanup pol
 Job logs and pipeline metadata remain in GitLab according to the instance retention
 policy. No CI-created database or image is pushed to Railway or a container registry.
 
-## Making it an actual gate
+## Pre-merge gate limitation
 
-An available GitLab runner is required. To prevent unverified Railway deployment,
-protect `main`, require merge requests and successful pipelines, and let Railway
-observe only the mirrored, accepted `main` commit. A direct push to `main` can trigger
-CI, but CI then runs too late to prevent the GitHub mirror and Railway deployment.
+This check runs after `main` changes, so it cannot stop that commit from being mirrored
+to GitHub or deployed by Railway. A true pre-merge gate requires an online runner that
+is permitted to execute unprotected merge-request refs. That capability must be
+provided by the GitLab administrator or by an independently hosted project runner.
+Once available, merge-request workflow rules and the GitLab "Pipelines must succeed"
+merge check can be enabled.

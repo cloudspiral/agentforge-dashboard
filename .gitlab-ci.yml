@@ -1,11 +1,12 @@
 stages:
   - verify
 
-# This pipeline is a merge/repository verification gate. Railway deployment is
-# independent and is triggered by the GitLab -> GitHub main-branch mirror.
+# This pipeline is a post-merge repository verification check. The available
+# Gauntlet instance runner is protected, so it cannot execute pipelines from
+# ordinary merge-request branches. Railway deployment is independent and is
+# triggered by the GitLab -> GitHub main-branch mirror.
 workflow:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - when: never
 
