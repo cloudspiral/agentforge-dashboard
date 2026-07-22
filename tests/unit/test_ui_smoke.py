@@ -396,8 +396,9 @@ def _execution_context(tmp_path: Path) -> TargetExecutionContext:
 
 
 class FakeBrowserContext:
-    def __init__(self, events: list[str]) -> None:
+    def __init__(self, events: list[str], *, close_error: Exception | None = None) -> None:
         self.events = events
+        self.close_error = close_error
 
     async def route(self, _pattern: str, _handler: Any) -> None:
         self.events.append("context:route")
@@ -408,6 +409,8 @@ class FakeBrowserContext:
 
     async def close(self) -> None:
         self.events.append("context:close")
+        if self.close_error is not None:
+            raise self.close_error
 
 
 class FakeBrowser:
@@ -416,10 +419,11 @@ class FakeBrowser:
         events: list[str],
         *,
         context_error: Exception | None = None,
+        context_close_error: Exception | None = None,
     ) -> None:
         self.events = events
         self.context_error = context_error
-        self.context = FakeBrowserContext(events)
+        self.context = FakeBrowserContext(events, close_error=context_close_error)
         self.new_context_calls: list[dict[str, Any]] = []
 
     async def new_context(self, **kwargs: Any) -> FakeBrowserContext:
@@ -454,8 +458,8 @@ class FakeBrowserType:
 
 class FakePlaywrightManager:
     def __init__(self, browser_type: FakeBrowserType, events: list[str]) -> None:
-        self.playwright = SimpleNamespace(chromium=browser_type)
         self.events = events
+        self.playwright = SimpleNamespace(chromium=browser_type, stop=self.stop)
 
     async def start(self) -> Any:
         self.events.append("manager:start")
@@ -717,6 +721,35 @@ async def test_browser_cleanup_runs_when_context_creation_fails_after_launch(
 
     assert browser_type.launch_calls == [{"headless": True}]
     assert events[-2:] == ["browser:close", "manager:stop"]
+
+
+@pytest.mark.asyncio
+async def test_bounded_cleanup_forces_browser_close_after_context_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    browser = FakeBrowser(
+        events,
+        context_close_error=PlaywrightTimeoutError("synthetic cleanup timeout"),
+    )
+    browser_type = FakeBrowserType(
+        executable_path=tmp_path / "managed-chromium",
+        outcomes=[browser],
+    )
+    _install_fake_playwright(monkeypatch, browser_type, events)
+    session = playwright_module._LivePlaywrightSession(
+        _execution_context(tmp_path),
+        trace_enabled=False,
+        browser_mode="chromium",
+    )
+
+    with pytest.raises(playwright_module._BrowserCleanupError) as error:
+        async with session:
+            pass
+
+    assert error.value.warnings == ("browser_cleanup_timeout",)
+    assert events[-3:] == ["context:close", "browser:close", "manager:stop"]
 
 
 def test_browser_channel_setting_is_validated_and_defaults_for_local_development(

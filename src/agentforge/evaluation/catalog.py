@@ -222,6 +222,12 @@ def load_judge_rubric(path: Path) -> JudgeRubricV1:
     return JudgeRubricV1.model_validate(_load(path, JudgeRubricV1))
 
 
+def load_seed_case(path: Path) -> SeedCaseV1:
+    """Load one exact case without applying whole-catalog coverage rules."""
+
+    return SeedCaseV1.model_validate(_load(path, SeedCaseV1))
+
+
 def load_seed_cases(directory: Path) -> list[SeedCaseV1]:
     cases = [
         SeedCaseV1.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))

@@ -3,6 +3,7 @@ from agentforge.evaluation.catalog import (
     SeedCaseV1,
     TaxonomyV1,
     load_judge_rubric,
+    load_seed_case,
     load_seed_cases,
     load_taxonomy,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "SeedCaseV1",
     "TaxonomyV1",
     "load_judge_rubric",
+    "load_seed_case",
     "load_seed_cases",
     "load_taxonomy",
 ]

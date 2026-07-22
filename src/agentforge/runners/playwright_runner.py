@@ -169,6 +169,15 @@ class _CopilotUIError(RuntimeError):
 _LOOPBACK_UI_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _SAFE_SYNTHETIC_EXTERNAL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$")
 _UI_SMOKE_CHAT_MESSAGE = "Briefly summarize the selected synthetic patient's chart."
+_BROWSER_CLEANUP_TIMEOUT_SECONDS = 5.0
+
+
+class _BrowserCleanupError(RuntimeError):
+    """Bounded cleanup warning raised only after every safe close was attempted."""
+
+    def __init__(self, warnings: list[str]) -> None:
+        super().__init__("bounded browser cleanup did not complete")
+        self.warnings = tuple(dict.fromkeys(warnings))
 
 
 def _resolve_ui_ignore_https_errors(*, enabled: bool, base_url: str) -> bool:
@@ -179,6 +188,12 @@ def _resolve_ui_ignore_https_errors(*, enabled: bool, base_url: str) -> bool:
     if parsed.scheme.casefold() != "https" or hostname not in _LOOPBACK_UI_HOSTS:
         raise _UIHttpsErrorsOverrideRejected
     return True
+
+
+def resolve_ui_ignore_https_errors(*, enabled: bool, base_url: str) -> bool:
+    """Validate the local-only TLS override for browser-backed workflows."""
+
+    return _resolve_ui_ignore_https_errors(enabled=enabled, base_url=base_url)
 
 
 def _is_missing_managed_chromium(exc: Exception, executable_path: str) -> bool:
@@ -396,7 +411,7 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
             self._page = await self._context.new_page()
             return self
         except Exception:
-            with suppress(Exception):
+            with suppress(_BrowserCleanupError):
                 await self._cleanup()
             raise
 
@@ -404,23 +419,39 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
         await self._cleanup()
 
     async def _cleanup(self) -> None:
-        try:
-            if self._context is not None:
-                await self._context.close()
-        finally:
+        warnings: list[str] = []
+
+        async def close_bounded(close: Callable[[], Awaitable[None]]) -> None:
             try:
-                if self._browser is not None:
-                    await self._browser.close()
-            finally:
-                try:
-                    if self._manager is not None:
-                        await self._manager.stop()
-                finally:
-                    self._page = None
-                    self._context = None
-                    self._browser = None
-                    self._playwright = None
-                    self._manager = None
+                await asyncio.wait_for(close(), timeout=_BROWSER_CLEANUP_TIMEOUT_SECONDS)
+            except (PlaywrightTimeoutError, TimeoutError):
+                warnings.append("browser_cleanup_timeout")
+            except Exception:
+                warnings.append("browser_cleanup_failed")
+
+        context = self._context
+        browser = self._browser
+        playwright = self._playwright
+        manager = self._manager
+        try:
+            if context is not None:
+                await close_bounded(context.close)
+            # Browser close is the safe forced fallback after a context-close failure.
+            if browser is not None:
+                await close_bounded(browser.close)
+            # Stopping Playwright remains bounded and is attempted even if both closes fail.
+            if playwright is not None:
+                await close_bounded(playwright.stop)
+            elif manager is not None:
+                await close_bounded(lambda: manager.__aexit__(None, None, None))
+        finally:
+            self._page = None
+            self._context = None
+            self._browser = None
+            self._playwright = None
+            self._manager = None
+        if warnings:
+            raise _BrowserCleanupError(warnings)
 
     async def _launch_browser(self) -> Browser:
         if self._playwright is None:
@@ -1177,7 +1208,9 @@ async def run_ui_smoke(
             timings[UISmokeStep.CLOSE_BROWSER.value] = round(
                 (monotonic() - cleanup_started) * 1_000, 3
             )
-        if current_step == UISmokeStep.CLOSE_BROWSER and isinstance(
+        if current_step == UISmokeStep.CLOSE_BROWSER and isinstance(exc, _BrowserCleanupError):
+            warnings.extend(exc.warnings)
+        elif current_step == UISmokeStep.CLOSE_BROWSER and isinstance(
             exc, (PlaywrightTimeoutError, TimeoutError)
         ):
             warnings.append("browser_cleanup_timeout")
@@ -1223,24 +1256,38 @@ async def run_ui_smoke(
     )
 
 
-def _default_session_factory(
-    context: TargetExecutionContext,
-    trace_enabled: bool,
-) -> AbstractAsyncContextManager[BrowserSession]:
-    return _LivePlaywrightSession(context, trace_enabled)
-
-
 class PlaywrightAttackRunner:
     """Run allowlisted UI actions inside one disposable browser context."""
 
-    def __init__(self, session_factory: BrowserSessionFactory | None = None) -> None:
-        self._session_factory = session_factory or _default_session_factory
+    def __init__(
+        self,
+        session_factory: BrowserSessionFactory | None = None,
+        *,
+        headless: bool = True,
+        browser_mode: BrowserLaunchMode = "chromium",
+        ignore_https_errors: bool | None = None,
+    ) -> None:
+        self._session_factory = session_factory or (
+            lambda context, trace_enabled: _LivePlaywrightSession(
+                context,
+                trace_enabled,
+                headless=headless,
+                browser_mode=browser_mode,
+                ignore_https_errors=ignore_https_errors,
+            )
+        )
+        self._cleanup_warnings: list[str] = []
+
+    @property
+    def cleanup_warnings(self) -> tuple[str, ...]:
+        return tuple(self._cleanup_warnings)
 
     async def execute(
         self,
         attack: ValidatedAttackV1,
         context: TargetExecutionContext,
     ) -> AttackEvidenceV1:
+        self._cleanup_warnings.clear()
         proposal = require_validated_attack(attack, context)
         recorder = EvidenceRecorder(context)
         trace_requested = any(
@@ -1320,7 +1367,7 @@ class PlaywrightAttackRunner:
                             status=ActionExecutionStatusV1.SUCCEEDED,
                             summary=summary,
                         )
-        except Exception:
+        except Exception as exc:
             if not recorder.executed_actions:
                 failure = RunnerFailure(
                     AgentErrorCodeV1.TARGET_UNREACHABLE,
@@ -1339,6 +1386,12 @@ class PlaywrightAttackRunner:
                 recorder.add_error(failure)
                 for index, action in enumerate(proposal.ordered_actions[1:], start=1):
                     recorder.add_skipped(index, action)
+            elif isinstance(exc, _BrowserCleanupError):
+                self._cleanup_warnings.extend(exc.warnings)
+            elif isinstance(exc, (PlaywrightTimeoutError, TimeoutError)):
+                self._cleanup_warnings.append("browser_cleanup_timeout")
+            else:
+                self._cleanup_warnings.append("browser_cleanup_failed")
         return recorder.finalize()
 
     async def _execute_action(
@@ -1510,4 +1563,5 @@ __all__ = [
     "UISmokeSessionFactory",
     "UISmokeStep",
     "run_ui_smoke",
+    "resolve_ui_ignore_https_errors",
 ]

@@ -22,6 +22,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from agentforge.api.schemas import CampaignCreateRequest, RegressionRunCreateRequest
 from agentforge.api.services import ApplicationService
 from agentforge.evaluation import TaxonomyV1, load_seed_cases, load_taxonomy
+from agentforge.evaluation.live_local import LiveLocalEvaluationResultV1, run_live_local_case
 from agentforge.persistence import Database
 from agentforge.persistence.models import Campaign, RegressionRun
 from agentforge.persistence.repositories import CampaignRepository
@@ -122,6 +123,19 @@ def _target_ui_smoke_message(result: UISmokeResult) -> str:
         f"Local UI smoke completed for {result.target_alias}: login succeeded, "
         f"synthetic patient selected, and Clinical Co-Pilot is ready with a response "
         f"({result.total_latency_ms:.1f} ms).{warning}"
+    )
+
+
+def _live_local_eval_message(result: LiveLocalEvaluationResultV1) -> str:
+    if result.successful:
+        warning = f" Warnings: {', '.join(result.warnings)}." if result.warnings else ""
+        return (
+            f"Live local evaluation {result.case_id} completed and was persisted; "
+            f"result exported to {result.result_path}.{warning}"
+        )
+    return (
+        f"Live local evaluation {result.case_id} failed at {result.failed_step}: "
+        f"{result.error_code} ({result.error_message}); result exported to {result.result_path}."
     )
 
 
@@ -534,6 +548,57 @@ def eval_run_seeds(
                 }
             )
     _emit({"count": len(queued), "surface": surface.value, "campaigns": queued})
+
+
+@eval_app.command("run")
+def eval_run(
+    case: Annotated[
+        Path,
+        typer.Option(
+            "--case",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+            help="One checked-in case under evals/seed-cases.",
+        ),
+    ],
+    target: Annotated[
+        TargetAlias,
+        typer.Option("--target", help="The local allowlisted target alias."),
+    ] = TargetAlias.LOCAL,
+    headed: Annotated[
+        bool,
+        typer.Option("--headed", help="Show the disposable browser while the case runs."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the sanitized typed result as compact JSON."),
+    ] = False,
+) -> None:
+    """Run one unmodified checked-in case through the authenticated local UI."""
+
+    with _runtime() as runtime:
+        try:
+            result = asyncio.run(
+                run_live_local_case(
+                    case_path=case,
+                    settings=runtime.settings,
+                    database=runtime.database,
+                    loaded_profile=runtime.target_profile,
+                    taxonomy=runtime.taxonomy,
+                    target_alias=target.value,
+                    headed=headed,
+                    repository_root=PROJECT_ROOT,
+                )
+            )
+        except (OSError, ValueError):
+            _abort("live-local evaluation failed before a typed result could be returned")
+    if json_output:
+        _emit(result.model_dump(mode="json"))
+    else:
+        typer.echo(_live_local_eval_message(result), err=not result.successful)
+    if not result.successful:
+        raise typer.Exit(code=1)
 
 
 @reports_app.command("export")
