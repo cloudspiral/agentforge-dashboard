@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import uuid
 from collections import Counter
 from collections.abc import AsyncIterator
@@ -7,14 +8,22 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from agentforge.dashboard.evaluations import (
+    DashboardEvaluationManager,
+    DashboardEvaluationSnapshot,
+    EvaluationAlreadyRunning,
+    EvaluationStartFailed,
+)
+from agentforge.evaluation import load_seed_cases
 from agentforge.observability.metrics import AgentForgeMetrics
 from agentforge.observability.metrics import metrics as default_metrics
 from agentforge.persistence.repositories import (
     CampaignNotFound,
+    CampaignRepository,
     FindingRepository,
     OperationalRepository,
     RegressionRunRepository,
@@ -22,6 +31,10 @@ from agentforge.persistence.repositories import (
 )
 from agentforge.security.auth import require_dashboard_auth
 from agentforge.security.redaction import redact
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+TERMINAL_CAMPAIGN_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
+CATEGORY_ORDER = ("prompt_injection", "data_exfiltration", "tool_misuse")
 
 
 def _app_metrics(application: FastAPI) -> AgentForgeMetrics:
@@ -74,6 +87,58 @@ def _runtime_metrics(request: Request) -> AgentForgeMetrics:
     return _app_metrics(request.app)
 
 
+def _repository_root(request: Request) -> Path:
+    return Path(getattr(request.app.state, "repository_root", PROJECT_ROOT)).resolve()
+
+
+def _seed_catalog(request: Request) -> list[tuple[Any, Path]]:
+    directory = _repository_root(request) / "evals" / "seed-cases"
+    paths = sorted(directory.glob("*.yaml"))
+    cases = load_seed_cases(directory)
+    return list(zip(cases, paths, strict=True))
+
+
+def _evaluation_manager(request: Request) -> DashboardEvaluationManager | None:
+    candidate = getattr(request.app.state, "evaluation_manager", None)
+    return candidate if isinstance(candidate, DashboardEvaluationManager) else candidate
+
+
+def _evaluation_snapshot(request: Request) -> DashboardEvaluationSnapshot:
+    manager = _evaluation_manager(request)
+    return manager.snapshot() if manager is not None else DashboardEvaluationSnapshot(phase="idle")
+
+
+def _csrf_token(request: Request) -> str:
+    return str(getattr(request.app.state, "dashboard_csrf_token", ""))
+
+
+def _attempt_result_rows(detail: dict[str, Any]) -> dict[uuid.UUID, dict[str, Any]]:
+    rows: dict[uuid.UUID, dict[str, Any]] = {}
+    for attempt in detail["attempts"]:
+        payload = attempt.evidence_payload if isinstance(attempt.evidence_payload, dict) else {}
+        transcript = payload.get("transcript", [])
+        responses = [
+            {
+                "role": str(turn.get("role", "assistant")),
+                "content": redact(str(turn.get("content", ""))),
+                "observed_at": turn.get("observed_at"),
+            }
+            for turn in transcript
+            if isinstance(turn, dict) and turn.get("role") in {"assistant", "tool"}
+        ]
+        assertions = payload.get("deterministic_assertion_results", [])
+        if not assertions and isinstance(attempt.evidence_summary, dict):
+            deterministic = attempt.evidence_summary.get("deterministic", {})
+            if isinstance(deterministic, dict):
+                assertions = deterministic.get("assertion_results", [])
+        rows[attempt.id] = {
+            "responses": responses,
+            "assertions": redact(assertions) if isinstance(assertions, list) else [],
+            "verdict": detail["verdicts"].get(attempt.id),
+        }
+    return rows
+
+
 @router.get("/metrics", include_in_schema=False)
 def prometheus_metrics(request: Request) -> Response:
     runtime_metrics = _runtime_metrics(request)
@@ -86,6 +151,8 @@ def prometheus_metrics(request: Request) -> Response:
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def overview(request: Request) -> HTMLResponse:
+    seed_catalog = _seed_catalog(request)
+    case_ids = [case.id for case, _path in seed_catalog]
     with request.app.state.database.session_factory() as session:
         operations = OperationalRepository(session)
         campaigns = operations.campaign_status_counts()
@@ -96,6 +163,27 @@ def overview(request: Request) -> HTMLResponse:
         recent_campaigns, _ = operations.campaign_rows(limit=8)
         recent_events = operations.recent_events(limit=12)
         coverage = coverage_summary(session)
+        latest_evaluations = operations.latest_live_evaluations(case_ids)
+    seed_groups = []
+    for category in CATEGORY_ORDER:
+        cases = []
+        for case, _path in seed_catalog:
+            if case.category != category:
+                continue
+            cases.append(
+                {
+                    "id": case.id,
+                    "name": case.name,
+                    "category": case.category,
+                    "subcategory": case.subcategory,
+                    "surface": case.surface,
+                    "latest": latest_evaluations.get(case.id),
+                }
+            )
+        seed_groups.append(
+            {"id": category, "label": category.replace("_", " ").title(), "cases": cases}
+        )
+    evaluation = _evaluation_snapshot(request)
     return templates.TemplateResponse(
         request=request,
         name="overview.html",
@@ -109,7 +197,42 @@ def overview(request: Request) -> HTMLResponse:
             "recent_campaigns": recent_campaigns,
             "recent_events": recent_events,
             "coverage": coverage,
+            "seed_groups": seed_groups,
+            "evaluation": evaluation,
+            "csrf_token": _csrf_token(request),
         },
+    )
+
+
+@router.post(
+    "/dashboard/evaluations/{case_id}/run",
+    response_class=RedirectResponse,
+    include_in_schema=False,
+)
+async def run_seed_evaluation(
+    request: Request,
+    case_id: str,
+    csrf_token: str = Form(...),
+) -> RedirectResponse:
+    expected_csrf = _csrf_token(request)
+    if not expected_csrf or not hmac.compare_digest(csrf_token, expected_csrf):
+        raise HTTPException(status_code=403, detail="invalid dashboard action token")
+    case_paths = {case.id: path for case, path in _seed_catalog(request)}
+    case_path = case_paths.get(case_id)
+    if case_path is None:
+        raise HTTPException(status_code=404, detail="evaluation case not found")
+    manager = _evaluation_manager(request)
+    if manager is None:
+        raise HTTPException(status_code=503, detail="dashboard evaluation runner unavailable")
+    try:
+        campaign_id = await manager.start(case_id=case_id, case_path=case_path)
+    except EvaluationAlreadyRunning as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except EvaluationStartFailed as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"/dashboard/campaigns/{campaign_id}",
+        status_code=303,
     )
 
 
@@ -168,8 +291,34 @@ def campaign_detail(request: Request, campaign_id: uuid.UUID) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="campaign_detail.html",
-        context={**detail, "event_rows": event_rows, "safe_error": safe_error},
+        context={
+            **detail,
+            "event_rows": event_rows,
+            "safe_error": safe_error,
+            "attempt_results": _attempt_result_rows(detail),
+            "terminal": detail["campaign"].status in TERMINAL_CAMPAIGN_STATUSES,
+        },
     )
+
+
+@router.get(
+    "/dashboard/campaigns/{campaign_id}/status",
+    response_class=JSONResponse,
+    include_in_schema=False,
+)
+def campaign_status(request: Request, campaign_id: uuid.UUID) -> JSONResponse:
+    try:
+        with request.app.state.database.session_factory() as session:
+            campaign = CampaignRepository(session).get(campaign_id)
+            payload = {
+                "campaign_id": str(campaign.id),
+                "status": campaign.status,
+                "terminal": campaign.status in TERMINAL_CAMPAIGN_STATUSES,
+                "updated_at": campaign.updated_at.isoformat(),
+            }
+    except CampaignNotFound as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/dashboard/findings", response_class=HTMLResponse, include_in_schema=False)

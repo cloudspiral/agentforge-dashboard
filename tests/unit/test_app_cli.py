@@ -285,11 +285,13 @@ def test_cli_campaign_seed_and_regression_commands_use_application_services(
     seeded = runner.invoke(cli_module.app, ["eval", "run-seeds", "--surface", "api"])
     assert seeded.exit_code == 0, seeded.output
     seed_payload = json.loads(seeded.stdout)
-    assert seed_payload["count"] == 2
-    assert {item["seed_id"] for item in seed_payload["campaigns"]} == {
-        "AF-DE-002",
-        "AF-TM-002",
+    expected_api_seeds = {
+        seed.id
+        for seed in cli_module.load_seed_cases(PROJECT_ROOT / "evals" / "seed-cases")
+        if seed.surface == "api"
     }
+    assert seed_payload["count"] == len(expected_api_seeds)
+    assert {item["seed_id"] for item in seed_payload["campaigns"]} == expected_api_seeds
 
     regression = runner.invoke(
         cli_module.app,

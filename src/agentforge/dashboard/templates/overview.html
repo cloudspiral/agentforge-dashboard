@@ -2,9 +2,55 @@
 {% block title %}AgentForge operations{% endblock %}
 {% block content %}
 <section class="hero">
-  <p class="eyebrow">Local operations</p>
+  <p class="eyebrow">Security evaluation operations</p>
   <h1>Application state</h1>
   <p>Current queue, worker, campaign, finding, and regression state from PostgreSQL.</p>
+</section>
+
+<section class="panel" id="seed-evaluations">
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">Live deployed target</p>
+      <h2>Run a seed evaluation</h2>
+      <p>Each button reads its current YAML case, runs it in isolated headless Chromium, and stores the result in PostgreSQL.</p>
+    </div>
+    {% if evaluation.active %}
+      <span class="badge badge-running">{{ evaluation.phase }}</span>
+    {% endif %}
+  </div>
+  {% if evaluation.error_message %}<p class="notice danger">{{ evaluation.error_message }}</p>{% endif %}
+  {% if evaluation.result_path %}<p class="notice">Latest JSON export: <span class="mono">{{ evaluation.result_path }}</span></p>{% endif %}
+  <div class="evaluation-groups">
+    {% for group in seed_groups %}
+    <section class="evaluation-group">
+      <h3>{{ group.label }}</h3>
+      <div class="evaluation-grid">
+        {% for case in group.cases %}
+        <article class="evaluation-card">
+          <div>
+            <p class="eyebrow">{{ case.id }} · {{ case.subcategory | replace('_', ' ') }}</p>
+            <h4>{{ case.name }}</h4>
+            <p class="case-meta">{{ case.surface | upper }} surface</p>
+          </div>
+          {% if case.latest %}
+          <p>
+            <span class="badge badge-{{ case.latest.campaign.status }}">{{ case.latest.campaign.status }}</span>
+            {% if case.latest.verdict %}<span class="verdict">{{ case.latest.verdict.verdict | replace('_', ' ') }}</span>{% endif %}
+            <a href="/dashboard/campaigns/{{ case.latest.campaign.id }}">View latest</a>
+          </p>
+          {% else %}<p class="empty-state">Not run against the deployed target yet.</p>{% endif %}
+          <form method="post" action="/dashboard/evaluations/{{ case.id }}/run">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" {% if evaluation.active %}disabled{% endif %}>
+              {% if evaluation.active and evaluation.case_id == case.id %}Running…{% else %}Run {{ group.label }} test{% endif %}
+            </button>
+          </form>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
 </section>
 
 <section class="stat-grid" aria-label="Application summary">

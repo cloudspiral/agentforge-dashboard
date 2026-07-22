@@ -7,7 +7,7 @@
   <p class="mono">{{ campaign.id }}</p>
 </section>
 <section class="stat-grid">
-  <article><span>Status</span><strong class="text">{{ campaign.status }}</strong></article>
+  <article><span>Status</span><strong class="text"><span id="campaign-status" class="badge badge-{{ campaign.status }}">{{ campaign.status }}</span></strong></article>
   <article><span>Trigger</span><strong class="text">{{ campaign.trigger_type }}</strong></article>
   <article><span>Target</span><strong class="text">{{ campaign.target_alias }}</strong></article>
   <article><span>Version</span><strong class="text mono">{{ campaign.target_version }}</strong></article>
@@ -62,5 +62,74 @@
     </tr>{% else %}<tr><td colspan="7">No attempts recorded.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
+
+{% for item in attempts %}{% set result = attempt_results[item.id] %}
+<section class="panel result-panel">
+  <div class="panel-heading">
+    <div><p class="eyebrow">{{ item.attack_family_id }}</p><h2>Persisted evaluation result</h2></div>
+    <span class="badge badge-{{ item.status }}">{{ item.status }}</span>
+  </div>
+
+  <h3>Response summary</h3>
+  {% for response in result.responses %}
+    <article class="response-summary">
+      <span>{{ response.role }}</span>
+      <p>{{ response.content }}</p>
+      <small>{{ response.observed_at }}</small>
+    </article>
+  {% else %}<p class="empty-state">Waiting for a persisted target response.</p>{% endfor %}
+
+  <h3>Deterministic assertions</h3>
+  <div class="table-wrap"><table class="assertion-table">
+    <thead><tr><th>Outcome</th><th>Invariant</th><th>Expected</th><th>Observed</th><th>Evidence</th></tr></thead>
+    <tbody>{% for assertion in result.assertions %}<tr>
+      <td><span class="assertion assertion-{{ assertion.outcome }}">{{ assertion.outcome | replace('_', ' ') }}</span></td>
+      <td class="mono">{{ assertion.invariant_id }}</td>
+      <td>{{ assertion.expected }}</td>
+      <td>{{ assertion.observed }}</td>
+      <td class="mono">{{ assertion.evidence_reference_ids | join(', ') or '—' }}</td>
+    </tr>{% else %}<tr><td colspan="5">Assertions will appear after evidence is persisted.</td></tr>{% endfor %}</tbody>
+  </table></div>
+
+  <h3>Judge verdict</h3>
+  {% if result.verdict %}
+  <dl class="summary-list verdict-summary">
+    <div><dt>Verdict</dt><dd>{{ result.verdict.verdict | replace('_', ' ') }}</dd></div>
+    <div><dt>Severity</dt><dd>{{ result.verdict.severity }}</dd></div>
+    <div><dt>Exploitability</dt><dd>{{ result.verdict.exploitability }}</dd></div>
+    <div><dt>Confidence</dt><dd>{{ result.verdict.confidence }}</dd></div>
+    <div><dt>Violated invariants</dt><dd>{{ result.verdict.violated_invariants | join(', ') or 'none' }}</dd></div>
+    <div><dt>Recommendation</dt><dd>{{ result.verdict.next_recommendation }}</dd></div>
+  </dl>
+  {% else %}<p class="empty-state">The Judge verdict is pending.</p>{% endif %}
+</section>
+{% endfor %}
 {% if safe_error %}<section class="panel danger"><h2>Sanitized error</h2><pre>{{ safe_error }}</pre></section>{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if not terminal %}
+<script>
+(() => {
+  const statusNode = document.getElementById("campaign-status");
+  const statusUrl = "/dashboard/campaigns/{{ campaign.id }}/status";
+  const poll = async () => {
+    try {
+      const response = await fetch(statusUrl, {cache: "no-store", headers: {Accept: "application/json"}});
+      if (!response.ok) throw new Error("status request failed");
+      const state = await response.json();
+      statusNode.textContent = state.status;
+      statusNode.className = `badge badge-${state.status}`;
+      if (state.terminal) {
+        window.location.reload();
+        return;
+      }
+    } catch (_error) {
+      statusNode.title = "Status polling will retry automatically";
+    }
+    window.setTimeout(poll, 2000);
+  };
+  window.setTimeout(poll, 2000);
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -620,6 +620,27 @@ class OperationalRepository:
             )
         }
 
+    def latest_live_evaluations(self, case_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Return the latest deployed single-case attempt for each requested seed ID."""
+
+        if not case_ids:
+            return {}
+        statement = (
+            select(AttackAttempt, Campaign, JudgeVerdict)
+            .join(Campaign, Campaign.id == AttackAttempt.campaign_id)
+            .outerjoin(JudgeVerdict, JudgeVerdict.attempt_id == AttackAttempt.id)
+            .where(AttackAttempt.attack_family_id.in_(case_ids))
+            .where(Campaign.trigger_type == "live_deployed")
+            .order_by(Campaign.created_at.desc(), AttackAttempt.created_at.desc())
+        )
+        latest: dict[str, dict[str, Any]] = {}
+        for attempt, campaign, verdict in self.session.execute(statement):
+            latest.setdefault(
+                attempt.attack_family_id,
+                {"attempt": attempt, "campaign": campaign, "verdict": verdict},
+            )
+        return latest
+
     def campaign_rows(
         self, *, offset: int = 0, limit: int = 50
     ) -> tuple[list[dict[str, Any]], int]:

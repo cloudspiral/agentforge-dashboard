@@ -97,6 +97,7 @@ class JudgeInvoker(Protocol):
 VersionDiscoverer = Callable[
     [LoadedTargetProfile, ResolvedTargetAlias], Awaitable[DiscoveredTargetVersion]
 ]
+CampaignPersistedCallback = Callable[[uuid.UUID], None]
 
 
 class CapturedMessageV1(BaseModel):
@@ -691,6 +692,7 @@ async def run_live_local_case(
     runner: AttackRunner | None = None,
     judge: JudgeInvoker | None = None,
     version_discoverer: VersionDiscoverer = _discover_version,
+    on_campaign_persisted: CampaignPersistedCallback | None = None,
 ) -> LiveLocalEvaluationResultV1:
     """Execute, judge, persist, and export one checked-in local or deployed case."""
 
@@ -827,6 +829,8 @@ async def run_live_local_case(
         target_alias=live_target_alias,
         run_mode=run_mode,
     )
+    if on_campaign_persisted is not None:
+        on_campaign_persisted(campaign_id)
 
     max_case_timeout = max(
         (action.timeout_seconds for action in case.actions if action.type == "wait_for_response"),

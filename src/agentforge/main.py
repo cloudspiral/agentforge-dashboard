@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import secrets
 from collections.abc import Callable
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -19,7 +20,12 @@ from sqlalchemy import inspect
 from agentforge.api import router as api_router
 from agentforge.api.routes import ApiError, require_api_read_token
 from agentforge.api.schemas import ErrorResponse
-from agentforge.dashboard import router as dashboard_router
+from agentforge.dashboard import (
+    DashboardEvaluationManager,
+)
+from agentforge.dashboard import (
+    router as dashboard_router,
+)
 from agentforge.evaluation import (
     load_judge_rubric,
     load_seed_cases,
@@ -118,6 +124,16 @@ def create_app(
             _project_path(configured_settings.judge_rubric_path)
         )
         application.state.seed_cases = load_seed_cases(PROJECT_ROOT / "evals" / "seed-cases")
+        application.state.repository_root = PROJECT_ROOT
+        application.state.dashboard_csrf_token = secrets.token_urlsafe(32)
+        evaluation_manager = DashboardEvaluationManager(
+            settings=configured_settings,
+            database=configured_database,
+            loaded_profile=application.state.target_profile,
+            taxonomy=application.state.taxonomy,
+            repository_root=PROJECT_ROOT,
+        )
+        application.state.evaluation_manager = evaluation_manager
         application.state.worker = None
         application.state.worker_task = None
 
@@ -146,6 +162,7 @@ def create_app(
         try:
             yield
         finally:
+            await evaluation_manager.shutdown()
             if worker is not None and worker_task is not None:
                 await _stop_worker(
                     worker,

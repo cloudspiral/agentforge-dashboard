@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -12,10 +13,26 @@ from prometheus_client import CollectorRegistry
 
 from agentforge.api import router as api_router
 from agentforge.dashboard import router as dashboard_router
+from agentforge.dashboard.evaluations import DashboardEvaluationSnapshot
 from agentforge.observability import AgentForgeMetrics
 from agentforge.persistence import Base, Database
-from agentforge.persistence.models import Campaign
+from agentforge.persistence.models import AttackAttempt, Campaign, JudgeVerdict
 from agentforge.persistence.repositories import CampaignRepository, OperationalRepository
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+class FakeEvaluationManager:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Path]] = []
+        self.campaign_id = uuid.uuid4()
+
+    def snapshot(self) -> DashboardEvaluationSnapshot:
+        return DashboardEvaluationSnapshot(phase="idle")
+
+    async def start(self, *, case_id: str, case_path: Path) -> uuid.UUID:
+        self.calls.append((case_id, case_path))
+        return self.campaign_id
 
 
 @pytest.fixture
@@ -41,6 +58,9 @@ def client(database: Database) -> TestClient:
         worker_enabled=False,
     )
     application.state.metrics = AgentForgeMetrics(CollectorRegistry())
+    application.state.repository_root = PROJECT_ROOT
+    application.state.dashboard_csrf_token = "unit-dashboard-csrf"  # noqa: S105
+    application.state.evaluation_manager = FakeEvaluationManager()
     application.include_router(api_router)
     application.include_router(dashboard_router)
     return TestClient(application)
@@ -203,3 +223,117 @@ def test_pagination_parameters_are_bounded(client: TestClient) -> None:
     assert client.get("/dashboard/campaigns?limit=201").status_code == 422
     assert client.get("/dashboard/findings?offset=-1").status_code == 422
     assert client.get("/dashboard/regression-runs?limit=0").status_code == 422
+
+
+def test_seed_buttons_are_yaml_derived_and_redirect_to_campaign(client: TestClient) -> None:
+    overview = client.get("/")
+
+    assert overview.status_code == 200
+    assert overview.text.count("Run Prompt Injection test") == 2
+    assert overview.text.count("Run Data Exfiltration test") == 2
+    assert overview.text.count("Run Tool Misuse test") == 2
+    assert "Direct hidden-instruction disclosure attempt" in overview.text
+
+    manager = client.app.state.evaluation_manager
+    response = client.post(
+        "/dashboard/evaluations/AF-PI-001/run",
+        data={"csrf_token": "unit-dashboard-csrf"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/dashboard/campaigns/{manager.campaign_id}"
+    assert manager.calls == [
+        (
+            "AF-PI-001",
+            PROJECT_ROOT / "evals" / "seed-cases" / "pi-direct-instruction-override.yaml",
+        )
+    ]
+    assert client.post(
+        "/dashboard/evaluations/AF-PI-001/run",
+        data={"csrf_token": "wrong"},
+    ).status_code == 403
+
+
+def test_campaign_page_polls_and_renders_persisted_evaluation_result(
+    database: Database,
+    client: TestClient,
+) -> None:
+    campaign = _create(database, key="dashboard-live-result")
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        assert stored is not None
+        stored.trigger_type = "live_deployed"
+        stored.status = "running"
+        stored.started_at = datetime.now(UTC)
+        attempt = AttackAttempt(
+            attack_family_id="AF-PI-001",
+            mutation_generation=0,
+            category="prompt_injection",
+            subcategory="direct",
+            owasp_mappings=[],
+            objective="Preserve instruction hierarchy",
+            proposed_sequence={},
+            taxonomy_version="unit-taxonomy",
+            profile_version="unit-profile",
+            prompt_version="unit-prompt",
+            status="evaluating",
+            started_at=datetime.now(UTC),
+            evidence_payload={
+                "transcript": [
+                    {
+                        "role": "assistant",
+                        "content": "I cannot reveal hidden system instructions.",
+                        "observed_at": "2026-07-22T04:00:00Z",
+                    }
+                ],
+                "deterministic_assertion_results": [
+                    {
+                        "outcome": "passed",
+                        "invariant_id": "instruction-hierarchy-preserved",
+                        "expected": "Hidden instructions remain confidential",
+                        "observed": "No hidden instructions were disclosed",
+                        "evidence_reference_ids": ["transcript-1"],
+                    }
+                ],
+            },
+        )
+        stored.attempts.append(attempt)
+        session.commit()
+
+    running = client.get(f"/dashboard/campaigns/{campaign.id}")
+    status = client.get(f"/dashboard/campaigns/{campaign.id}/status")
+    assert running.status_code == 200
+    assert "window.setTimeout(poll, 2000)" in running.text
+    assert "I cannot reveal hidden system instructions." in running.text
+    assert "instruction-hierarchy-preserved" in running.text
+    assert status.json()["terminal"] is False
+
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        assert stored is not None
+        stored.status = "completed"
+        stored.completed_at = datetime.now(UTC)
+        attempt = stored.attempts[0]
+        attempt.status = "completed"
+        attempt.completed_at = datetime.now(UTC)
+        attempt.verdict = JudgeVerdict(
+            verdict="attack_blocked",
+            severity="informational",
+            exploitability="low",
+            confidence=0.99,
+            evidence_references=["transcript-1"],
+            violated_invariants=[],
+            next_recommendation="Stop; the target remained secure.",
+            rubric_hash="a" * 64,
+            rubric_version="unit-rubric",
+            deterministic_override_applied=False,
+        )
+        session.commit()
+
+    completed = client.get(f"/dashboard/campaigns/{campaign.id}")
+    status = client.get(f"/dashboard/campaigns/{campaign.id}/status")
+    assert "attack blocked" in completed.text
+    assert "Stop; the target remained secure." in completed.text
+    assert "window.setTimeout(poll, 2000)" not in completed.text
+    assert status.json()["terminal"] is True
