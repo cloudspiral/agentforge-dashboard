@@ -20,6 +20,8 @@ artifacts/screenshots/*
 !artifacts/screenshots/.gitkeep
 evals/results/*
 !evals/results/.gitkeep
+!evals/results/submission/
+!evals/results/submission/**
 reports/generated/*
 !reports/generated/.gitkeep
 
