@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BeforeValidator, Field, SecretStr, field_validator
+from pydantic import BeforeValidator, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://agentforge:agentforge@localhost:5433/agentforge"
     platform_api_token: SecretStr | None = None
     deploy_webhook_secret: SecretStr | None = None
+    dashboard_auth_username: str | None = None
+    dashboard_auth_password: SecretStr | None = None
 
     openai_api_key: SecretStr | None = None
     openai_orchestrator_model: str = "gpt-5.6-terra"
@@ -85,12 +87,37 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(default=1_048_576, ge=1, le=10_485_760)
     run_live_e2e: bool = False
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_postgresql_driver(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        for prefix in ("postgresql://", "postgres://"):
+            if value.startswith(prefix):
+                return f"postgresql+psycopg://{value[len(prefix) :]}"
+        return value
+
     @field_validator("target_allowed_hosts")
     @classmethod
     def allowed_hosts_must_not_be_empty(cls, value: list[str]) -> list[str]:
         if not value:
             raise ValueError("TARGET_ALLOWED_HOSTS must contain at least one hostname")
         return value
+
+    @model_validator(mode="after")
+    def production_dashboard_auth_is_configured(self) -> Settings:
+        if self.environment != "production":
+            return self
+        username = (self.dashboard_auth_username or "").strip()
+        password = (
+            self.dashboard_auth_password.get_secret_value() if self.dashboard_auth_password else ""
+        )
+        if not username or not password:
+            raise ValueError(
+                "DASHBOARD_AUTH_USERNAME and DASHBOARD_AUTH_PASSWORD are required in production"
+            )
+        self.dashboard_auth_username = username
+        return self
 
     @property
     def has_openai_credentials(self) -> bool:

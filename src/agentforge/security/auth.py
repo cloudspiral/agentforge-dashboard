@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hmac
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import SecretStr
+
+_dashboard_basic = HTTPBasic(auto_error=False)
 
 
 def _matches(candidate: str | None, expected: SecretStr | None) -> bool:
@@ -32,3 +35,34 @@ def require_webhook(expected: SecretStr | None):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid webhook")
 
     return dependency
+
+
+def require_dashboard_auth(
+    request: Request,
+    credentials: HTTPBasicCredentials | None = Depends(_dashboard_basic),
+) -> None:
+    settings = request.app.state.settings
+    if getattr(settings, "environment", "development") != "production":
+        return
+
+    expected_username = getattr(settings, "dashboard_auth_username", None)
+    expected_password = getattr(settings, "dashboard_auth_password", None)
+    username_matches = bool(
+        credentials
+        and expected_username
+        and hmac.compare_digest(credentials.username, expected_username)
+    )
+    password_matches = bool(
+        credentials
+        and expected_password
+        and hmac.compare_digest(
+            credentials.password,
+            expected_password.get_secret_value(),
+        )
+    )
+    if not username_matches or not password_matches:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid dashboard credentials",
+            headers={"WWW-Authenticate": 'Basic realm="AgentForge"'},
+        )

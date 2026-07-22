@@ -88,6 +88,14 @@ def require_api_token(
         raise ApiError(status.HTTP_401_UNAUTHORIZED, "invalid_token", "invalid bearer token")
 
 
+def require_api_read_token(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> None:
+    if getattr(request.app.state.settings, "environment", "development") == "production":
+        require_api_token(request, authorization)
+
+
 def require_webhook_secret(
     request: Request,
     x_agentforge_webhook_secret: str | None = Header(default=None),
@@ -238,7 +246,11 @@ def create_campaign(
         raise ApiError(status.HTTP_400_BAD_REQUEST, "invalid_campaign", str(exc)) from exc
 
 
-@router.get("/campaigns", response_model=CampaignPage)
+@router.get(
+    "/campaigns",
+    response_model=CampaignPage,
+    dependencies=[Depends(require_api_read_token)],
+)
 def list_campaigns(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
@@ -250,7 +262,11 @@ def list_campaigns(
     )
 
 
-@router.get("/operations/summary", response_model=OperationalSummaryResponse)
+@router.get(
+    "/operations/summary",
+    response_model=OperationalSummaryResponse,
+    dependencies=[Depends(require_api_read_token)],
+)
 def get_operational_summary(
     request: Request,
     session: Session = Depends(get_session),
@@ -268,7 +284,11 @@ def get_operational_summary(
     )
 
 
-@router.get("/operations/queue", response_model=QueueStatusResponse)
+@router.get(
+    "/operations/queue",
+    response_model=QueueStatusResponse,
+    dependencies=[Depends(require_api_read_token)],
+)
 def get_queue_status(
     request: Request,
     session: Session = Depends(get_session),
@@ -281,7 +301,10 @@ def get_queue_status(
 
 
 @router.get(
-    "/campaigns/{campaign_id}", response_model=CampaignDetailResponse, responses=ERROR_RESPONSES
+    "/campaigns/{campaign_id}",
+    response_model=CampaignDetailResponse,
+    responses=ERROR_RESPONSES,
+    dependencies=[Depends(require_api_read_token)],
 )
 def get_campaign(
     campaign_id: uuid.UUID, session: Session = Depends(get_session)
@@ -344,7 +367,11 @@ def create_regression_run(
         raise ApiError(status.HTTP_400_BAD_REQUEST, "invalid_regression", str(exc)) from exc
 
 
-@router.get("/regression-runs", response_model=RegressionRunPage)
+@router.get(
+    "/regression-runs",
+    response_model=RegressionRunPage,
+    dependencies=[Depends(require_api_read_token)],
+)
 def list_regression_runs(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
@@ -357,7 +384,10 @@ def list_regression_runs(
 
 
 @router.get(
-    "/regression-runs/{run_id}", response_model=RegressionRunResponse, responses=ERROR_RESPONSES
+    "/regression-runs/{run_id}",
+    response_model=RegressionRunResponse,
+    responses=ERROR_RESPONSES,
+    dependencies=[Depends(require_api_read_token)],
 )
 def get_regression_run(
     run_id: uuid.UUID, session: Session = Depends(get_session)
@@ -389,7 +419,11 @@ def target_deployed(
     )
 
 
-@router.get("/findings", response_model=FindingPage)
+@router.get(
+    "/findings",
+    response_model=FindingPage,
+    dependencies=[Depends(require_api_read_token)],
+)
 def list_findings(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
@@ -401,7 +435,12 @@ def list_findings(
     )
 
 
-@router.get("/findings/{finding_id}", response_model=FindingResponse, responses=ERROR_RESPONSES)
+@router.get(
+    "/findings/{finding_id}",
+    response_model=FindingResponse,
+    responses=ERROR_RESPONSES,
+    dependencies=[Depends(require_api_read_token)],
+)
 def get_finding(finding_id: uuid.UUID, session: Session = Depends(get_session)) -> FindingResponse:
     try:
         return _finding(FindingRepository(session).get(finding_id))
@@ -426,7 +465,12 @@ def update_finding_status(
         raise ApiError(status.HTTP_404_NOT_FOUND, "finding_not_found", "finding not found") from exc
 
 
-@router.get("/reports/{finding_id}", response_model=ReportResponse, responses=ERROR_RESPONSES)
+@router.get(
+    "/reports/{finding_id}",
+    response_model=ReportResponse,
+    responses=ERROR_RESPONSES,
+    dependencies=[Depends(require_api_read_token)],
+)
 def get_report(finding_id: uuid.UUID, session: Session = Depends(get_session)) -> ReportResponse:
     try:
         report = ReportRepository(session).latest_for_finding(finding_id)
@@ -462,12 +506,20 @@ def export_report(
     return ReportExportResponse(finding_id=finding_id, path=path, report_version=version)
 
 
-@router.get("/coverage", response_model=CoverageResponse)
+@router.get(
+    "/coverage",
+    response_model=CoverageResponse,
+    dependencies=[Depends(require_api_read_token)],
+)
 def get_coverage(service: ApplicationService = Depends(get_service)) -> CoverageResponse:
     return CoverageResponse(rows=service.coverage())
 
 
-@router.get("/agent-runs", response_model=AgentRunPage)
+@router.get(
+    "/agent-runs",
+    response_model=AgentRunPage,
+    dependencies=[Depends(require_api_read_token)],
+)
 def list_agent_runs(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),

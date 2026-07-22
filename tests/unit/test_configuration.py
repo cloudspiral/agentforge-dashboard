@@ -44,3 +44,40 @@ def test_unknown_target_alias_is_rejected() -> None:
     profile = load_target_profile(ROOT / "config/target-profile.yaml")
     with pytest.raises(ValueError, match="unknown target alias"):
         profile.resolve_alias("arbitrary-host", Settings())
+
+
+@pytest.mark.parametrize(
+    ("configured", "normalized"),
+    [
+        (
+            "postgresql://agentforge:secret@postgres.railway.internal:5432/railway",
+            "postgresql+psycopg://agentforge:secret@postgres.railway.internal:5432/railway",
+        ),
+        (
+            "postgres://agentforge:secret@postgres.railway.internal:5432/railway?sslmode=require",
+            "postgresql+psycopg://agentforge:secret@postgres.railway.internal:5432/railway?sslmode=require",
+        ),
+        (
+            "postgresql+psycopg://agentforge:secret@localhost:5433/agentforge",
+            "postgresql+psycopg://agentforge:secret@localhost:5433/agentforge",
+        ),
+        ("sqlite+pysqlite:///:memory:", "sqlite+pysqlite:///:memory:"),
+    ],
+)
+def test_database_url_uses_the_psycopg3_driver(configured: str, normalized: str) -> None:
+    assert Settings(database_url=configured).database_url == normalized
+
+
+def test_production_requires_dashboard_basic_auth_credentials() -> None:
+    with pytest.raises(ValueError, match="DASHBOARD_AUTH_USERNAME"):
+        Settings(environment="production")
+
+    settings = Settings(
+        environment="production",
+        dashboard_auth_username=" admin ",
+        dashboard_auth_password="pass",  # noqa: S106 - synthetic HTTP Basic fixture
+    )
+
+    assert settings.dashboard_auth_username == "admin"
+    assert settings.dashboard_auth_password is not None
+    assert settings.dashboard_auth_password.get_secret_value() == "pass"

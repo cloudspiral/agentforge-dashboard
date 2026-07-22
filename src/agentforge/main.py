@@ -11,13 +11,13 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 
 from agentforge.api import router as api_router
-from agentforge.api.routes import ApiError
+from agentforge.api.routes import ApiError, require_api_read_token
 from agentforge.api.schemas import ErrorResponse
 from agentforge.dashboard import router as dashboard_router
 from agentforge.evaluation import (
@@ -161,6 +161,9 @@ def create_app(
         summary="Authorized synthetic-data security evaluation for the OpenEMR Clinical Co-Pilot",
         version="0.1.0",
         lifespan=lifespan,
+        docs_url=None if configured_settings.environment == "production" else "/docs",
+        redoc_url=None if configured_settings.environment == "production" else "/redoc",
+        openapi_url=(None if configured_settings.environment == "production" else "/openapi.json"),
     )
 
     @application.middleware("http")
@@ -221,7 +224,12 @@ def create_app(
             content={"status": "ready" if ready else "not_ready", "checks": checks},
         )
 
-    @application.get("/metrics", tags=["operations"], response_model=None)
+    @application.get(
+        "/metrics",
+        tags=["operations"],
+        response_model=None,
+        dependencies=[Depends(require_api_read_token)],
+    )
     def prometheus_metrics() -> Response:
         return Response(
             content=app_metrics.render(),

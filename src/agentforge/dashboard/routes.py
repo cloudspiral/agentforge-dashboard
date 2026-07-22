@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
@@ -20,6 +20,7 @@ from agentforge.persistence.repositories import (
     RegressionRunRepository,
     coverage_summary,
 )
+from agentforge.security.auth import require_dashboard_auth
 from agentforge.security.redaction import redact
 
 
@@ -47,7 +48,10 @@ async def _dashboard_lifespan(application: FastAPI) -> AsyncIterator[None]:
         runtime_metrics.unbind_persistence(database)
 
 
-router = APIRouter(lifespan=_dashboard_lifespan)
+router = APIRouter(
+    lifespan=_dashboard_lifespan,
+    dependencies=[Depends(require_dashboard_auth)],
+)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 

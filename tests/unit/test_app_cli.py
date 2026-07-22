@@ -135,6 +135,44 @@ def test_app_wires_health_readiness_metrics_dashboard_api_and_shutdown(tmp_path:
     assert telemetry.shutdown_calls == 1
 
 
+def test_production_protects_dashboard_api_and_metrics_but_not_health(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(
+        tmp_path,
+        environment="production",
+        dashboard_auth_username="admin",
+        dashboard_auth_password="pass",  # noqa: S106 - synthetic HTTP Basic fixture
+    )
+    database = _database(settings)
+    application = create_app(
+        settings=settings,
+        database=database,
+        telemetry=FakeTelemetry(),  # type: ignore[arg-type]
+        app_metrics=AgentForgeMetrics(CollectorRegistry()),
+    )
+    bearer_headers = {"Authorization": "Bearer unit-platform-token"}
+
+    with TestClient(application) as client:
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/readyz").status_code == 200
+
+        dashboard = client.get("/")
+        assert dashboard.status_code == 401
+        assert dashboard.headers["www-authenticate"] == 'Basic realm="AgentForge"'
+        assert client.get("/", auth=("admin", "wrong")).status_code == 401
+        assert client.get("/", auth=("admin", "pass")).status_code == 200
+
+        assert client.get("/api/v1/campaigns").status_code == 401
+        assert client.get("/api/v1/campaigns", headers=bearer_headers).status_code == 200
+        assert client.get("/metrics").status_code == 401
+        assert client.get("/metrics", headers=bearer_headers).status_code == 200
+
+        assert client.get("/docs").status_code == 404
+        assert client.get("/redoc").status_code == 404
+        assert client.get("/openapi.json").status_code == 404
+
+
 def test_enabled_worker_is_started_once_and_stopped_with_lifespan(tmp_path: Path) -> None:
     settings = _settings(
         tmp_path,
