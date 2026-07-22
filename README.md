@@ -219,6 +219,11 @@ uv run pytest
 
 PostgreSQL and live-target tests are opt-in and require explicitly configured test environments.
 
+GitLab CI runs a minimal merge/repository verification gate with an ephemeral
+PostgreSQL test database. It does not deploy to Railway. See
+[`docs/CI.md`](docs/CI.md) for its exact scope, cleanup behavior, and deployment
+boundary.
+
 ## Deployment
 
 AgentForge is designed to deploy as:

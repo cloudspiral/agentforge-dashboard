@@ -1,29 +1,23 @@
 stages:
-  - quality
-  - test
-  - build
+  - verify
 
+# This pipeline is a merge/repository verification gate. Railway deployment is
+# independent and is triggered by the GitLab -> GitHub main-branch mirror.
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_COMMIT_BRANCH'
+    - when: never
 
 default:
   image: ghcr.io/astral-sh/uv:0.11.25-python3.12-bookworm-slim
   interruptible: true
-  cache:
-    key:
-      files:
-        - uv.lock
-    paths:
-      - .cache/uv
   before_script:
-    - uv sync --frozen --extra dev
+    - uv sync --frozen
 
 variables:
+  # Keep caches inside the disposable job workspace. No GitLab cache or build
+  # artifact is retained by this pipeline.
   UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
   UV_LINK_MODE: copy
   RUN_LIVE_E2E: "0"
@@ -35,8 +29,19 @@ variables:
   OPENINFERENCE_HIDE_LLM_TOOLS: "true"
   OPENINFERENCE_HIDE_LLM_INVOCATION_PARAMETERS: "true"
 
-quality:
-  stage: quality
+  # The explicit _test suffix is enforced by the integration tests to prevent
+  # destructive schema setup against a non-test database.
+  POSTGRES_DB: agentforge_ci_test
+  POSTGRES_USER: agentforge_ci
+  POSTGRES_PASSWORD: agentforge_ci
+  DATABASE_URL: postgresql+psycopg://agentforge_ci:agentforge_ci@postgres:5432/agentforge_ci_test
+  AGENTFORGE_TEST_DATABASE_URL: postgresql+psycopg://agentforge_ci:agentforge_ci@postgres:5432/agentforge_ci_test
+
+verify:
+  stage: verify
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
   script:
     - uv run ruff format --check .
     - uv run ruff check .
@@ -44,63 +49,8 @@ quality:
     - uv run python scripts/export_evals.py --validate-only
     - uv run python scripts/check_submission_results.py
     - uv run python scripts/check_control_results.py
-    - mkdir -p .ci-artifacts
-    - uv run python scripts/export_evals.py --output .ci-artifacts/agentforge-seed-catalog.json
-    - uv run python scripts/load_test.py --target fake --operations 100 --max-seconds 30 --max-cost-usd 0 --max-target-requests 0 --output .ci-artifacts/agentforge-load-test.json
-  artifacts:
-    when: always
-    expire_in: 7 days
-    paths:
-      - .ci-artifacts/agentforge-seed-catalog.json
-      - .ci-artifacts/agentforge-load-test.json
-
-tests:
-  stage: test
-  services:
-    - name: postgres:17-alpine
-      alias: postgres
-  variables:
-    POSTGRES_DB: agentforge_ci
-    POSTGRES_USER: agentforge_ci
-    POSTGRES_PASSWORD: agentforge_ci
-    DATABASE_URL: postgresql+psycopg://agentforge_ci:agentforge_ci@postgres:5432/agentforge_ci
-  script:
-    - uv run pytest --cov=agentforge --cov-report=term-missing --cov-report=xml
-  coverage: '/TOTAL.*\s+(\d+%)$/'
-  artifacts:
-    when: always
-    expire_in: 7 days
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.xml
-
-migrations:
-  stage: test
-  services:
-    - name: postgres:17-alpine
-      alias: postgres
-  variables:
-    POSTGRES_DB: agentforge_ci
-    POSTGRES_USER: agentforge_ci
-    POSTGRES_PASSWORD: agentforge_ci
-    DATABASE_URL: postgresql+psycopg://agentforge_ci:agentforge_ci@postgres:5432/agentforge_ci
-  script:
     - uv run alembic heads
     - uv run alembic upgrade head
-
-container:
-  stage: build
-  image: docker:27.5.1-cli
-  services:
-    - name: docker:27.5.1-dind
-      alias: docker
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: /certs
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: /certs/client
-  before_script: []
-  script:
-    - docker compose config --quiet
-    - docker build --pull --tag agentforge:${CI_COMMIT_SHA} .
+    - uv run alembic current
+    - uv run alembic check
+    - uv run pytest -q

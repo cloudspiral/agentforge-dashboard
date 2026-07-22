@@ -192,20 +192,33 @@ def test_compose_uses_one_application_container_with_embedded_worker() -> None:
     assert application["healthcheck"]["test"][0] == "CMD"
 
 
-def test_gitlab_pipeline_enforces_offline_quality_migration_and_build_gates() -> None:
+def test_gitlab_pipeline_is_a_minimal_ephemeral_repository_gate() -> None:
     pipeline = yaml.safe_load((REPOSITORY_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
     assert pipeline["variables"]["RUN_LIVE_E2E"] == "0"
-    assert set(pipeline["stages"]) == {"quality", "test", "build"}
-    quality_script = "\n".join(pipeline["quality"]["script"])
-    assert "ruff format --check" in quality_script
-    assert "export_contracts.py --check" in quality_script
-    assert "check_submission_results.py" in quality_script
-    assert "check_control_results.py" in quality_script
-    assert "load_test.py --target fake --operations 100" in quality_script
-    assert pipeline["tests"]["services"][0]["alias"] == "postgres"
-    assert pipeline["tests"]["variables"]["DATABASE_URL"].startswith("postgresql+psycopg://")
-    assert any("alembic upgrade head" in command for command in pipeline["migrations"]["script"])
-    assert any("docker build" in command for command in pipeline["container"]["script"])
+    assert pipeline["stages"] == ["verify"]
+    assert "cache" not in pipeline["default"]
+    assert "artifacts" not in pipeline["verify"]
+    assert pipeline["verify"]["services"] == [{"name": "postgres:17-alpine", "alias": "postgres"}]
+    assert pipeline["variables"]["POSTGRES_DB"].endswith("_test")
+    assert (
+        pipeline["variables"]["DATABASE_URL"]
+        == pipeline["variables"]["AGENTFORGE_TEST_DATABASE_URL"]
+    )
+
+    verification_script = "\n".join(pipeline["verify"]["script"])
+    assert "ruff format --check" in verification_script
+    assert "export_contracts.py --check" in verification_script
+    assert "check_submission_results.py" in verification_script
+    assert "check_control_results.py" in verification_script
+    assert "alembic upgrade head" in verification_script
+    assert "alembic check" in verification_script
+    assert "pytest -q" in verification_script
+    assert "load_test.py" not in verification_script
+    assert "docker build" not in verification_script
+
+    workflow_rules = pipeline["workflow"]["rules"]
+    assert workflow_rules[-1] == {"when": "never"}
+    assert not any(rule.get("if") == "$CI_COMMIT_BRANCH" for rule in workflow_rules)
 
 
 def test_dockerfile_installs_browser_and_runs_as_non_root() -> None:
