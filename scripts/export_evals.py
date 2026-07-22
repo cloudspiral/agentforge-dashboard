@@ -16,9 +16,11 @@ if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
 from agentforge.evaluation.catalog import (  # noqa: E402
+    ControlCaseV1,
     JudgeRubricV1,
     SeedCaseV1,
     TaxonomyV1,
+    load_control_cases,
     load_judge_rubric,
     load_seed_cases,
     load_taxonomy,
@@ -38,12 +40,15 @@ def _canonical_json(value: object) -> bytes:
     ).encode("utf-8")
 
 
-def load_catalog(repository_root: Path) -> tuple[TaxonomyV1, JudgeRubricV1, list[SeedCaseV1]]:
+def load_catalog(
+    repository_root: Path,
+) -> tuple[TaxonomyV1, JudgeRubricV1, list[SeedCaseV1], list[ControlCaseV1]]:
     """Load and cross-check every versioned input without reading runtime state."""
 
     taxonomy = load_taxonomy(repository_root / "config" / "attack-taxonomy.yaml")
     rubric = load_judge_rubric(repository_root / "config" / "judge-rubric.yaml")
     seeds = load_seed_cases(repository_root / "evals" / "seed-cases")
+    controls = load_control_cases(repository_root / "evals" / "control-cases")
 
     taxonomy_by_category = {category.id: category for category in taxonomy.categories}
     for seed in seeds:
@@ -55,17 +60,18 @@ def load_catalog(repository_root: Path) -> tuple[TaxonomyV1, JudgeRubricV1, list
             )
         if seed.category not in rubric.categories:
             raise ValueError(f"seed {seed.id!r} has no judge rubric category")
-    return taxonomy, rubric, seeds
+    return taxonomy, rubric, seeds, controls
 
 
 def build_bundle(repository_root: Path) -> dict[str, object]:
     """Build a deterministic export containing definitions, never execution results."""
 
-    taxonomy, rubric, seeds = load_catalog(repository_root)
+    taxonomy, rubric, seeds, controls = load_catalog(repository_root)
     source_paths = [
         repository_root / "config" / "attack-taxonomy.yaml",
         repository_root / "config" / "judge-rubric.yaml",
         *sorted((repository_root / "evals" / "seed-cases").glob("*.yaml")),
+        *sorted((repository_root / "evals" / "control-cases").glob("*.yaml")),
     ]
     source_hashes = {
         path.relative_to(repository_root).as_posix(): _sha256_bytes(path.read_bytes())
@@ -73,10 +79,11 @@ def build_bundle(repository_root: Path) -> dict[str, object]:
     }
     catalog = {
         "schema_version": "1.0",
-        "artifact_kind": "synthetic_seed_definitions_not_execution_results",
+        "artifact_kind": "agentforge_evaluation_definitions_not_execution_results",
         "taxonomy": taxonomy.model_dump(mode="json"),
         "judge_rubric": rubric.model_dump(mode="json"),
         "seed_cases": [seed.model_dump(mode="json") for seed in seeds],
+        "control_cases": [control.model_dump(mode="json") for control in controls],
         "source_sha256": source_hashes,
     }
     return {
@@ -133,7 +140,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.validate_only:
         print(
             "validated synthetic evaluation catalog: "
-            f"{len(bundle['seed_cases'])} seeds, hash={bundle['catalog_sha256']}"
+            f"{len(bundle['seed_cases'])} seeds and "
+            f"{len(bundle['control_cases'])} controls, hash={bundle['catalog_sha256']}"
         )
         return 0
 
@@ -147,7 +155,10 @@ def main(argv: list[str] | None = None) -> int:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(rendered, encoding="utf-8")
-    print(f"exported {len(bundle['seed_cases'])} synthetic seed definitions to {output}")
+    print(
+        f"exported {len(bundle['seed_cases'])} seed and "
+        f"{len(bundle['control_cases'])} control definitions to {output}"
+    )
     return 0
 
 

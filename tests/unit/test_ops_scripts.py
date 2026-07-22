@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -34,8 +35,9 @@ def test_evaluation_export_is_reproducible_and_explicitly_not_results(tmp_path: 
 
     assert first.read_bytes() == second.read_bytes()
     payload = json.loads(first.read_text(encoding="utf-8"))
-    assert payload["artifact_kind"] == "synthetic_seed_definitions_not_execution_results"
+    assert payload["artifact_kind"] == "agentforge_evaluation_definitions_not_execution_results"
     assert len(payload["seed_cases"]) == 6
+    assert len(payload["control_cases"]) == 4
     assert len(payload["catalog_sha256"]) == 64
 
     check = run_script("scripts/export_evals.py", "--output", str(first), "--check")
@@ -52,6 +54,43 @@ def test_evaluation_export_validate_only_does_not_write(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert not destination.exists()
+
+
+def test_current_result_hash_validation_accepts_only_exact_yaml_bytes(tmp_path: Path) -> None:
+    current = tmp_path / "current"
+    current.mkdir()
+    submission = REPOSITORY_ROOT / "evals" / "results" / "submission"
+    for case_id in ("AF-PI-001", "AF-DE-001"):
+        shutil.copyfile(submission / f"{case_id}.json", current / f"{case_id}.json")
+
+    result = run_script(
+        "scripts/check_submission_results.py",
+        "--current-directory",
+        str(current),
+        "--minimum-categories",
+        "2",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "2 exact-schema" in result.stdout
+
+
+def test_current_result_hash_validation_rejects_historical_tool_case(tmp_path: Path) -> None:
+    current = tmp_path / "current"
+    current.mkdir()
+    submission = REPOSITORY_ROOT / "evals" / "results" / "submission"
+    shutil.copyfile(submission / "AF-TM-002.json", current / "AF-TM-002.json")
+
+    result = run_script(
+        "scripts/check_submission_results.py",
+        "--current-directory",
+        str(current),
+        "--minimum-categories",
+        "0",
+    )
+
+    assert result.returncode == 1
+    assert "case_sha256 mismatch" in result.stderr
 
 
 def test_offline_load_test_completes_without_external_operations(tmp_path: Path) -> None:

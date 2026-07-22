@@ -13,7 +13,11 @@ from pydantic import SecretStr
 from agentforge.contracts.v1 import ApprovedHttpMethodV1
 from agentforge.contracts.v1.campaign import ProposedAttackV1
 from agentforge.contracts.v1.errors import AgentErrorCodeV1
-from agentforge.contracts.v1.evidence import ActionExecutionStatusV1
+from agentforge.contracts.v1.evidence import (
+    ActionExecutionStatusV1,
+    TargetVisibleToolCallV1,
+    ToolAuthorizationResultV1,
+)
 from agentforge.orchestration.execution_gate import (
     ApprovedFixtureV1,
     EndpointBindingV1,
@@ -28,6 +32,7 @@ from agentforge.runners.playwright_runner import (
     BrowserUploadResult,
     PlaywrightAttackRunner,
     SelectedPatient,
+    _extract_target_visible_tool_calls,
 )
 from agentforge.security.allowlist import TargetRejected
 from agentforge.settings import Settings
@@ -386,9 +391,15 @@ def test_test_credentials_are_alias_bounded_and_secret_safe() -> None:
 
 
 class FakeBrowserSession(AbstractAsyncContextManager["FakeBrowserSession"]):
-    def __init__(self, *, fail_chat: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_chat: bool = False,
+        target_visible_tool_calls: tuple[TargetVisibleToolCallV1, ...] = (),
+    ) -> None:
         self.events: list[str] = []
         self.fail_chat = fail_chat
+        self.target_visible_tool_calls = target_visible_tool_calls
 
     async def __aenter__(self) -> FakeBrowserSession:
         self.events.append("enter")
@@ -412,7 +423,10 @@ class FakeBrowserSession(AbstractAsyncContextManager["FakeBrowserSession"]):
         assert timeout_seconds == 7
         if self.fail_chat:
             raise RunnerActionRejected("fake bounded chat failure")
-        return BrowserChatResult("Synthetic chart response with bounded evidence.")
+        return BrowserChatResult(
+            "Synthetic chart response with bounded evidence.",
+            target_visible_tool_calls=self.target_visible_tool_calls,
+        )
 
     async def stage_and_reject(
         self,
@@ -481,7 +495,14 @@ def _browser_actions(*, failure_capture: bool = False) -> list[dict[str, object]
 async def test_playwright_runner_uses_fake_ephemeral_session_and_captures_transcript(
     tmp_path: Path,
 ) -> None:
-    fake = FakeBrowserSession()
+    tool_call = TargetVisibleToolCallV1(
+        call_id="turn-1:retrieval-1",
+        tool_name="get_vitals",
+        sanitized_arguments={"metrics": ["blood_pressure"], "limit": 25},
+        authorization_result=ToolAuthorizationResultV1.ALLOWED,
+        patient_context_alias="patient_a",
+    )
+    fake = FakeBrowserSession(target_visible_tool_calls=(tool_call,))
     runner = PlaywrightAttackRunner(lambda context, trace: fake)
 
     context = _context(tmp_path, credentials=True)
@@ -495,11 +516,77 @@ async def test_playwright_runner_uses_fake_ephemeral_session_and_captures_transc
         "select:patient_a",
     ]
     assert [turn.role.value for turn in evidence.transcript] == ["user", "assistant"]
+    assert evidence.target_visible_tool_calls == [tool_call]
     assert all(
         item.status == ActionExecutionStatusV1.SUCCEEDED
         for item in evidence.executed_action_sequence
     )
     assert fake.events[-1] == "exit"
+
+
+def test_extract_target_visible_tool_calls_uses_validated_proxy_metadata() -> None:
+    calls = _extract_target_visible_tool_calls(
+        {
+            "evidence_packet": {
+                "retrievals": [
+                    {
+                        "retrieval_id": "retrieval-1",
+                        "tool_name": "get_vitals",
+                        "effective_filters": [
+                            {"name": "metrics", "value": ["blood_pressure"]},
+                            {"name": "limit", "value": 25},
+                        ],
+                    }
+                ]
+            }
+        },
+        patient_alias="patient_a",
+        turn_number=3,
+    )
+
+    assert len(calls) == 1
+    assert calls[0].call_id == "turn-3:retrieval-1"
+    assert calls[0].tool_name == "get_vitals"
+    assert calls[0].sanitized_arguments == {
+        "metrics": ["blood_pressure"],
+        "limit": 25,
+    }
+    assert calls[0].patient_context_alias == "patient_a"
+    assert calls[0].authorization_result == ToolAuthorizationResultV1.ALLOWED
+
+
+def test_extract_target_visible_tool_calls_rejects_unreadable_or_invalid_evidence() -> None:
+    assert (
+        _extract_target_visible_tool_calls(
+            {"evidence_packet": None},
+            patient_alias="patient_a",
+            turn_number=1,
+        )
+        == ()
+    )
+
+    with pytest.raises(ValueError, match="evidence envelope"):
+        _extract_target_visible_tool_calls(
+            {"answer": "No validated target evidence."},
+            patient_alias="patient_a",
+            turn_number=1,
+        )
+    with pytest.raises(ValueError, match="filter entry"):
+        _extract_target_visible_tool_calls(
+            {
+                "evidence_packet": {
+                    "retrievals": [
+                        {
+                            "retrieval_id": "retrieval-1",
+                            "tool_name": "get_vitals",
+                            "effective_filters": [{"name": "limit"}],
+                        }
+                    ]
+                }
+            },
+            patient_alias="patient_a",
+            turn_number=1,
+        )
 
 
 @pytest.mark.asyncio

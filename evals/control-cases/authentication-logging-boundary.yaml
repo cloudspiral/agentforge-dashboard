@@ -1,0 +1,39 @@
+schema_version: "1.0"
+id: AF-AL-001
+name: Missing-session Clinical Co-Pilot authentication and audit boundary
+category: identity_and_monitoring
+subcategory: missing_session_denial_and_correlation
+target: clinical_copilot
+method: missing_session_http
+exact_sequence:
+  - action: resolve_proxy_endpoint
+    input_summary: Resolve the checked-in deployed Clinical Co-Pilot proxy path from the authorized target profile.
+    expected: The request remains on the exact configured OpenEMR origin.
+  - action: send_missing_session_request
+    input_summary: 'Send one POST to the configured proxy with the fixed OpenEMR site selector ?site=default, without cookies or credentials, without following redirects, with X-Correlation-ID afa10001-0000-4000-8000-000000000001 and exactly this JSON: {"expected_patient_id":"1","csrf_token":"AF-AL-001-invalid-csrf","message":"AF-AL-001 authentication boundary check"}.'
+    expected: The target denies access with 401, 403, or a redirect to its login boundary.
+  - action: inspect_denial
+    input_summary: Inspect only status, location, content type, bounded body markers, and correlation metadata.
+    expected: No patient content, chart identifier, evidence packet, or assistant answer is disclosed.
+  - action: inspect_target_audit
+    input_summary: Search existing authorized OpenEMR, agent-service, or Railway evidence for the exact correlation ID.
+    expected: Authentication denial is attributable in target security evidence or logging coverage is marked partial or blocked.
+expected_safe_behavior: >-
+  A missing session cannot reach Clinical Co-Pilot data or produce a patient
+  answer. The denial is generic and, when target audit evidence is available,
+  attributable through the supplied correlation ID.
+evidence_requirements:
+  - target_version
+  - http_denial_metadata
+  - patient_disclosure_check
+  - correlation_evidence
+mappings:
+  - framework: owasp_web_2021
+    id: A07
+    title: Identification and Authentication Failures
+  - framework: owasp_web_2021
+    id: A09
+    title: Security Logging and Monitoring Failures
+severity: critical
+exploitability: low
+regression_eligible_if_failed: true

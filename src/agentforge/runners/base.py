@@ -28,6 +28,7 @@ from agentforge.contracts.v1.evidence import (
     AttackEvidenceV1,
     ExecutedActionV1,
     SanitizedHttpExchangeV1,
+    TargetVisibleToolCallV1,
     TranscriptRoleV1,
     TranscriptTurnV1,
 )
@@ -298,6 +299,7 @@ class EvidenceRecorder:
         self.executed_actions: list[ExecutedActionV1] = []
         self.transcript: list[TranscriptTurnV1] = []
         self.http_metadata: list[SanitizedHttpExchangeV1] = []
+        self.target_visible_tool_calls: list[TargetVisibleToolCallV1] = []
         self.errors: list[AgentErrorV1] = []
         self.artifacts: list[EvidenceReferenceV1] = []
 
@@ -365,6 +367,9 @@ class EvidenceRecorder:
     def add_http(self, exchange: SanitizedHttpExchangeV1) -> None:
         self.http_metadata.append(exchange)
 
+    def add_target_visible_tool_call(self, call: TargetVisibleToolCallV1) -> None:
+        self.target_visible_tool_calls.append(call)
+
     def add_artifact(
         self,
         *,
@@ -393,7 +398,7 @@ class EvidenceRecorder:
             executed_action_sequence=self.executed_actions,
             transcript=self.transcript,
             sanitized_http_metadata=self.http_metadata,
-            target_visible_tool_calls=[],
+            target_visible_tool_calls=self.target_visible_tool_calls,
             side_effects=[],
             deterministic_assertion_results=[],
             artifact_references=self.artifacts,

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections import Counter
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
@@ -24,6 +26,7 @@ Identifier = Annotated[
     StringConstraints(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$"),
 ]
 BoundedText = Annotated[str, StringConstraints(min_length=1, max_length=4_000)]
+Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
 
 class TaxonomySubcategoryV1(CatalogModel):
@@ -210,6 +213,91 @@ class SeedCaseV1(CatalogModel):
         return self
 
 
+class CoverageStatusV1(StrEnum):
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    PARTIAL = "PARTIAL"
+    BLOCKED = "BLOCKED"
+    NOT_RUN = "NOT RUN"
+    NOT_APPLICABLE = "NOT APPLICABLE"
+
+
+class ControlMappingV1(CatalogModel):
+    framework: Literal["owasp_web_2021", "owasp_llm_2025"]
+    id: Identifier
+    title: BoundedText
+
+
+class ControlStepV1(CatalogModel):
+    action: Identifier
+    input_summary: BoundedText
+    expected: BoundedText
+
+
+class ControlCaseV1(CatalogModel):
+    schema_version: Literal["1.0"]
+    id: Identifier
+    name: BoundedText
+    category: Identifier
+    subcategory: Identifier
+    target: Literal["clinical_copilot"]
+    method: Literal[
+        "static_sca",
+        "missing_session_http",
+        "live_chat_url_sentinel",
+        "live_chat_markup_canary",
+    ]
+    exact_sequence: list[ControlStepV1] = Field(min_length=1, max_length=12)
+    expected_safe_behavior: BoundedText
+    evidence_requirements: list[Identifier] = Field(min_length=1, max_length=12)
+    mappings: list[ControlMappingV1] = Field(min_length=1, max_length=4)
+    severity: Literal["informational", "low", "medium", "high", "critical"]
+    exploitability: Literal["low", "medium", "high"]
+    regression_eligible_if_failed: bool
+
+    @field_validator("mappings")
+    @classmethod
+    def mappings_are_unique(cls, value: list[ControlMappingV1]) -> list[ControlMappingV1]:
+        keys = [(mapping.framework, mapping.id) for mapping in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("control mappings must be unique")
+        return value
+
+
+class ControlMappingResultV1(CatalogModel):
+    framework: Literal["owasp_web_2021", "owasp_llm_2025"]
+    id: Identifier
+    status: CoverageStatusV1
+    observed: BoundedText
+    evidence_paths: list[str] = Field(default_factory=list, max_length=20)
+
+
+class ControlResultV1(CatalogModel):
+    schema_version: Literal["1.0"]
+    artifact_kind: Literal["clinical_copilot_owasp_control_result"]
+    case_id: Identifier
+    case_sha256: Sha256Hex
+    target_version: BoundedText
+    target_source_sha256: Sha256Hex | None = None
+    executed_at: AwareDatetime
+    execution_status: CoverageStatusV1
+    observed_behavior: BoundedText
+    severity: Literal["informational", "low", "medium", "high", "critical"]
+    exploitability: Literal["low", "medium", "high"]
+    regression_eligible: bool
+    mapping_results: list[ControlMappingResultV1] = Field(min_length=1, max_length=4)
+    evidence_paths: list[str] = Field(default_factory=list, max_length=20)
+    limitations: list[BoundedText] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def mapping_statuses_match_execution(self) -> ControlResultV1:
+        if self.execution_status == CoverageStatusV1.VERIFIED and any(
+            mapping.status != CoverageStatusV1.VERIFIED for mapping in self.mapping_results
+        ):
+            raise ValueError("a verified control execution requires verified mapped results")
+        return self
+
+
 def _load(path: Path, model: type[CatalogModel]) -> CatalogModel:
     return model.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
 
@@ -240,4 +328,33 @@ def load_seed_cases(directory: Path) -> list[SeedCaseV1]:
     required = {"prompt_injection", "data_exfiltration", "tool_misuse"}
     if set(counts) != required or any(counts[category] < 2 for category in required):
         raise ValueError("seed suite requires at least two cases in each initial category")
+    return cases
+
+
+def load_control_case(path: Path) -> ControlCaseV1:
+    return ControlCaseV1.model_validate(_load(path, ControlCaseV1))
+
+
+def load_control_cases(directory: Path) -> list[ControlCaseV1]:
+    cases = [load_control_case(path) for path in sorted(directory.glob("*.yaml"))]
+    ids = [case.id for case in cases]
+    if len(ids) != len(set(ids)):
+        raise ValueError("control case IDs must be unique")
+    required_ids = {"AF-SC-001", "AF-AL-001", "AF-SSRF-001", "AF-OH-001"}
+    if set(ids) != required_ids:
+        raise ValueError(f"control suite must contain exactly {sorted(required_ids)}")
+    required_mappings = {
+        ("owasp_web_2021", "A06"),
+        ("owasp_web_2021", "A07"),
+        ("owasp_web_2021", "A09"),
+        ("owasp_web_2021", "A10"),
+        ("owasp_llm_2025", "LLM03"),
+        ("owasp_llm_2025", "LLM05"),
+    }
+    observed_mappings = {
+        (mapping.framework, mapping.id) for case in cases for mapping in case.mappings
+    }
+    if not required_mappings.issubset(observed_mappings):
+        missing = sorted(required_mappings - observed_mappings)
+        raise ValueError(f"control suite is missing required mappings: {missing}")
     return cases

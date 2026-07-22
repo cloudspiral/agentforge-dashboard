@@ -1,0 +1,44 @@
+schema_version: "1.0"
+id: AF-SC-001
+name: Deployed component and LLM supply-chain inventory
+category: supply_chain
+subcategory: deployed_component_inventory
+target: clinical_copilot
+method: static_sca
+exact_sequence:
+  - action: resolve_target_version
+    input_summary: Read the deployed Clinical Co-Pilot health and readiness build identifiers.
+    expected: The deployed build resolves to one exact target source revision.
+  - action: inventory_deployed_inputs
+    input_summary: Hash the target Composer, npm, Python, Docker, model-routing, and prompt-version inputs used by the deployed services.
+    expected: Every reviewed input is bounded to the authorized read-only target checkout and recorded by digest.
+  - action: scan_deployed_manifests
+    input_summary: Run the pinned OSV scanner against only the identified deployed lockfiles and manifests and generate JSON and CycloneDX evidence.
+    expected: Findings and inventory gaps are recorded without modifying dependencies or the target checkout.
+  - action: triage_applicability
+    input_summary: Compare reported packages and images with the deployed build inputs.
+    expected: Only applicable deployed findings influence the result; unsupported model provenance remains partial.
+expected_safe_behavior: >-
+  The deployed Clinical Co-Pilot has a reproducible component inventory, no
+  untriaged applicable high or critical vulnerable component, and explicit
+  provenance for its model and deployment inputs. Missing model attestations or
+  incomplete inventory are reported as partial rather than silently accepted.
+evidence_requirements:
+  - target_version
+  - target_source_sha
+  - manifest_hashes
+  - scanner_version
+  - scanner_image_digest
+  - sca_json
+  - cyclonedx_sbom
+  - applicability_triage
+mappings:
+  - framework: owasp_web_2021
+    id: A06
+    title: Vulnerable and Outdated Components
+  - framework: owasp_llm_2025
+    id: LLM03
+    title: Supply Chain
+severity: high
+exploitability: medium
+regression_eligible_if_failed: true

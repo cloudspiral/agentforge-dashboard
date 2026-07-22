@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from agentforge.evaluation import load_judge_rubric, load_seed_cases, load_taxonomy
+from agentforge.evaluation import (
+    load_control_cases,
+    load_judge_rubric,
+    load_seed_cases,
+    load_taxonomy,
+)
 from agentforge.settings import Settings
 from agentforge.target import load_target_profile
 
@@ -14,6 +19,7 @@ def test_checked_in_configuration_validates() -> None:
     rubric = load_judge_rubric(ROOT / "config/judge-rubric.yaml")
     profile = load_target_profile(ROOT / "config/target-profile.yaml")
     seeds = load_seed_cases(ROOT / "evals/seed-cases")
+    controls = load_control_cases(ROOT / "evals/control-cases")
 
     assert len(taxonomy.categories) == 6
     assert set(rubric.categories) == {
@@ -23,6 +29,12 @@ def test_checked_in_configuration_validates() -> None:
     }
     assert len(profile.profile_hash) == 64
     assert len(seeds) == 6
+    assert {control.id for control in controls} == {
+        "AF-SC-001",
+        "AF-AL-001",
+        "AF-SSRF-001",
+        "AF-OH-001",
+    }
 
 
 def test_local_alias_resolves_only_from_settings() -> None:
