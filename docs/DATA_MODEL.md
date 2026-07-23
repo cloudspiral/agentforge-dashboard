@@ -1,76 +1,107 @@
 # AgentForge data model
 
-## Authority and revision
+PostgreSQL is the canonical operational and audit store. JSON and Markdown files are
+portable exports; they do not replace database records.
 
-PostgreSQL is the operational source of truth. The feature-branch schema is
-represented by SQLAlchemy models and Alembic head `f43a8d7e91b2`. Empty-database
-upgrade/current/check and the explicit PostgreSQL integration suite have been
-exercised. The current deployment remains on the earlier `c71d9e5a4b20` schema until
-this branch is reviewed and separately deployed.
+## Core records
 
-```mermaid
-erDiagram
-    CAMPAIGNS ||--o{ ATTACK_ATTEMPTS : contains
-    CAMPAIGNS ||--o{ AGENT_RUNS : records
-    CAMPAIGNS o|--o{ REGRESSION_RUNS : triggers
-    ATTACK_ATTEMPTS ||--o| JUDGE_VERDICTS : receives
-    ATTACK_ATTEMPTS ||--o{ ATTACK_ATTEMPTS : mutates
-    ATTACK_ATTEMPTS ||--o{ FINDINGS : supports
-    ATTACK_ATTEMPTS o|--o{ AGENT_RUNS : traces
-    FINDINGS ||--o{ VULNERABILITY_REPORTS : versions
-    FINDINGS ||--o{ REGRESSION_CASES : creates
-    FINDINGS o|--o{ AGENT_RUNS : documents
-    REGRESSION_RUNS ||--o{ REGRESSION_RESULTS : contains
-    REGRESSION_CASES ||--o{ REGRESSION_RESULTS : replayed_as
+| Table | Purpose and important fields | Cardinality / rule |
+| --- | --- | --- |
+| `campaigns` | Target, taxonomy scope, `max_attempts`, maximum cost, duration, priority, state, cancellation, idempotency | One campaign has many attempts and AgentRuns |
+| `campaign_events` | Timestamped mechanical lifecycle events | Append-only history |
+| `attack_attempts` | Lifecycle `state`, optional structured failure, parent attempt, trusted provenance, sequence hash, objective, proposed/executed sequence, target/profile/prompt/taxonomy versions, raw evidence, evidence hash, usage/cost/latency/trace | Created only after an agent proposal passes authorization |
+| `judge_verdicts` | Verdict, confidence, severity, exploitability, violated invariants, observed/expected behavior, rubric version/hash | Zero or one per executed attempt |
+| `agent_runs` | Role, model, prompt version, input/output metadata, usage, cost, latency, trace ID, typed failure | Persists successful and rejected/invalid role calls |
+| `findings` | One confirmed attempt, attempt/evidence fingerprint, status | Exactly one new Finding per `exploit_confirmed` attempt |
+| `vulnerability_reports` | Documentation Agent structured output and rendered internal draft | Exactly one per successfully documented Finding |
+| `regression_cases` | Saved sequence, target requirements, original Judge context, expected secure behavior, taxonomy metadata, source evidence hash | Created mechanically after report persistence |
+| `regression_runs` | New target/evidence/verdict and mapped regression outcome | Many runs per regression case |
+
+## Attempt lifecycle and outcome
+
+`AttackAttempt.state` is deliberately lifecycle-only:
+
+```text
+pending | running | completed | failed | cancelled
 ```
 
-## Tables
+`failure`, when present, is:
 
-| Table | Purpose and important fields | Integrity/lifecycle |
-| --- | --- | --- |
-| `target_versions` | Environment, version label, Git SHA, deployment ID, URL alias, profile hash, metadata | Unique version label; records exact evaluated runtime, not assumed checkout HEAD |
-| `campaigns` | Type/trigger/status, target alias/version, category scope, budgets, attempts, priority, heartbeat, cancellation, sanitized error | Unique idempotency key; indexed queue/status/category/version; parent for attempts and agent runs |
-| `attack_attempts` | Family/lineage/parent/mutation generation, trusted proposal and objective provenance, sanitized fallback reason, sequence hash, objective, proposed/executed sequences, prompt/taxonomy/profile versions, evidence hash, usage/cost/latency/trace | Cascades with campaign; self-parent becomes null; immutable proposal provenance and evidence identity should be treated append-only after creation/completion |
-| `judge_verdicts` | Verdict, severity, exploitability, confidence, evidence references, violated invariants, rubric version/hash, deterministic override | Exactly zero or one per attempt; cascades with attempt |
-| `findings` | Stable vulnerability ID/fingerprint, source attempt, category/severity/status, clinical impact, expected/observed behavior, first/last target versions | Fingerprint and vulnerability ID unique; source attempt restricted from deletion; current regression pointer optional |
-| `vulnerability_reports` | Finding/version, structured report, Markdown, export path, draft status, validation summary, prompt/schema versions | Unique finding/version; cascades with finding; export path is metadata, not evidence authority |
-| `regression_cases` | Finding/version, setup, exact ordered sequence, invariants, deterministic checks, rubric subset, target requirements, source evidence hash | Unique finding/version; versioned rather than edited in place |
-| `regression_runs` | Target version, optional campaign, trigger/status, outcome counters, cost and timing | Campaign deletion sets null; results cascade |
-| `regression_results` | Run/case/version, four-state outcome, deterministic/Judge results, evidence references, cost/latency/trace | Unique run/case/version; case deletion restricted |
-| `agent_runs` | Role, prompt version, model, status, tokens, cost, latency, trace ID, typed error, campaign/attempt/finding links | Links set null on parent removal; supports audit and cost measurement |
+```json
+{
+  "stage": "runner",
+  "code": "runner_crash",
+  "retryable": false
+}
+```
 
-## State rules
+Security outcomes exist only in `JudgeVerdict.verdict`:
 
-Campaign states should be changed only by repository/controller transitions. Queue
-claiming and heartbeat recovery are transactional. A cancelled or stale run becomes
-an explicit terminal/interrupted record, not silently retried. Attempts retain
-controller-assigned proposal/objective provenance, lineage, proposal, actual
-execution, versions, and frozen evidence separately. Historical attempts are
-explicitly `legacy_unknown`; provenance is never inferred retrospectively. Findings
-are deduplicated by fingerprint and progress through human-controlled status. Reports
-and regression cases are new versions, not destructive updates.
+```text
+exploit_confirmed | partial_signal | attack_blocked | inconclusive
+```
 
-Regression outcomes are `secure_pass`, `vulnerability_reproduced`, `inconclusive`, or `error`. A secure pass requires affirmative evidence for every saved invariant; a transport failure or missing Judge result for a Judge-required case cannot pass.
+This keeps operational execution state separate from semantic assessment. A runner
+crash produces a failed attempt and no Judge row. Successfully returned partial/error
+evidence is persisted and judged.
 
-## JSON/JSONB fields
+## Provenance and mutation
 
-Flexible contracts are stored as JSON with a PostgreSQL JSONB variant. This supports versioned typed payloads but shifts some integrity to Pydantic and application code. Every stored contract should carry `schema_version`, source/prompt/profile/rubric versions where relevant, and hashes for evidence or configuration. Migrations must accompany incompatible shape changes; free-form secrets or raw headers must never be stored.
+New discovery attempts permit:
 
-## Sensitive data and retention
+```text
+proposal_provenance = agent_generated | agent_generated_mutation
+objective_provenance = orchestrator_selected
+```
 
-The system is synthetic-only but still handles credentials, session cookies, CSRF values, prompts, target responses, and potentially sensitive implementation details. Credentials and session artifacts belong only in process memory/secret stores and must be redacted before database, logs, Langfuse, screenshots, or reports. Evidence should be bounded to required canaries, target-visible facts, correlations, and hashes.
+Historical fallback values are retained for read-only compatibility but are rejected
+for new discovery writes.
 
-No retention schedule or automated purge job is implemented. Before production, define retention by record class, legal/security hold, artifact deletion, Langfuse retention, backup encryption, restoration tests, and auditable deletion. PostgreSQL backups and exported Markdown require the same access classification as findings.
+Only `parent_attempt_id` is stored for mutation. It must reference an attempt whose
+Judge verdict is `partial_signal`. Lineage and generation are derived by following
+parents; they are not separately persisted facts.
 
-## Index and scale notes
+## Evidence identity
 
-Existing indexes cover queue/status time, target version, category/subcategory, evidence/trace IDs, severity/status, and regression run/case lookup. At higher volume, evaluate time partitioning for attempts, agent runs, and regression results; partial indexes for queued/active campaigns; object storage for large artifacts; and separate analytics replicas. Do not place raw screenshots or PDFs directly in JSONB.
+The runner constructs `AttackEvidenceV1`. The controller canonicalizes and hashes the
+evidence once when persisting it. The raw evidence and hash are retained unchanged for
+the Judge, report, and regression source.
 
-## Known gaps
+Discovery does not persist deterministic assertion summaries or authorization-result
+fields. Fixed-case assertions are stored only with fixed-case evaluation records and
+cannot become discovery Findings or change Judge rows.
 
-- No schema-level enum/check constraints enforce status vocabularies.
-- No row-level access control, tenant boundary, retention job, or encryption policy is implemented.
-- Multi-worker kill/recovery and backup/restore exercises remain outstanding.
-- The process-local fixed-case dashboard evaluation path persists a valid lifecycle
-  but intentionally bypasses controller Finding/Documentation Agent creation. The
-  new full-campaign launcher uses the durable queue and normal controller instead.
+## Findings and reports
+
+One `exploit_confirmed` verdict creates a new Finding immediately. Its unique
+fingerprint is derived from the attempt ID and evidence hash, so even identical attack
+sequences in separate attempts create separate Findings. There is no reproduction
+counter, semantic deduplication, finding upsert, or target-version reopening rule.
+
+The Documentation Agent runs immediately for that Finding. If report or regression
+creation fails, the Finding and evidence remain durable and the campaign ends
+visibly.
+
+## Regression mapping
+
+The same runner and Judge evaluate a saved regression sequence:
+
+| Judge / operational result | Stored regression outcome |
+| --- | --- |
+| `exploit_confirmed` | `vulnerability_reproduced` |
+| `attack_blocked` | `secure_pass` |
+| `partial_signal` or `inconclusive` | `inconclusive` |
+| runner or Judge operational failure | `error` |
+
+## Legacy migration
+
+Migration `a812e4c97f30` maps old attempt status values as follows:
+
+- `proposed` to `pending`;
+- active execution/evaluation/documentation states to `running`;
+- `cancelled` to `cancelled`;
+- rejected, operational-error, and documentation-failure states to `failed`;
+- semantic terminal outcomes to `completed`.
+
+It removes stored lineage, mutation generation, fallback reason, and redundant
+evidence summaries while preserving historical provenance values for audit display.

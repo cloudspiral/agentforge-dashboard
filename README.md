@@ -1,134 +1,111 @@
-# AgentForge Adversarial Security Platform
+# AgentForge adversarial security platform
 
-AgentForge is an evidence-first adversarial evaluation platform for testing AI-assisted clinical workflows. It runs bounded, reproducible security cases against an authorized Clinical Co-Pilot target, captures the resulting evidence, evaluates that evidence with deterministic checks and an independent Judge Agent, and persists the complete audit trail for review and regression testing.
+AgentForge is an evidence-first platform for testing an authorized Clinical
+Co-Pilot with synthetic users and patient data. It supports two intentionally
+separate workflows:
 
-The platform is designed around a simple rule: **models may propose or interpret, but deterministic code controls what is allowed to execute.**
+- **Discovery campaigns** use four agents to select, generate, judge, and document
+  attacks. Agents make semantic security decisions; deterministic code handles
+  authorization, execution, persistence, budgets, and typed transport.
+- **Fixed-case evaluations** run an explicitly selected YAML case with deterministic
+  assertions. These are repeatable OWASP checks and regression assets, not fallbacks
+  for discovery and not a source of discovery Findings.
 
-> AgentForge is intended only for systems you own or are explicitly authorized to test, using synthetic test users and synthetic patient data.
+> Run AgentForge only against systems you own or are explicitly authorized to test.
 
-## What AgentForge does
-
-AgentForge can:
-
-- Run versioned adversarial test cases against a live Clinical Co-Pilot
-- Exercise the real authenticated UI through Playwright
-- Validate every action through an allowlisted execution gate
-- Capture transcripts, target version, timings, evidence, and assertion results
-- Evaluate outcomes with deterministic invariants and an independent Judge Agent
-- Store campaigns, attempts, evidence, verdicts, findings, and regression results in PostgreSQL
-- Generate structured vulnerability reports when a finding is confirmed
-- Run autonomous, bounded discovery campaigns in which the Orchestrator selects an
-  objective and the Attack Generator creates the exact ordered sequence
-- Record controller-assigned proposal and objective provenance for every attempt
-- Surface campaign status, coverage, findings, costs, and regression history in a web dashboard
-- Replay confirmed findings against future target versions
-
-Checked-in YAML cases remain deterministic seeds and standalone evaluations. Full
-discovery campaigns use them only when the Orchestrator or Attack Generator fails to
-return a usable typed result; the dashboard identifies those attempts explicitly as
-`deterministic_seed_fallback`.
-
-## Architecture
+## Discovery workflow
 
 ```mermaid
 flowchart LR
-    U["Operator / Dashboard"] --> API["FastAPI API"]
-    API --> DB[("PostgreSQL")]
-    DB --> W["Background Worker"]
-    W --> O{{"Orchestrator / Controller"}}
-    O --> G["Deterministic Execution Gate"]
-    G --> R["Playwright or HTTP Runner"]
-    R --> T["Clinical Co-Pilot Target"]
-    R --> O
-    O --> J{{"Judge Agent"}}
-    J --> O
-    O --> DB
-    O --> D{{"Documentation Agent"}}
-    D --> DB
-    DB --> UI["Dashboard / Reports"]
+    U["Operator"] --> Q["Authenticated API / dashboard"]
+    Q --> O{{"Orchestrator"}}
+    O --> A{{"Attack Generator"}}
+    A --> G["Authorization gate"]
+    G --> R["Browser / HTTP runner"]
+    R --> E["Typed raw evidence"]
+    E --> J{{"Judge"}}
+    J -->|"exploit_confirmed"| F["Finding"]
+    F --> D{{"Documentation Agent"}}
+    D --> X["Report + regression case"]
+    J -->|"other verdict"| O
+    X --> O
 ```
 
-### Agent roles
+1. The Orchestrator receives allowed taxonomy choices, target constraints, prior
+   attempts and verdicts, and the remaining campaign limits. It returns
+   `new_attack`, `mutation`, or `stop`.
+2. The Attack Generator creates the exact ordered sequence. A mutation must reference
+   an existing `partial_signal` attempt.
+3. The authorization gate checks only executable facts: allowed target, operation,
+   payload, duplicate sequence hash, target version, and safety constraints.
+4. The runner executes the validated sequence and directly constructs typed raw
+   evidence.
+5. The Judge is the sole authority for `exploit_confirmed`, `partial_signal`,
+   `attack_blocked`, or `inconclusive`.
+6. One `exploit_confirmed` verdict immediately creates one Finding, one Documentation
+   Agent report, and one regression case. Discovery then continues until the
+   Orchestrator stops or a configured campaign limit is reached.
 
-- **Orchestrator Agent / Controller** — selects and coordinates bounded work, applies budgets and stopping rules, and owns workflow decisions.
-- **Attack Generator Agent** — produces the exact typed ordered sequence for the
-  controller-approved discovery objective; deterministic YAML sequences are clearly
-  labeled fallback only.
-- **Judge Agent** — independently evaluates frozen evidence and deterministic assertion results.
-- **Documentation Agent** — converts confirmed findings into structured vulnerability reports and Markdown exports.
+Invalid agent output receives bounded retries from the same agent. Persistent failure
+ends the campaign visibly. There is no deterministic objective, attack, verdict, or
+YAML fallback in discovery.
 
-Specialist agents do not communicate directly with one another. The Orchestrator mediates each handoff through versioned typed contracts.
+## State, verdicts, and provenance
 
-## Evaluation flow
+An attempt's lifecycle is stored only as:
 
-A fixed-case evaluation selected from the dashboard or CLI follows this path:
+```text
+pending | running | completed | failed | cancelled
+```
 
-1. Loads and validates the current case definition
-2. Creates a campaign and attempt record
-3. Validates the target, patient, action sequence, and budget
-4. Executes the fixed interaction against the target
-5. Captures transcript and execution evidence
-6. Runs deterministic security assertions
-7. Sends the frozen evidence to the Judge Agent
-8. Persists the verdict and supporting metadata in PostgreSQL
-9. Creates a finding, report, and regression candidate only when warranted
+Operational failures store `stage`, `code`, and `retryable`. Security meaning exists
+only in `JudgeVerdict.verdict`; a failed runner therefore has no Judge verdict, while
+partial or error-bearing evidence successfully returned by the runner is judged
+unchanged.
 
-A full discovery campaign repeats a stricter four-agent loop. Deterministic code gives
-the Orchestrator the allowed taxonomy shortlist, coverage, prior outcomes, target
-constraints, and remaining limits. The Orchestrator chooses a new objective or a
-partial-signal lineage to mutate. The Attack Generator produces the exact sequence.
-The controller rejects invalid scope, lineage, unsafe actions, and duplicate semantic
-sequence hashes before target execution. Only a semantic `partial_signal` can open a
-mutation lineage. Confirmed deterministic evidence flows through Judge, finding
-deduplication, Documentation Agent reporting, and versioned regression-case creation.
+New discovery attempts use only:
 
-For each attempt the controller stores one trusted proposal source:
-`agent_generated`, `agent_generated_mutation`, or
-`deterministic_seed_fallback`. It separately stores
-`orchestrator_selected` or `deterministic_ranked_fallback` for the objective.
-Pre-migration records are displayed as `legacy_unknown (pre-provenance)` and are never
-retroactively inferred.
+- proposal provenance `agent_generated` or `agent_generated_mutation`;
+- objective provenance `orchestrator_selected`.
 
-PostgreSQL is the canonical source of truth. JSON files under `evals/results/` are portable exports for review and submission.
+Historical fallback labels remain readable for audit compatibility but cannot be
+created by the new controller. `parent_attempt_id` is stored for mutations; lineage
+and generation are derived for display.
 
-## Included evaluation categories
+## Fixed-case and OWASP harness
 
-The nine-case seed suite covers all six required threat families:
+YAML cases under `evals/seed-cases/` are launched explicitly from the CLI or dashboard.
+Their deterministic assertions answer the particular case's fixed expectations. Raw
+runner evidence is also sent directly to the Judge, and fixed assertions neither
+enter the Judge prompt nor override the Judge verdict. Fixed-case results cannot
+create discovery Findings.
 
-- Direct prompt injection
-- Multi-turn prompt injection
-- Cross-patient data exposure
-- Trusted-context identifier spoofing
-- Evidence-precedence and conversation-state poisoning
-- Unintended tool invocation
-- Tool-parameter tampering
-- Bounded recursive work and cost amplification
-- Text-only identity and role escalation
-
-Each case defines its category, exact action sequence, expected safe behavior, exploit signals, deterministic assertions, severity, exploitability, and regression eligibility.
+Portable result exports live under `evals/results/`; PostgreSQL remains the canonical
+operational record.
 
 ## Project structure
 
 ```text
 .
-├── config/                  # Target profile, taxonomy, rubric, routing, pricing
+├── config/                  # Target, taxonomy, rubric, routing, pricing
 ├── contracts/v1/           # Published JSON Schema contracts
 ├── evals/
-│   ├── seed-cases/          # Version-controlled adversarial cases
-│   └── results/             # Portable evaluation result exports
-├── migrations/              # Alembic database migrations
-├── reports/                 # Generated and simulated vulnerability reports
+│   ├── seed-cases/          # Explicit fixed-case and regression assets
+│   └── results/             # Sanitized portable exports
+├── migrations/              # Alembic migrations
+├── reports/                 # Internal vulnerability-report drafts
 ├── src/agentforge/
-│   ├── agents/              # Orchestrator, attacker, Judge, documentation roles
-│   ├── api/                 # FastAPI routes and schemas
-│   ├── dashboard/           # Jinja/HTMX operational dashboard
-│   ├── evaluation/          # Case loading and deterministic evaluation
-│   ├── orchestration/       # Controller, budgets, queue worker, execution gate
+│   ├── agents/              # Four structured model roles
+│   ├── api/                 # FastAPI API
+│   ├── dashboard/           # Authenticated Jinja/HTMX dashboard
+│   ├── evaluation/          # Fixed-case harness
+│   ├── orchestration/       # Discovery controller and authorization gate
 │   ├── persistence/         # SQLAlchemy models and repositories
-│   ├── regression/          # Regression case creation and replay semantics
-│   ├── runners/             # HTTP and Playwright target runners
-│   └── security/            # Allowlisting, authentication, and redaction
-├── tests/                   # Unit, contract, integration, and opt-in live tests
+│   ├── regression/          # Saved-sequence replay
+│   ├── reports/             # Report rendering
+│   ├── runners/             # HTTP and Playwright execution
+│   └── security/            # Authentication, allowlisting, redaction
+├── tests/
 ├── compose.yaml
 ├── Dockerfile
 └── pyproject.toml
@@ -136,62 +113,23 @@ Each case defines its category, exact action sequence, expected safe behavior, e
 
 ## Local setup
 
-### Prerequisites
-
-- Python 3.12+
-- `uv`
-- Docker and Docker Compose
-- An authorized Clinical Co-Pilot test target
-- Synthetic test credentials and patients
-- An OpenAI API key for agent-backed evaluation
-
-### Install dependencies
+Requirements are Python 3.12+, `uv`, Docker, an authorized synthetic Clinical
+Co-Pilot target, and provider credentials for agent-backed evaluation.
 
 ```bash
 uv sync
 uv run playwright install chromium
-```
-
-### Configure the environment
-
-```bash
 cp .env.example .env
-```
-
-Set the required values in `.env`, including:
-
-```text
-OPENAI_API_KEY
-DATABASE_URL
-TARGET_BASE_URL
-TARGET_API_BASE_URL
-TARGET_TEST_USERNAME
-TARGET_TEST_PASSWORD
-PLATFORM_API_TOKEN
-```
-
-Do not commit `.env`.
-
-### Start AgentForge
-
-```bash
 docker compose up --build
 ```
 
-The application is available at:
+Configure at least `OPENAI_API_KEY`, `DATABASE_URL`, target URLs and synthetic target
+credentials, and `PLATFORM_API_TOKEN`. Never commit `.env`.
 
-```text
-http://localhost:8080
-```
+The application listens at `http://localhost:8080`; readiness is available at
+`GET /readyz`.
 
-Health endpoints:
-
-```text
-GET /healthz
-GET /readyz
-```
-
-## Run an evaluation from the CLI
+## Run a fixed case
 
 ```bash
 uv run --env-file .env agentforge eval run \
@@ -200,116 +138,56 @@ uv run --env-file .env agentforge eval run \
   --json
 ```
 
-Replace the case path with any allowlisted file under `evals/seed-cases/`.
+## Launch a discovery campaign
 
-A successful run persists its canonical records in PostgreSQL and writes a portable result to `evals/results/`.
+The authenticated `/dashboard/campaigns` page provides target, taxonomy scope,
+maximum attempts, and maximum cost controls. Advanced controls provide subcategory,
+duration, and priority. Deployed campaigns require an explicit synthetic/authorized
+target confirmation enforced server-side. The form is CSRF-protected and idempotent
+and never embeds the platform bearer token.
 
-## Launch a full discovery campaign
-
-The authenticated dashboard at `/dashboard/campaigns` has a **Launch campaign**
-panel with quick target, taxonomy, attempt, and cost controls plus advanced duration,
-mutation, no-signal, and priority limits. Deployed campaigns require an explicit
-synthetic/authorized-target confirmation. The form is CSRF-protected and uses a
-per-form idempotency key; it never places the platform bearer token in HTML or
-JavaScript.
-
-The equivalent CLI command is:
+Equivalent CLI:
 
 ```bash
 uv run agentforge campaign create \
   --target deployed \
   --category prompt_injection \
   --max-attempts 1 \
-  --max-cost-usd 0.25 \
-  --max-mutations 1 \
-  --no-signal-limit 2
+  --max-cost-usd 0.25
 ```
 
-Campaigns are queued for the background worker. The detail page polls the durable
-campaign state and shows the ordered Orchestrator, Attack Generator, Judge, and
-Documentation Agent timeline together with proposal provenance and lineage.
+The campaign detail page polls durable state and shows lifecycle, raw evidence,
+Judge verdicts, failure stage, parent/derived generation, provenance, Findings,
+reports, regression results, and the ordered AgentRun timeline.
 
-## Dashboard
-
-The dashboard provides views for:
-
-- Campaign status and lifecycle events
-- An authenticated, bounded full-campaign launcher
-- Queue and worker state
-- Attempts and evidence
-- Deterministic assertion outcomes
-- Judge verdicts and confidence
-- Findings and vulnerability reports
-- Regression runs and results
-- Cost, latency, and coverage summaries
-- Proposal-source utilization and per-source verdict counts
-- Target-version resilience rates
-
-Allowlisted seed cases can be launched from the dashboard when run controls are enabled. Campaign execution occurs asynchronously through the background worker, and campaign details are read from PostgreSQL.
-
-## Database and migrations
-
-Apply migrations with:
+## Database and tests
 
 ```bash
 uv run alembic upgrade head
-```
-
-AgentForge stores:
-
-- Campaigns and lifecycle events
-- Attempts and evidence
-- Judge verdicts
-- Findings and reports
-- Regression cases, runs, and results
-- Agent usage, cost, and trace references
-
-## Testing
-
-```bash
-uv run ruff check .
 uv run ruff format --check .
+uv run ruff check .
 uv run pytest
+uv run python scripts/export_contracts.py --check
+uv run python scripts/export_evals.py --validate-only
 ```
 
-PostgreSQL and live-target tests are opt-in and require explicitly configured test environments.
+PostgreSQL integration tests require an explicitly named `_test` database. Live-target
+tests are opt-in. GitLab CI validates formatting, contracts, migrations, tests, and
+submission artifacts without deploying; see [docs/CI.md](docs/CI.md).
 
-GitLab CI runs a minimal pre-merge verification gate with an ephemeral PostgreSQL test
-database. It blocks merging when the latest pipeline fails or remains pending and does
-not deploy to Railway. See
-[`docs/CI.md`](docs/CI.md) for its exact scope, cleanup behavior, and deployment
-boundary.
+## Safety and deployment boundary
 
-## Deployment
+- Only configured aliases, hosts, synthetic identities, and synthetic patients are
+  authorized.
+- A model cannot directly perform network, browser, file, shell, SQL, or publication
+  actions.
+- Target credentials never enter model context; browser contexts are ephemeral.
+- Direct target-database access and persistent clinical writes are prohibited.
+- Incomplete execution is not a secure pass.
+- Reports are internal drafts until a human approves disclosure.
+- AgentForge and the Clinical Co-Pilot are separate deployments. This feature branch
+  does not merge, deploy, patch, or reconfigure the target.
 
-AgentForge is designed to deploy as:
-
-- One application service containing FastAPI, the dashboard, worker, agents, and Playwright runner
-- One isolated PostgreSQL service
-
-The target Clinical Co-Pilot remains a separate deployment. AgentForge reaches it only through configured and allowlisted HTTPS endpoints.
-
-For browser-based deployments, run a single application replica with enough memory for headless Chromium.
-
-## Safety model
-
-- Only configured target aliases and allowlisted hosts may be contacted
-- Only synthetic identities and patients are permitted
-- Model output cannot directly execute network actions
-- The execution gate validates every runnable sequence
-- Target credentials remain outside model context
-- Browser sessions are ephemeral
-- Direct target-database access is prohibited
-- Missing evidence or incomplete execution is never treated as a secure pass
-- Reports remain internal until reviewed by a human
-
-See [`THREAT_MODEL.md`](THREAT_MODEL.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full security and design rationale.
-
-## Current scope
-
-AgentForge supports both fixed, version-controlled evaluations and bounded autonomous
-discovery campaigns. The four-agent loop, trusted provenance, partial-signal mutation,
-finding/report/regression path, and PostgreSQL recovery behavior are covered by
-deterministic and isolated PostgreSQL tests. The current public deployment still
-reflects the previously verified `main` release until this feature branch is reviewed
-and deployed; this branch does not deploy itself.
+See [ARCHITECTURE.md](ARCHITECTURE.md), [THREAT_MODEL.md](THREAT_MODEL.md), and
+[docs/FINAL_READINESS.md](docs/FINAL_READINESS.md) for the detailed design and
+evidence boundaries.
