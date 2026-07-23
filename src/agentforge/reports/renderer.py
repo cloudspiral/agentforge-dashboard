@@ -35,7 +35,10 @@ def render_vulnerability_report(report: VulnerabilityReportV1, template_path: Pa
                 report.minimal_reproducible_attack_sequence
             ),
             "evidence_references": _bullets(
-                [reference.reference_id for reference in report.evidence_references]
+                [
+                    f"Attempt `{report.source_attempt_id}`",
+                    f"Evidence hash `{report.evidence_hash}`",
+                ]
             ),
             "current_fix_validation_results": _bullets(
                 [result.summary for result in report.current_fix_validation_results]

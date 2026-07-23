@@ -1,12 +1,12 @@
-"""Build immutable, versioned regression cases from confirmed report snapshots."""
+"""Build immutable, versioned Judge-driven regression cases."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from agentforge.contracts.v1 import (
     ActionExecutionStatusV1,
@@ -15,6 +15,7 @@ from agentforge.contracts.v1 import (
     AuthenticateActionV1,
     CollectEvidenceActionV1,
     InvokeApprovedApiRequestActionV1,
+    JudgeVerdictV1,
     OwaspMappingsV1,
     ResetSessionActionV1,
     SelectSyntheticPatientActionV1,
@@ -24,8 +25,6 @@ from agentforge.contracts.v1 import (
     WaitForResponseActionV1,
 )
 from agentforge.orchestration.execution_gate import ValidatedAttackV1
-
-from .invariants import SecurityInvariantV1
 
 
 class RegressionModel(BaseModel):
@@ -58,47 +57,18 @@ class RegressionCaseV1(RegressionModel):
     owasp_mappings: OwaspMappingsV1
     setup: RegressionSetupV1
     exact_ordered_sequence: list[AttackActionV1] = Field(min_length=6, max_length=30)
-    expected_security_invariants: list[SecurityInvariantV1] = Field(min_length=1, max_length=50)
-    deterministic_check_ids: list[str] = Field(min_length=1, max_length=50)
-    judge_required: bool
+    judge_context: dict[str, Any]
+    expected_behavior: str = Field(min_length=1, max_length=20_000)
     target_requirements: RegressionTargetRequirementsV1
     created_from_evidence_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     sequence_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     created_at: AwareDatetime
 
-    @field_validator("expected_security_invariants")
-    @classmethod
-    def invariant_ids_are_unique(
-        cls,
-        value: list[SecurityInvariantV1],
-    ) -> list[SecurityInvariantV1]:
-        ids = [invariant.invariant_id for invariant in value]
-        if len(ids) != len(set(ids)):
-            raise ValueError("regression invariant IDs must be unique")
-        return value
-
-    @model_validator(mode="after")
-    def deterministic_checks_match_invariants(self) -> RegressionCaseV1:
-        ids = [invariant.invariant_id for invariant in self.expected_security_invariants]
-        if self.deterministic_check_ids != ids:
-            raise ValueError("deterministic_check_ids must preserve exact invariant order")
-        return self
-
-
-def _canonical(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
-
 
 def _hash(value: object) -> str:
-    return hashlib.sha256(_canonical(value).encode()).hexdigest()
-
-
-def _normalized_action(action: AttackActionV1) -> dict[str, object]:
-    value = action.model_dump(mode="json")
-    value.pop("action_id", None)
-    value.pop("description", None)
-    return value
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def _validate_minimal_sequence(actions: list[AttackActionV1]) -> None:
@@ -115,20 +85,6 @@ def _validate_minimal_sequence(actions: list[AttackActionV1]) -> None:
         raise ValueError(
             "minimal sequence must preserve reset/auth/select and final evidence collection"
         )
-    if any(
-        isinstance(
-            action,
-            (
-                ResetSessionActionV1,
-                AuthenticateActionV1,
-                SelectSyntheticPatientActionV1,
-                CollectEvidenceActionV1,
-            ),
-        )
-        for action in actions[3:-1]
-    ):
-        raise ValueError("identity setup and evidence collection cannot be duplicated")
-
     pending_wait = False
     operation_count = 0
     for action in actions[3:-1]:
@@ -149,7 +105,7 @@ def _validate_minimal_sequence(actions: list[AttackActionV1]) -> None:
                 raise ValueError("regression waits must immediately follow target operations")
             pending_wait = False
         else:
-            raise ValueError("regression sequence contains an unsupported action ordering")
+            raise ValueError("regression sequence contains unsupported action ordering")
     if pending_wait or operation_count == 0:
         raise ValueError("minimal sequence needs an operation followed by a bounded wait")
 
@@ -159,80 +115,64 @@ def _is_ordered_action_subsequence(
     candidates: list[AttackActionV1],
 ) -> bool:
     remaining = iter(candidates)
-    for selected_action in selected:
-        selected_json = selected_action.model_dump(mode="json")
-        if not any(candidate.model_dump(mode="json") == selected_json for candidate in remaining):
-            return False
-    return True
+    return all(
+        any(
+            candidate.model_dump(mode="json") == selected_action.model_dump(mode="json")
+            for candidate in remaining
+        )
+        for selected_action in selected
+    )
 
 
 def build_regression_case(
     *,
     finding_id: str,
     report: VulnerabilityReportV1,
+    judge_verdict: JudgeVerdictV1,
     source_evidence: AttackEvidenceV1,
     validated_attack: ValidatedAttackV1,
-    invariants: list[SecurityInvariantV1],
     case_version: int,
     created_at: AwareDatetime,
-    judge_required: bool = False,
 ) -> RegressionCaseV1:
-    """Freeze the confirmed minimal sequence and stable invariant fingerprint."""
+    """Freeze the exact successful attack and the Judge context that confirmed it."""
 
     actions = report.minimal_reproducible_attack_sequence
     _validate_minimal_sequence(actions)
-    validated_actions = validated_attack.proposal.ordered_actions
     if (
         validated_attack.campaign_id != source_evidence.campaign_id
         or validated_attack.proposal.category != report.category
         or validated_attack.proposal.subcategory != report.subcategory
-        or not _is_ordered_action_subsequence(actions, validated_actions)
+        or not _is_ordered_action_subsequence(actions, validated_attack.proposal.ordered_actions)
     ):
-        raise ValueError(
-            "report sequence and scope must match the deterministic gate authorization"
-        )
+        raise ValueError("report sequence and scope must match gate authorization")
     if source_evidence.target_version not in report.affected_target_versions:
         raise ValueError("source evidence target version is absent from the report")
-    executed = source_evidence.executed_action_sequence
-    successful_executed_actions = [
+    successful_actions = [
         execution.action
-        for execution in executed
+        for execution in source_evidence.executed_action_sequence
         if execution.status == ActionExecutionStatusV1.SUCCEEDED
     ]
-    if not _is_ordered_action_subsequence(actions, successful_executed_actions):
-        raise ValueError("report sequence must be an ordered subset of successful source evidence")
-    if not invariants:
-        raise ValueError("a regression case requires at least one security invariant")
+    if not _is_ordered_action_subsequence(actions, successful_actions):
+        raise ValueError("report sequence must be an ordered subset of successful evidence")
 
-    reset = actions[0]
-    authenticate = actions[1]
-    select = actions[2]
+    reset, authenticate, select = actions[:3]
     if not (
         isinstance(reset, ResetSessionActionV1)
         and isinstance(authenticate, AuthenticateActionV1)
         and isinstance(select, SelectSyntheticPatientActionV1)
     ):
         raise ValueError("regression setup actions are malformed")
-    if select.patient_alias not in {"patient_a", "patient_b"}:
-        raise ValueError("regression cases may select only a named synthetic patient")
     if select.patient_alias != validated_attack.selected_patient_alias:
-        raise ValueError("regression patient must match the deterministic gate authorization")
+        raise ValueError("regression patient must match gate authorization")
 
     sequence_json = [action.model_dump(mode="json") for action in actions]
-    normalized = {
-        "category": report.category,
-        "subcategory": report.subcategory,
-        "sequence": [_normalized_action(action) for action in actions],
-        "invariants": [
-            {
-                key: value
-                for key, value in invariant.model_dump(mode="json").items()
-                if key not in {"description", "severity_on_failure"}
-            }
-            for invariant in invariants
-        ],
-    }
-    fingerprint = _hash(normalized)
+    fingerprint = _hash(
+        {
+            "finding_id": finding_id,
+            "evidence_hash": source_evidence.evidence_hash,
+            "sequence": sequence_json,
+        }
+    )
     case_id = f"REG-{report.vulnerability_id}-v{case_version}"
     if len(case_id) > 128:
         case_id = f"REG-{report.vulnerability_id[:80]}-{fingerprint[:12]}-v{case_version}"
@@ -254,9 +194,8 @@ def build_regression_case(
             ),
         ),
         exact_ordered_sequence=actions,
-        expected_security_invariants=invariants,
-        deterministic_check_ids=[invariant.invariant_id for invariant in invariants],
-        judge_required=judge_required,
+        judge_context=judge_verdict.model_dump(mode="json"),
+        expected_behavior=judge_verdict.expected_behavior,
         target_requirements=RegressionTargetRequirementsV1(
             target_profile_version=validated_attack.target_profile_version,
             source_target_version=source_evidence.target_version,

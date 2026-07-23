@@ -70,6 +70,7 @@ class CampaignTypeV1(StrEnum):
 class RequestedActionV1(StrEnum):
     NEW_ATTACK = "new_attack"
     MUTATION = "mutation"
+    STOP = "stop"
 
 
 class SeverityV1(StrEnum):

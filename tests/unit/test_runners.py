@@ -16,7 +16,6 @@ from agentforge.contracts.v1.errors import AgentErrorCodeV1
 from agentforge.contracts.v1.evidence import (
     ActionExecutionStatusV1,
     TargetVisibleToolCallV1,
-    ToolAuthorizationResultV1,
 )
 from agentforge.orchestration.execution_gate import (
     ApprovedFixtureV1,
@@ -58,7 +57,6 @@ def _attack(actions: list[dict[str, object]]) -> ProposedAttackV1:
                 "category": "prompt_injection",
                 "subcategory": "direct",
                 "attack_family_id": "family-1",
-                "lineage_id": "lineage-1",
                 "novelty_rationale": "Focused adapter unit test.",
                 "prerequisites": [],
                 "ordered_actions": actions,
@@ -183,7 +181,6 @@ def _validated(
         sequence_hash=proposal_sequence_hash(attack),
         authorized_at=now - timedelta(seconds=1),
         expires_at=expires_at or now + timedelta(minutes=5),
-        budget_reservation_id="fixture-reservation",
     )
 
 
@@ -499,7 +496,6 @@ async def test_playwright_runner_uses_fake_ephemeral_session_and_captures_transc
         call_id="turn-1:retrieval-1",
         tool_name="get_vitals",
         sanitized_arguments={"metrics": ["blood_pressure"], "limit": 25},
-        authorization_result=ToolAuthorizationResultV1.ALLOWED,
         patient_context_alias="patient_a",
     )
     fake = FakeBrowserSession(target_visible_tool_calls=(tool_call,))
@@ -552,7 +548,6 @@ def test_extract_target_visible_tool_calls_uses_validated_proxy_metadata() -> No
         "limit": 25,
     }
     assert calls[0].patient_context_alias == "patient_a"
-    assert calls[0].authorization_result == ToolAuthorizationResultV1.ALLOWED
 
 
 def test_extract_target_visible_tool_calls_rejects_unreadable_or_invalid_evidence() -> None:
@@ -605,10 +600,7 @@ async def test_playwright_failure_capture_skips_later_actions_without_state_pers
     assert evidence.executed_action_sequence[5].status == ActionExecutionStatusV1.SKIPPED
     assert "screenshot:failure-screenshot.png" in fake.events
     assert "trace:failure-trace.zip" in fake.events
-    assert {artifact.kind.value for artifact in evidence.artifact_references} == {
-        "screenshot",
-        "browser_trace",
-    }
+    assert not hasattr(evidence, "artifact_references")
 
 
 @pytest.mark.asyncio

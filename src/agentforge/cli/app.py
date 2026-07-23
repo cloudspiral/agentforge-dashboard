@@ -176,8 +176,6 @@ def _campaign_payload(campaign: Campaign, *, include_attempts: bool = False) -> 
         "max_cost_usd": str(campaign.max_cost_usd),
         "max_attempts": campaign.max_attempts,
         "max_duration_seconds": campaign.max_duration_seconds,
-        "max_mutations": campaign.max_mutations,
-        "no_signal_limit": campaign.no_signal_limit,
         "actual_cost_usd": str(campaign.actual_cost_usd),
         "actual_attempts": campaign.actual_attempts,
         "cancellation_requested": campaign.cancellation_requested,
@@ -188,16 +186,15 @@ def _campaign_payload(campaign: Campaign, *, include_attempts: bool = False) -> 
         payload["attempts"] = [
             {
                 "id": str(attempt.id),
-                "status": attempt.status,
+                "state": attempt.state,
+                "failure": attempt.failure,
                 "category": attempt.category,
                 "subcategory": attempt.subcategory,
-                "lineage_id": attempt.lineage_id,
                 "parent_attempt_id": (
                     str(attempt.parent_attempt_id)
                     if attempt.parent_attempt_id is not None
                     else None
                 ),
-                "mutation_generation": attempt.mutation_generation,
                 "proposal_source": attempt.proposal_source,
                 "objective_source": attempt.objective_source,
                 "sequence_hash": attempt.sequence_hash,
@@ -382,14 +379,6 @@ def campaign_create(
         int | None,
         typer.Option(min=30, max=86_400, help="Campaign wall-clock limit."),
     ] = None,
-    max_mutations: Annotated[
-        int | None,
-        typer.Option(min=0, max=20, help="Maximum mutations per partial-signal lineage."),
-    ] = None,
-    no_signal_limit: Annotated[
-        int | None,
-        typer.Option(min=1, max=20, help="Stop after this many no-signal iterations."),
-    ] = None,
     target: Annotated[
         TargetAlias,
         typer.Option("--target", help="Allowlisted target alias."),
@@ -410,8 +399,6 @@ def campaign_create(
             max_attempts=max_attempts,
             max_cost_usd=max_cost_usd,
             max_duration_seconds=max_duration_seconds,
-            max_mutations=max_mutations,
-            no_signal_limit=no_signal_limit,
             idempotency_key=idempotency_key,
         )
         campaign = ApplicationService(

@@ -27,8 +27,8 @@ from agentforge.agents import (
 )
 from agentforge.contracts.v1 import (
     AgentErrorCodeV1,
-    CampaignObjectiveV1,
     JudgeVerdictV1,
+    OrchestratorDecisionV1,
     ProposedAttackV1,
     VulnerabilityReportV1,
 )
@@ -147,10 +147,10 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
     [
         (
             OrchestratorAgent,
-            CampaignObjectiveV1,
+            OrchestratorDecisionV1,
             "gpt-5.6-terra",
             900,
-            "orchestrator-v2-2026-07-23",
+            "orchestrator-v3-2026-07-23",
             False,
         ),
         (
@@ -158,7 +158,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             ProposedAttackV1,
             "gpt-5.6-terra",
             1200,
-            "attack-generator-v2-2026-07-23",
+            "attack-generator-v3-2026-07-23",
             False,
         ),
         (
@@ -166,7 +166,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             JudgeVerdictV1,
             "gpt-5.6-terra",
             1000,
-            "judge-v1-2026-07-21",
+            "judge-v2-2026-07-23",
             True,
         ),
         (
@@ -174,7 +174,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             VulnerabilityReportV1,
             "gpt-5.6-luna",
             1800,
-            "documentation-v1-2026-07-21",
+            "documentation-v2-2026-07-23",
             False,
         ),
     ],
@@ -341,7 +341,7 @@ async def test_credentialless_run_returns_typed_failure_without_calling_runner()
 
 @pytest.mark.asyncio
 async def test_only_429_and_5xx_are_retried_with_bounded_backoff() -> None:
-    output = _output(CampaignObjectiveV1)
+    output = _output(OrchestratorDecisionV1)
     runner = FakeRunner(
         _status_error(429),
         _status_error(503),
@@ -465,7 +465,7 @@ async def test_judge_uses_terra_unless_controller_explicitly_selects_sol() -> No
 
 @pytest.mark.asyncio
 async def test_langfuse_and_sdk_trace_scopes_receive_hashes_not_payloads() -> None:
-    output = _output(CampaignObjectiveV1)
+    output = _output(OrchestratorDecisionV1)
     runner = FakeRunner(_usage_result(output))
     telemetry = FakeTelemetry()
     traces: list[dict[str, Any]] = []

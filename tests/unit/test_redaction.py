@@ -3,7 +3,7 @@ from __future__ import annotations
 from agentforge.security.redaction import redact
 
 
-def test_redaction_preserves_authorization_result_but_not_authorization_secret() -> None:
+def test_redaction_treats_authorization_shaped_fields_as_sensitive() -> None:
     payload = {
         "authorization_result": "allowed",
         "Authorization": "Bearer private-value",
@@ -11,7 +11,7 @@ def test_redaction_preserves_authorization_result_but_not_authorization_secret()
     }
 
     assert redact(payload) == {
-        "authorization_result": "allowed",
+        "authorization_result": "[REDACTED]",
         "Authorization": "[REDACTED]",
         "nested": {"api_key": "[REDACTED]"},
     }

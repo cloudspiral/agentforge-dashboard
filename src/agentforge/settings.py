@@ -43,8 +43,6 @@ class Settings(BaseSettings):
     default_campaign_max_cost_usd: float = Field(default=2, gt=0)
     default_campaign_max_attempts: int = Field(default=10, ge=1, le=100)
     default_campaign_max_duration_seconds: int = Field(default=1200, ge=30, le=86_400)
-    default_max_mutations: int = Field(default=3, ge=0, le=20)
-    default_no_signal_limit: int = Field(default=4, ge=1, le=20)
 
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None

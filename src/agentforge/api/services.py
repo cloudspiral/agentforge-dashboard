@@ -78,12 +78,6 @@ class ApplicationService:
             max_duration_seconds=(
                 request.max_duration_seconds or self.settings.default_campaign_max_duration_seconds
             ),
-            max_mutations=(
-                request.max_mutations
-                if request.max_mutations is not None
-                else self.settings.default_max_mutations
-            ),
-            no_signal_limit=(request.no_signal_limit or self.settings.default_no_signal_limit),
             priority=request.priority,
             idempotency_key=idempotency_key or request.idempotency_key,
         )

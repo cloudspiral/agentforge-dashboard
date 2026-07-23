@@ -78,7 +78,7 @@
     <dl class="summary-list">
       <div><dt>Attempts</dt><dd>{{ activity.attempts }}</dd></div>
       <div><dt>Agent-generated proposals</dt><dd>{{ activity.proposal_sources.get('agent_generated', 0) + activity.proposal_sources.get('agent_generated_mutation', 0) }}</dd></div>
-      <div><dt>Deterministic fallbacks</dt><dd>{{ activity.proposal_sources.get('deterministic_seed_fallback', 0) }}</dd></div>
+      <div><dt>Historical fallback records</dt><dd>{{ activity.proposal_sources.get('deterministic_seed_fallback', 0) }}</dd></div>
       <div><dt>Average attempt latency</dt><dd>{{ '%.1f' | format(activity.average_attempt_latency_ms) }}ms</dd></div>
       <div><dt>Findings</dt><dd>{{ finding_summary.total }}</dd></div>
       <div><dt>Reports</dt><dd>{{ finding_summary.reports }}</dd></div>

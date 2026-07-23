@@ -18,6 +18,7 @@ from .actions import (
 from .campaign import (
     CampaignObjectiveV1,
     EstimatedCostClassV1,
+    OrchestratorDecisionV1,
     PriorAttemptOutcomeV1,
     PriorAttemptSummaryV1,
     ProposedAttackV1,
@@ -46,16 +47,14 @@ from .evidence import (
     SanitizedHttpExchangeV1,
     SideEffectV1,
     TargetVisibleToolCallV1,
-    ToolAuthorizationResultV1,
     TranscriptRoleV1,
     TranscriptTurnV1,
 )
-from .judge import JudgeRecommendedActionV1, JudgeVerdictKindV1, JudgeVerdictV1
+from .judge import JudgeVerdictKindV1, JudgeVerdictV1
 from .reports import (
     ConfirmedFindingSnapshotV1,
     DocumentationRequestV1,
     FixValidationResultV1,
-    MinimalEvidencePackageV1,
     ValidationOutcomeV1,
     VulnerabilityReportV1,
 )
@@ -87,10 +86,9 @@ __all__ = [
     "FindingStatusV1",
     "FixValidationResultV1",
     "InvokeApprovedApiRequestActionV1",
-    "JudgeRecommendedActionV1",
     "JudgeVerdictKindV1",
     "JudgeVerdictV1",
-    "MinimalEvidencePackageV1",
+    "OrchestratorDecisionV1",
     "OwaspMappingsV1",
     "PriorAttemptOutcomeV1",
     "PriorAttemptSummaryV1",
@@ -106,7 +104,6 @@ __all__ = [
     "SideEffectV1",
     "TargetVisibleToolCallV1",
     "TokenUsageV1",
-    "ToolAuthorizationResultV1",
     "TranscriptRoleV1",
     "TranscriptTurnV1",
     "UploadApprovedFixtureActionV1",

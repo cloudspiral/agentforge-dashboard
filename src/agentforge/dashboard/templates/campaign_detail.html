@@ -17,7 +17,7 @@
 <section class="stat-grid" aria-label="Proposal provenance">
   <article><span>Agent generated</span><strong>{{ proposal_sources.get('agent_generated', 0) }}</strong></article>
   <article><span>Agent mutations</span><strong>{{ proposal_sources.get('agent_generated_mutation', 0) }}</strong></article>
-  <article><span>Seed fallback</span><strong>{{ proposal_sources.get('deterministic_seed_fallback', 0) }}</strong></article>
+  <article><span>Historical fallback</span><strong>{{ proposal_sources.get('deterministic_seed_fallback', 0) }}</strong></article>
   <article><span>Legacy unknown</span><strong>{{ proposal_sources.get('legacy_unknown', 0) }}</strong></article>
 </section>
 <section class="panel">
@@ -41,8 +41,6 @@
     <div><dt>Category</dt><dd>{{ campaign.category_scope or 'automatic' }}</dd></div>
     <div><dt>Subcategory</dt><dd>{{ campaign.subcategory_scope or 'automatic' }}</dd></div>
     <div><dt>Maximum attempts</dt><dd>{{ campaign.max_attempts }}</dd></div>
-    <div><dt>Maximum mutations</dt><dd>{{ campaign.max_mutations }}</dd></div>
-    <div><dt>No-signal limit</dt><dd>{{ campaign.no_signal_limit }}</dd></div>
     <div><dt>Maximum duration</dt><dd>{{ campaign.max_duration_seconds }}s</dd></div>
     <div><dt>Priority</dt><dd>{{ campaign.priority }}</dd></div>
   </dl></div>
@@ -90,14 +88,14 @@
 <section class="panel">
   <h2>Attempts and results</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>Status</th><th>Proposal source</th><th>Objective source</th><th>Lineage</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
+    <thead><tr><th>State</th><th>Proposal source</th><th>Objective source</th><th>Parent</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
     <tbody>{% for item in attempts %}<tr>
-      <td>{{ item.status }}</td>
-      <td><span class="badge badge-provenance">{% if item.proposal_source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% else %}{{ item.proposal_source | replace('_', ' ') }}{% endif %}</span>{% if item.proposal_fallback_reason %}<small>{{ item.proposal_fallback_reason | replace('_', ' ') }}</small>{% endif %}</td>
+      <td>{{ item.state }}{% if item.failure %}<small>{{ item.failure.stage }}: {{ item.failure.code }}</small>{% endif %}</td>
+      <td><span class="badge badge-provenance">{% if item.proposal_source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% elif item.proposal_source == 'deterministic_seed_fallback' %}historical deterministic fallback{% else %}{{ item.proposal_source | replace('_', ' ') }}{% endif %}</span></td>
       <td>{% if item.objective_source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% else %}{{ item.objective_source | replace('_', ' ') }}{% endif %}</td>
-      <td class="mono">{{ item.lineage_id or item.attack_family_id }}<small>generation {{ item.mutation_generation }}{% if item.parent_attempt_id %} · parent {{ item.parent_attempt_id }}{% endif %}</small></td>
+      <td class="mono">{{ item.parent_attempt_id or 'new lineage' }}<small>generation {{ generations.get(item.id, 0) }}</small></td>
       <td>{{ item.category }} / {{ item.subcategory }}</td>
-      <td>{{ verdicts[item.id].verdict if item.id in verdicts else 'not produced' if item.status == 'error' else 'pending' }}</td>
+      <td>{{ verdicts[item.id].verdict if item.id in verdicts else 'not produced' if item.state == 'failed' else 'pending' }}</td>
       <td>{{ item.latency_ms ~ 'ms' if item.latency_ms is not none else '—' }}</td>
       <td>${{ item.estimated_cost_usd }}</td>
       <td class="mono">{{ item.langfuse_trace_id or 'not available' }}</td>
@@ -109,7 +107,7 @@
 <section class="panel result-panel">
   <div class="panel-heading">
     <div><p class="eyebrow">{{ item.attack_family_id }}</p><h2>Persisted evaluation result</h2></div>
-    <span class="badge badge-{{ item.status }}">{{ item.status }}</span>
+    <span class="badge badge-{{ item.state }}">{{ item.state }}</span>
   </div>
 
   <h3>Response summary</h3>
@@ -121,17 +119,13 @@
     </article>
   {% else %}<p class="empty-state">Waiting for a persisted target response.</p>{% endfor %}
 
-  <h3>Deterministic assertions</h3>
-  <div class="table-wrap"><table class="assertion-table">
-    <thead><tr><th>Outcome</th><th>Invariant</th><th>Expected</th><th>Observed</th><th>Evidence</th></tr></thead>
-    <tbody>{% for assertion in result.assertions %}<tr>
-      <td><span class="assertion assertion-{{ assertion.outcome }}">{{ assertion.outcome | replace('_', ' ') }}</span></td>
-      <td class="mono">{{ assertion.invariant_id }}</td>
-      <td>{{ assertion.expected }}</td>
-      <td>{{ assertion.observed }}</td>
-      <td class="mono">{{ assertion.evidence_reference_ids | join(', ') or '—' }}</td>
-    </tr>{% else %}<tr><td colspan="5">Assertions will appear after evidence is persisted.</td></tr>{% endfor %}</tbody>
-  </table></div>
+  <h3>Raw structured evidence</h3>
+  <dl class="summary-list">
+    <div><dt>HTTP exchanges</dt><dd><code>{{ result.http }}</code></dd></div>
+    <div><dt>Tool calls</dt><dd><code>{{ result.tool_calls }}</code></dd></div>
+    <div><dt>Side effects</dt><dd><code>{{ result.side_effects }}</code></dd></div>
+    <div><dt>Errors</dt><dd><code>{{ result.errors }}</code></dd></div>
+  </dl>
 
   <h3>Judge verdict</h3>
   {% if result.verdict %}
@@ -141,9 +135,10 @@
     <div><dt>Exploitability</dt><dd>{{ result.verdict.exploitability }}</dd></div>
     <div><dt>Confidence</dt><dd>{{ result.verdict.confidence }}</dd></div>
     <div><dt>Violated invariants</dt><dd>{{ result.verdict.violated_invariants | join(', ') or 'none' }}</dd></div>
-    <div><dt>Recommendation</dt><dd>{{ result.verdict.next_recommendation }}</dd></div>
+    <div><dt>Observed</dt><dd>{{ result.verdict.observed_behavior }}</dd></div>
+    <div><dt>Expected</dt><dd>{{ result.verdict.expected_behavior }}</dd></div>
   </dl>
-  {% elif item.status == 'error' %}<p class="empty-state">The Judge did not produce a verdict.</p>
+  {% elif item.state == 'failed' %}<p class="empty-state">The Judge did not produce a verdict.</p>
   {% else %}<p class="empty-state">The Judge verdict is pending.</p>{% endif %}
 </section>
 {% endfor %}

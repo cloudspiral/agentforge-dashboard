@@ -133,8 +133,6 @@ def _campaign_form_defaults(request: Request) -> dict[str, str]:
         "max_duration_seconds": str(
             getattr(settings, "default_campaign_max_duration_seconds", 900)
         ),
-        "max_mutations": str(getattr(settings, "default_max_mutations", 3)),
-        "no_signal_limit": str(getattr(settings, "default_no_signal_limit", 4)),
         "priority": "0",
         "idempotency_key": f"dashboard-{uuid.uuid4().hex}",
         "confirm_authorized": "",
@@ -203,14 +201,12 @@ def _attempt_result_rows(detail: dict[str, Any]) -> dict[uuid.UUID, dict[str, An
             for turn in transcript
             if isinstance(turn, dict) and turn.get("role") in {"assistant", "tool"}
         ]
-        assertions = payload.get("deterministic_assertion_results", [])
-        if not assertions and isinstance(attempt.evidence_summary, dict):
-            deterministic = attempt.evidence_summary.get("deterministic", {})
-            if isinstance(deterministic, dict):
-                assertions = deterministic.get("assertion_results", [])
         rows[attempt.id] = {
             "responses": responses,
-            "assertions": redact(assertions) if isinstance(assertions, list) else [],
+            "http": redact(payload.get("sanitized_http_metadata", [])),
+            "tool_calls": redact(payload.get("target_visible_tool_calls", [])),
+            "side_effects": redact(payload.get("side_effects", [])),
+            "errors": redact(payload.get("errors", [])),
             "verdict": detail["verdicts"].get(attempt.id),
         }
     return rows
@@ -358,8 +354,6 @@ def launch_campaign(
     max_attempts: str = Form("1"),
     max_cost_usd: str = Form("0.25"),
     max_duration_seconds: str = Form(""),
-    max_mutations: str = Form(""),
-    no_signal_limit: str = Form(""),
     priority: str = Form("0"),
     confirm_authorized: str = Form(""),
 ) -> Response:
@@ -373,8 +367,6 @@ def launch_campaign(
         "max_attempts": max_attempts,
         "max_cost_usd": max_cost_usd,
         "max_duration_seconds": max_duration_seconds,
-        "max_mutations": max_mutations,
-        "no_signal_limit": no_signal_limit,
         "priority": priority,
         "idempotency_key": idempotency_key,
         "confirm_authorized": confirm_authorized,
@@ -394,8 +386,6 @@ def launch_campaign(
                 "max_attempts": _optional_form_value(max_attempts),
                 "max_cost_usd": _optional_form_value(max_cost_usd),
                 "max_duration_seconds": _optional_form_value(max_duration_seconds),
-                "max_mutations": _optional_form_value(max_mutations),
-                "no_signal_limit": _optional_form_value(no_signal_limit),
                 "priority": _optional_form_value(priority) or "0",
                 "idempotency_key": idempotency_key,
             }

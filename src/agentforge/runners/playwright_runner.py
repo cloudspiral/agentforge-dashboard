@@ -47,13 +47,12 @@ from agentforge.contracts.v1.actions import (
     WaitForResponseActionV1,
 )
 from agentforge.contracts.v1.campaign import ProposedAttackV1
-from agentforge.contracts.v1.common import EvidenceReferenceKindV1, utc_now
+from agentforge.contracts.v1.common import utc_now
 from agentforge.contracts.v1.errors import AgentErrorCodeV1
 from agentforge.contracts.v1.evidence import (
     ActionExecutionStatusV1,
     AttackEvidenceV1,
     TargetVisibleToolCallV1,
-    ToolAuthorizationResultV1,
     TranscriptRoleV1,
 )
 from agentforge.orchestration.execution_gate import ValidatedAttackV1
@@ -242,7 +241,6 @@ def _extract_target_visible_tool_calls(
                     "call_id": f"turn-{turn_number}:{retrieval_id}",
                     "tool_name": tool_name,
                     "sanitized_arguments": arguments,
-                    "authorization_result": ToolAuthorizationResultV1.ALLOWED,
                     "patient_context_alias": patient_alias,
                 }
             )
@@ -1724,24 +1722,12 @@ class PlaywrightAttackRunner:
             return "deferred artifact capture condition was not met during execution", trace_stopped
         captured: list[str] = []
         if EvidenceKindV1.SCREENSHOT in action.evidence_kinds:
-            path, relative = context.artifact_path(f"action-{sequence_index}-screenshot.png")
+            path, _ = context.artifact_path(f"action-{sequence_index}-screenshot.png")
             await session.capture_screenshot(path)
-            recorder.add_artifact(
-                reference_id=f"screenshot-{sequence_index}",
-                kind=EvidenceReferenceKindV1.SCREENSHOT,
-                relative_path=relative,
-                description="Synthetic target UI screenshot captured after approved actions",
-            )
             captured.append("screenshot")
         if EvidenceKindV1.BROWSER_TRACE in action.evidence_kinds and not trace_stopped:
-            path, relative = context.artifact_path(f"action-{sequence_index}-trace.zip")
+            path, _ = context.artifact_path(f"action-{sequence_index}-trace.zip")
             await session.stop_trace(path)
-            recorder.add_artifact(
-                reference_id=f"trace-{sequence_index}",
-                kind=EvidenceReferenceKindV1.BROWSER_TRACE,
-                relative_path=relative,
-                description="Ephemeral same-origin browser trace for the synthetic attempt",
-            )
             trace_stopped = True
             captured.append("browser trace")
         label = ", ".join(captured) if captured else "in-memory evidence"
@@ -1773,24 +1759,12 @@ class PlaywrightAttackRunner:
         )
         if wants_screenshot and not authentication_failure:
             with suppress(Exception):
-                path, relative = context.artifact_path("failure-screenshot.png")
+                path, _ = context.artifact_path("failure-screenshot.png")
                 await session.capture_screenshot(path)
-                recorder.add_artifact(
-                    reference_id="failure-screenshot",
-                    kind=EvidenceReferenceKindV1.SCREENSHOT,
-                    relative_path=relative,
-                    description="Synthetic target UI state captured after runner failure",
-                )
         if trace_requested and not trace_stopped:
             with suppress(Exception):
-                path, relative = context.artifact_path("failure-trace.zip")
+                path, _ = context.artifact_path("failure-trace.zip")
                 await session.stop_trace(path)
-                recorder.add_artifact(
-                    reference_id="failure-trace",
-                    kind=EvidenceReferenceKindV1.BROWSER_TRACE,
-                    relative_path=relative,
-                    description="Ephemeral same-origin browser trace captured on failure",
-                )
                 trace_stopped = True
         return trace_stopped
 

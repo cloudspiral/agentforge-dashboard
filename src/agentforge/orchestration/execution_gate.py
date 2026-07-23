@@ -27,8 +27,6 @@ from agentforge.contracts.v1 import (
 )
 from agentforge.target.profile import TargetProfileV1
 
-from .budgets import BudgetReservationV1, BudgetStateV1, Money
-
 _PATIENT_PARAMETER_KEYS = {
     "external_id",
     "patient",
@@ -106,7 +104,6 @@ class ApprovedFixtureV1(GateModel):
 class GateLimitsV1(GateModel):
     max_actions: int = Field(ge=5, le=30)
     max_turns: int = Field(ge=1, le=20)
-    max_worst_case_cost_usd: Money
     max_total_wait_seconds: float = Field(gt=0, le=1_200, allow_inf_nan=False)
     max_total_message_bytes: int = Field(gt=0, le=100_000)
     max_upload_count: int = Field(ge=0, le=20)
@@ -132,9 +129,6 @@ class CampaignExecutionContextV1(GateModel):
     limits: GateLimitsV1
     campaign_started_at: AwareDatetime
     campaign_deadline_at: AwareDatetime
-    budget_state: BudgetStateV1
-    budget_reservation: BudgetReservationV1
-    consumed_budget_reservation_ids: list[str] = Field(default_factory=list, max_length=100)
     attempted_sequence_counts: dict[str, int] = Field(default_factory=dict, max_length=1_000)
     cancellation_requested: bool = False
     cleanup_succeeded: bool = True
@@ -182,8 +176,6 @@ class GateRejectionCodeV1(StrEnum):
     MESSAGE_SIZE_LIMIT = "message_size_limit"
     UPLOAD_SIZE_LIMIT = "upload_size_limit"
     TIME_LIMIT = "time_limit"
-    BUDGET_NOT_RESERVED = "budget_not_reserved"
-    BUDGET_LIMIT = "budget_limit"
     DUPLICATE_SEQUENCE = "duplicate_sequence"
 
 
@@ -209,7 +201,6 @@ class ValidatedAttackV1(GateModel):
     sequence_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     authorized_at: AwareDatetime
     expires_at: AwareDatetime
-    budget_reservation_id: str
 
 
 ExecutionGateResultV1 = ValidatedAttackV1 | GateRejectionV1
@@ -302,32 +293,6 @@ def _parameter_authority_violation(
         if ".." in PurePosixPath(value).parts:
             return f"request parameter {parent_key!r} contains path traversal"
     return None
-
-
-def _budget_is_reserved(context: CampaignExecutionContextV1) -> bool:
-    reservation = context.budget_reservation
-    if reservation.campaign_id != context.campaign_id:
-        return False
-    if reservation.reservation_id in context.consumed_budget_reservation_ids:
-        return False
-    if reservation.reservation_id not in context.budget_state.active_reservation_ids:
-        return False
-    total = reservation.worst_case_total
-    for account in (
-        context.budget_state.global_account,
-        context.budget_state.campaign_account,
-    ):
-        reserved = account.reserved
-        if (
-            reserved.calls < total.calls
-            or reserved.input_tokens < total.input_tokens
-            or reserved.cached_input_tokens < total.cached_input_tokens
-            or reserved.cache_write_tokens < total.cache_write_tokens
-            or reserved.output_tokens < total.output_tokens
-            or reserved.cost_usd < total.cost_usd
-        ):
-            return False
-    return True
 
 
 def validate_attack(
@@ -796,53 +761,6 @@ def validate_attack(
             "bounded response waits exceed the campaign's remaining time",
         )
 
-    reservation = context.budget_reservation
-    if not _budget_is_reserved(context):
-        return _reject(
-            context,
-            proposal,
-            GateRejectionCodeV1.BUDGET_NOT_RESERVED,
-            "worst-case model calls/tokens/cost were not reserved for this campaign",
-            retryable=False,
-        )
-    if (
-        reservation.reserved_at > checked_at
-        or reservation.worst_case_total.cost_usd > context.limits.max_worst_case_cost_usd
-    ):
-        return _reject(
-            context,
-            proposal,
-            GateRejectionCodeV1.BUDGET_LIMIT,
-            "worst-case reservation exceeds the per-attack gate limit",
-            retryable=False,
-        )
-    for account in (
-        context.budget_state.global_account,
-        context.budget_state.campaign_account,
-    ):
-        actual_and_reserved_input = (
-            account.actual.input_tokens
-            + account.actual.cached_input_tokens
-            + account.actual.cache_write_tokens
-            + account.reserved.input_tokens
-            + account.reserved.cached_input_tokens
-            + account.reserved.cache_write_tokens
-        )
-        if (
-            account.actual.cost_usd + account.reserved.cost_usd > account.limits.max_cost_usd
-            or account.actual.calls + account.reserved.calls > account.limits.max_calls
-            or actual_and_reserved_input > account.limits.max_input_tokens
-            or account.actual.output_tokens + account.reserved.output_tokens
-            > account.limits.max_output_tokens
-        ):
-            return _reject(
-                context,
-                proposal,
-                GateRejectionCodeV1.BUDGET_LIMIT,
-                "global or campaign cost ceiling is already exceeded",
-                retryable=False,
-            )
-
     sequence_hash = proposal_sequence_hash(proposal)
     if (
         context.attempted_sequence_counts.get(sequence_hash, 0)
@@ -866,7 +784,6 @@ def validate_attack(
         sequence_hash=sequence_hash,
         authorized_at=checked_at,
         expires_at=context.campaign_deadline_at,
-        budget_reservation_id=reservation.reservation_id,
     )
 
 

@@ -174,18 +174,11 @@ class FakeJudge:
                 "severity":"none",
                 "exploitability":"not_applicable",
                 "confidence":0.95,
-                "supporting_evidence_references":[],
                 "violated_security_invariants":[],
                 "observed_behavior":"The fixed synthetic case remained within scope.",
                 "expected_behavior":"The selected chart remains authoritative.",
-                "recommended_next_action":"stop",
-                "reproduce_again":false,
-                "create_or_update_finding":false,
-                "add_regression_candidate":false,
                 "rubric_version":"fake-rubric",
-                "rubric_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                "deterministic_override_applied":false,
-                "deterministic_override_assertion_ids":[]
+                "rubric_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
             }"""
         )
         return AgentInvocationResult(
@@ -397,7 +390,7 @@ async def test_invalid_judge_contract_is_retried_once_and_audited(tmp_path: Path
         with database.session_factory() as session:
             attempt = session.scalar(select(AttackAttempt))
             assert attempt is not None
-            assert attempt.status == "completed"
+            assert attempt.state == "completed"
             assert attempt.langfuse_trace_id == "judge-trace-2"
             runs = list(session.scalars(select(AgentRun).order_by(AgentRun.created_at)))
             assert [run.status for run in runs] == ["failed", "succeeded"]
@@ -447,7 +440,12 @@ async def test_repeated_invalid_judge_contract_persists_specific_failure(
                 "trace_id": "judge-trace-2",
             }
             assert attempt is not None
-            assert attempt.status == "error"
+            assert attempt.state == "failed"
+            assert attempt.failure == {
+                "stage": "judge",
+                "code": "judge_failed",
+                "retryable": False,
+            }
             assert attempt.langfuse_trace_id == "judge-trace-2"
             assert session.scalar(select(JudgeVerdict)) is None
             runs = list(session.scalars(select(AgentRun).order_by(AgentRun.created_at)))
@@ -479,7 +477,7 @@ async def test_execution_failure_persists_failure_without_fabricating_verdict(
             campaign = session.scalar(select(Campaign))
             attempt = session.scalar(select(AttackAttempt))
             assert campaign is not None and campaign.status == "failed"
-            assert attempt is not None and attempt.status == "error"
+            assert attempt is not None and attempt.state == "failed"
             assert attempt.evidence_payload is not None
             assert session.scalar(select(JudgeVerdict)) is None
     finally:

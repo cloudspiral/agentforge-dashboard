@@ -505,13 +505,6 @@
       "title": "Expected Safe Behavior",
       "type": "array"
     },
-    "lineage_id": {
-      "maxLength": 128,
-      "minLength": 1,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-      "title": "Lineage Id",
-      "type": "string"
-    },
     "novelty_rationale": {
       "maxLength": 512,
       "minLength": 1,
@@ -635,7 +628,6 @@
     "category",
     "subcategory",
     "attack_family_id",
-    "lineage_id",
     "novelty_rationale",
     "ordered_actions",
     "expected_exploit_signals",

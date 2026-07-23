@@ -72,8 +72,6 @@ class Campaign(TimestampMixin, Base):
     max_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     max_duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_mutations: Mapped[int] = mapped_column(Integer, nullable=False)
-    no_signal_limit: Mapped[int] = mapped_column(Integer, nullable=False)
     actual_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
     actual_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -127,18 +125,15 @@ class AttackAttempt(TimestampMixin, Base):
         ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True
     )
     attack_family_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    lineage_id: Mapped[str | None] = mapped_column(String(255))
     parent_attempt_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("attack_attempts.id", ondelete="SET NULL")
     )
-    mutation_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     proposal_source: Mapped[str] = mapped_column(
         String(40), nullable=False, default="legacy_unknown"
     )
     objective_source: Mapped[str] = mapped_column(
         String(40), nullable=False, default="legacy_unknown"
     )
-    proposal_fallback_reason: Mapped[str | None] = mapped_column(String(255))
     sequence_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -149,8 +144,8 @@ class AttackAttempt(TimestampMixin, Base):
     taxonomy_version: Mapped[str] = mapped_column(String(64), nullable=False)
     profile_version: Mapped[str] = mapped_column(String(64), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="proposed")
-    evidence_summary: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    failure: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     evidence_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     evidence_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -178,15 +173,11 @@ class JudgeVerdict(TimestampMixin, Base):
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     exploitability: Mapped[str] = mapped_column(String(32), nullable=False)
     confidence: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
-    evidence_references: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
     violated_invariants: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
-    next_recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_behavior: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_behavior: Mapped[str] = mapped_column(Text, nullable=False)
     rubric_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     rubric_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    deterministic_override_applied: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
-    deterministic_override_reason: Mapped[str | None] = mapped_column(Text)
 
     attempt: Mapped[AttackAttempt] = relationship(back_populates="verdict")
 
@@ -266,14 +257,8 @@ class RegressionCase(TimestampMixin, Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     setup: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     ordered_sequence: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
-    expected_security_invariants: Mapped[list[str]] = mapped_column(
-        JSON_TYPE, nullable=False, default=list
-    )
-    deterministic_checks: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON_TYPE, nullable=False, default=list
-    )
-    judge_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    judge_rubric_subset: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    judge_context: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False, default=dict)
+    expected_behavior: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
     owasp_mappings: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
@@ -324,11 +309,8 @@ class RegressionResult(TimestampMixin, Base):
     )
     case_version: Mapped[int] = mapped_column(Integer, nullable=False)
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
-    deterministic_results: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON_TYPE, nullable=False, default=list
-    )
     judge_result: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
-    evidence_references: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
+    evidence_hash: Mapped[str | None] = mapped_column(String(64))
     estimated_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     trace_id: Mapped[str | None] = mapped_column(String(255), index=True)
@@ -362,6 +344,7 @@ class AgentRun(TimestampMixin, Base):
     estimated_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     langfuse_trace_id: Mapped[str | None] = mapped_column(String(255))
+    output_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     typed_error: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
 
     campaign: Mapped[Campaign | None] = relationship(back_populates="agent_runs")

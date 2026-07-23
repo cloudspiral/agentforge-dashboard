@@ -8,7 +8,7 @@ import json
 import re
 import sys
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
 from typing import Final
@@ -55,13 +55,6 @@ def _payload_state(value: object) -> str:
     if value == _FULL_MASK_MARKER:
         return "fully_masked"
     return "unexpected_present"
-
-
-def _assertion_count(payload: object) -> int:
-    if not isinstance(payload, Mapping):
-        return 0
-    assertions = payload.get("deterministic_assertion_results")
-    return len(assertions) if isinstance(assertions, Sequence) else 0
 
 
 def _typed_error_code(value: object) -> str | None:
@@ -126,10 +119,9 @@ def build_persistence_report(
                 "id": str(attempt.id),
                 "category": _safe_identifier(attempt.category),
                 "subcategory": _safe_identifier(attempt.subcategory),
-                "status": _safe_identifier(attempt.status),
+                "state": _safe_identifier(attempt.state),
                 "evidence_present": attempt.evidence_payload is not None,
                 "evidence_hash": _safe_identifier(attempt.evidence_hash),
-                "deterministic_assertions_persisted": _assertion_count(attempt.evidence_payload),
                 "judge_verdict_present": verdict is not None,
                 "judge_verdict": _safe_identifier(verdict.verdict) if verdict else None,
                 "judge_typed_failure_present": any(

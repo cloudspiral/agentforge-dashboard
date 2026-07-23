@@ -142,18 +142,16 @@ def _campaign(entity: Campaign) -> CampaignResponse:
 def _attempt_summary(entity: AttackAttempt) -> dict[str, object]:
     return {
         "id": str(entity.id),
-        "status": entity.status,
+        "state": entity.state,
+        "failure": entity.failure,
         "category": entity.category,
         "subcategory": entity.subcategory,
         "attack_family_id": entity.attack_family_id,
-        "lineage_id": entity.lineage_id,
         "parent_attempt_id": (
             str(entity.parent_attempt_id) if entity.parent_attempt_id is not None else None
         ),
-        "mutation_generation": entity.mutation_generation,
         "proposal_source": entity.proposal_source,
         "objective_source": entity.objective_source,
-        "proposal_fallback_reason": entity.proposal_fallback_reason,
         "sequence_hash": entity.sequence_hash,
         "evidence_hash": entity.evidence_hash,
         "estimated_cost_usd": str(entity.estimated_cost_usd),
@@ -205,8 +203,8 @@ def _regression(entity: RegressionRun) -> RegressionRunResponse:
                 case_id=result.case_id,
                 case_version=result.case_version,
                 outcome=result.outcome,
-                deterministic_results=result.deterministic_results,
-                evidence_references=result.evidence_references,
+                judge_result=result.judge_result,
+                evidence_hash=result.evidence_hash,
                 estimated_cost_usd=result.estimated_cost_usd,
                 latency_ms=result.latency_ms,
                 trace_id=result.trace_id,
@@ -231,6 +229,7 @@ def _agent_run(entity: AgentRun) -> AgentRunResponse:
         estimated_cost_usd=entity.estimated_cost_usd,
         latency_ms=entity.latency_ms,
         langfuse_trace_id=entity.langfuse_trace_id,
+        output_payload=entity.output_payload,
         typed_error=entity.typed_error,
         created_at=entity.created_at,
     )

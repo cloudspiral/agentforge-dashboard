@@ -122,16 +122,6 @@
       "title": "ApprovedHttpMethodV1",
       "type": "string"
     },
-    "AssertionOutcomeV1": {
-      "enum": [
-        "passed",
-        "failed",
-        "error",
-        "not_applicable"
-      ],
-      "title": "AssertionOutcomeV1",
-      "type": "string"
-    },
     "AuthenticateActionV1": {
       "additionalProperties": false,
       "properties": {
@@ -240,60 +230,6 @@
       "title": "CollectEvidenceActionV1",
       "type": "object"
     },
-    "DeterministicAssertionResultV1": {
-      "additionalProperties": false,
-      "properties": {
-        "assertion_id": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-          "title": "Assertion Id",
-          "type": "string"
-        },
-        "evidence_reference_ids": {
-          "items": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            "type": "string"
-          },
-          "maxItems": 20,
-          "title": "Evidence Reference Ids",
-          "type": "array"
-        },
-        "expected": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Expected",
-          "type": "string"
-        },
-        "invariant_id": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-          "title": "Invariant Id",
-          "type": "string"
-        },
-        "observed": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Observed",
-          "type": "string"
-        },
-        "outcome": {
-          "$ref": "#/$defs/AssertionOutcomeV1"
-        }
-      },
-      "required": [
-        "assertion_id",
-        "invariant_id",
-        "outcome",
-        "expected",
-        "observed"
-      ],
-      "title": "DeterministicAssertionResultV1",
-      "type": "object"
-    },
     "EvidenceKindV1": {
       "enum": [
         "transcript",
@@ -305,63 +241,6 @@
       ],
       "title": "EvidenceKindV1",
       "type": "string"
-    },
-    "EvidenceReferenceKindV1": {
-      "enum": [
-        "transcript",
-        "http_metadata",
-        "tool_call",
-        "assertion",
-        "screenshot",
-        "browser_trace",
-        "langfuse_trace",
-        "report",
-        "other"
-      ],
-      "title": "EvidenceReferenceKindV1",
-      "type": "string"
-    },
-    "EvidenceReferenceV1": {
-      "additionalProperties": false,
-      "properties": {
-        "artifact_path": {
-          "anyOf": [
-            {
-              "maxLength": 512,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Artifact Path"
-        },
-        "description": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Description",
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/$defs/EvidenceReferenceKindV1"
-        },
-        "reference_id": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-          "title": "Reference Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "reference_id",
-        "kind",
-        "description"
-      ],
-      "title": "EvidenceReferenceV1",
-      "type": "object"
     },
     "ExecutedActionV1": {
       "additionalProperties": false,
@@ -744,10 +623,6 @@
     "SideEffectV1": {
       "additionalProperties": false,
       "properties": {
-        "authorized": {
-          "title": "Authorized",
-          "type": "boolean"
-        },
         "description": {
           "maxLength": 512,
           "minLength": 1,
@@ -777,8 +652,7 @@
         "effect_id",
         "effect_type",
         "description",
-        "observed",
-        "authorized"
+        "observed"
       ],
       "title": "SideEffectV1",
       "type": "object"
@@ -786,9 +660,6 @@
     "TargetVisibleToolCallV1": {
       "additionalProperties": false,
       "properties": {
-        "authorization_result": {
-          "$ref": "#/$defs/ToolAuthorizationResultV1"
-        },
         "call_id": {
           "maxLength": 128,
           "minLength": 1,
@@ -829,20 +700,10 @@
       },
       "required": [
         "call_id",
-        "tool_name",
-        "authorization_result"
+        "tool_name"
       ],
       "title": "TargetVisibleToolCallV1",
       "type": "object"
-    },
-    "ToolAuthorizationResultV1": {
-      "enum": [
-        "allowed",
-        "blocked",
-        "unknown"
-      ],
-      "title": "ToolAuthorizationResultV1",
-      "type": "string"
     },
     "TranscriptRoleV1": {
       "enum": [
@@ -996,14 +857,6 @@
   },
   "additionalProperties": false,
   "properties": {
-    "artifact_references": {
-      "items": {
-        "$ref": "#/$defs/EvidenceReferenceV1"
-      },
-      "maxItems": 100,
-      "title": "Artifact References",
-      "type": "array"
-    },
     "attempt_id": {
       "maxLength": 128,
       "minLength": 1,
@@ -1022,14 +875,6 @@
       "format": "date-time",
       "title": "Completed At",
       "type": "string"
-    },
-    "deterministic_assertion_results": {
-      "items": {
-        "$ref": "#/$defs/DeterministicAssertionResultV1"
-      },
-      "maxItems": 100,
-      "title": "Deterministic Assertion Results",
-      "type": "array"
     },
     "errors": {
       "items": {

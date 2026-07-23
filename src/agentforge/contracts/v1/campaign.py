@@ -33,8 +33,7 @@ class PriorAttemptOutcomeV1(StrEnum):
 class PriorAttemptSummaryV1(ContractModel):
     attempt_id: Identifier
     attack_family_id: Identifier
-    lineage_id: Identifier
-    mutation_generation: int = Field(ge=0, le=20)
+    parent_attempt_id: Identifier | None = None
     outcome: PriorAttemptOutcomeV1
     summary: ShortText
     sequence_hash: Sha256Hex
@@ -48,8 +47,40 @@ class RemainingBudgetAndLimitsV1(ContractModel):
     remaining_model_calls: int = Field(ge=0, le=10_000)
     remaining_input_tokens: int = Field(ge=0)
     remaining_output_tokens: int = Field(ge=0)
-    max_mutations_per_lineage: int = Field(ge=0, le=20)
-    max_consecutive_no_signal: int = Field(ge=1, le=100)
+
+
+class OrchestratorDecisionV1(ContractModel):
+    """The only semantic planning decision returned by the Orchestrator."""
+
+    schema_version: Literal[SCHEMA_VERSION_V1]
+    requested_action: RequestedActionV1
+    selected_category: Identifier | None = None
+    selected_subcategory: Identifier | None = None
+    objective: ShortText | None = None
+    mutation_source_attempt_id: Identifier | None = None
+
+    @model_validator(mode="after")
+    def action_has_required_fields(self) -> OrchestratorDecisionV1:
+        if self.requested_action == RequestedActionV1.STOP:
+            if any(
+                value is not None
+                for value in (
+                    self.selected_category,
+                    self.selected_subcategory,
+                    self.objective,
+                    self.mutation_source_attempt_id,
+                )
+            ):
+                raise ValueError("stop cannot include an objective or mutation source")
+            return self
+        if not self.selected_category or not self.selected_subcategory or not self.objective:
+            raise ValueError("new attacks and mutations require a complete objective")
+        if self.requested_action == RequestedActionV1.MUTATION:
+            if self.mutation_source_attempt_id is None:
+                raise ValueError("mutation_source_attempt_id is required for a mutation")
+        elif self.mutation_source_attempt_id is not None:
+            raise ValueError("mutation_source_attempt_id is only valid for a mutation")
+        return self
 
 
 class CampaignObjectiveV1(ContractModel):
@@ -106,7 +137,6 @@ class ProposedAttackV1(ContractModel):
     category: Identifier
     subcategory: Identifier
     attack_family_id: Identifier
-    lineage_id: Identifier
     parent_attempt_id: Identifier | None = None
     novelty_rationale: ShortText
     prerequisites: list[ShortText] = Field(default_factory=list, max_length=20)
@@ -142,6 +172,7 @@ class ProposedAttackV1(ContractModel):
 __all__ = [
     "CampaignObjectiveV1",
     "EstimatedCostClassV1",
+    "OrchestratorDecisionV1",
     "PriorAttemptOutcomeV1",
     "PriorAttemptSummaryV1",
     "ProposedAttackV1",

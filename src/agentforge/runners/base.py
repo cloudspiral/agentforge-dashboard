@@ -17,11 +17,7 @@ from pydantic import JsonValue
 
 from agentforge.contracts.v1.actions import AttackActionV1
 from agentforge.contracts.v1.campaign import ProposedAttackV1
-from agentforge.contracts.v1.common import (
-    EvidenceReferenceKindV1,
-    EvidenceReferenceV1,
-    utc_now,
-)
+from agentforge.contracts.v1.common import utc_now
 from agentforge.contracts.v1.errors import AgentErrorCodeV1, AgentErrorV1
 from agentforge.contracts.v1.evidence import (
     ActionExecutionStatusV1,
@@ -297,7 +293,6 @@ class EvidenceRecorder:
         self.http_metadata: list[SanitizedHttpExchangeV1] = []
         self.target_visible_tool_calls: list[TargetVisibleToolCallV1] = []
         self.errors: list[AgentErrorV1] = []
-        self.artifacts: list[EvidenceReferenceV1] = []
 
     def add_action(
         self,
@@ -366,23 +361,6 @@ class EvidenceRecorder:
     def add_target_visible_tool_call(self, call: TargetVisibleToolCallV1) -> None:
         self.target_visible_tool_calls.append(call)
 
-    def add_artifact(
-        self,
-        *,
-        reference_id: str,
-        kind: EvidenceReferenceKindV1,
-        relative_path: str,
-        description: str,
-    ) -> None:
-        self.artifacts.append(
-            EvidenceReferenceV1(
-                reference_id=reference_id,
-                kind=kind,
-                artifact_path=relative_path,
-                description=sanitized_summary(description),
-            )
-        )
-
     def finalize(self) -> AttackEvidenceV1:
         completed_at = utc_now()
         draft = AttackEvidenceV1(
@@ -396,8 +374,6 @@ class EvidenceRecorder:
             sanitized_http_metadata=self.http_metadata,
             target_visible_tool_calls=self.target_visible_tool_calls,
             side_effects=[],
-            deterministic_assertion_results=[],
-            artifact_references=self.artifacts,
             started_at=self.started_at,
             completed_at=completed_at,
             total_latency_ms=max(0.0, (completed_at - self.started_at).total_seconds() * 1_000),

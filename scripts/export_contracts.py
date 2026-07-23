@@ -22,12 +22,14 @@ from agentforge.contracts.v1 import (  # noqa: E402
     CampaignObjectiveV1,
     DocumentationRequestV1,
     JudgeVerdictV1,
+    OrchestratorDecisionV1,
     ProposedAttackV1,
     VulnerabilityReportV1,
 )
 
 SCHEMA_MODELS: Final[dict[str, type[BaseModel]]] = {
     "campaign-objective.schema.json": CampaignObjectiveV1,
+    "orchestrator-decision.schema.json": OrchestratorDecisionV1,
     "proposed-attack.schema.json": ProposedAttackV1,
     "attack-evidence.schema.json": AttackEvidenceV1,
     "judge-verdict.schema.json": JudgeVerdictV1,

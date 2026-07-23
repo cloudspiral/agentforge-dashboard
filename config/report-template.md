@@ -23,7 +23,7 @@
 
 {{ prerequisites }}
 
-## Minimal reproducible sequence
+## Exact confirmed sequence
 
 {{ minimal_reproducible_attack_sequence }}
 
@@ -39,7 +39,7 @@
 
 {{ evidence_references }}
 
-## Reproduction and validation history
+## Remediation validation history
 
 {{ current_fix_validation_results }}
 
@@ -49,9 +49,9 @@
 
 ## Regression protection
 
-Regression case: {{ regression_case_id }}
+The exact confirmed sequence is saved as a versioned regression case after this
+report is persisted.
 
 ## Human approval
 
 This report remains a draft until a human reviewer validates the evidence and approves publication. A generated report is not proof of a vulnerability.
-

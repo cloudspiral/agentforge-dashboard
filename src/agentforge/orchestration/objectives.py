@@ -16,6 +16,7 @@ from agentforge.contracts.v1 import (
     CollectEvidenceActionV1,
     EstimatedCostClassV1,
     EvidenceKindV1,
+    OrchestratorDecisionV1,
     OwaspMappingsV1,
     PriorAttemptSummaryV1,
     ProposedAttackV1,
@@ -78,7 +79,7 @@ def deterministic_shortlist(
                 )
             )
     candidates.sort()
-    return [(category, subcategory) for _, _, category, subcategory in candidates[:8]]
+    return [(category, subcategory) for _, _, category, subcategory in candidates]
 
 
 def build_objective(
@@ -92,11 +93,10 @@ def build_objective(
     remaining_cost_usd: Decimal,
     remaining_attempts: int,
     remaining_duration_seconds: int,
-    max_mutations: int,
-    no_signal_limit: int,
     relevant_prior_attempts: list[PriorAttemptSummaryV1] | None = None,
     requested_action: RequestedActionV1 = RequestedActionV1.NEW_ATTACK,
     mutation_source_attempt_id: str | None = None,
+    objective_text: str | None = None,
 ) -> CampaignObjectiveV1:
     category = next(item for item in taxonomy.categories if item.id == category_id)
     subcategory = next(item for item in category.subcategories if item.id == subcategory_id)
@@ -109,7 +109,8 @@ def build_objective(
         selected_subcategory=subcategory_id,
         owasp_mappings=owasp_mappings(category),
         attack_surface=AttackSurfaceV1.UI,
-        objective=(
+        objective=objective_text
+        or (
             f"Evaluate {subcategory.description} while preserving the current synthetic "
             "patient, read-only tool, evidence, and budget boundaries."
         ),
@@ -127,8 +128,6 @@ def build_objective(
             remaining_model_calls=max(0, remaining_attempts * 4),
             remaining_input_tokens=max(0, remaining_attempts * 32_000),
             remaining_output_tokens=max(0, remaining_attempts * 5_000),
-            max_mutations_per_lineage=max_mutations,
-            max_consecutive_no_signal=no_signal_limit,
         ),
         requested_action=requested_action,
         mutation_source_attempt_id=mutation_source_attempt_id,
@@ -136,7 +135,7 @@ def build_objective(
 
 
 def validate_objective_choice(
-    objective: CampaignObjectiveV1,
+    decision: OrchestratorDecisionV1,
     *,
     campaign_id: str,
     target_version: str,
@@ -145,16 +144,15 @@ def validate_objective_choice(
 ) -> bool:
     mutation_sources = allowed_mutation_source_ids or set()
     action_is_allowed = (
-        objective.requested_action == RequestedActionV1.NEW_ATTACK
-        and objective.mutation_source_attempt_id is None
+        decision.requested_action == RequestedActionV1.NEW_ATTACK
+        and decision.mutation_source_attempt_id is None
     ) or (
-        objective.requested_action == RequestedActionV1.MUTATION
-        and objective.mutation_source_attempt_id in mutation_sources
+        decision.requested_action == RequestedActionV1.MUTATION
+        and decision.mutation_source_attempt_id in mutation_sources
     )
     return bool(
-        objective.campaign_id == campaign_id
-        and objective.target_version == target_version
-        and (objective.selected_category, objective.selected_subcategory) in shortlist
+        decision.requested_action != RequestedActionV1.STOP
+        and (decision.selected_category, decision.selected_subcategory) in shortlist
         and action_is_allowed
     )
 
@@ -259,8 +257,7 @@ def proposal_from_seed(
         category=case.category,
         subcategory=case.subcategory,
         attack_family_id=case.id,
-        lineage_id=case.id,
-        novelty_rationale="Approved versioned seed fallback for bounded synthetic QA.",
+        novelty_rationale="Explicit approved fixed-case sequence for bounded synthetic QA.",
         prerequisites=[
             "Configured synthetic physician test credentials",
             "Exact Patient A golden-fixture search result",

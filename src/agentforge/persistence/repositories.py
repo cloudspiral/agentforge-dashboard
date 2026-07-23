@@ -71,8 +71,6 @@ class CampaignRepository:
         max_cost_usd: Decimal,
         max_attempts: int,
         max_duration_seconds: int,
-        max_mutations: int,
-        no_signal_limit: int,
         priority: int = 0,
         idempotency_key: str | None = None,
     ) -> Campaign:
@@ -86,8 +84,6 @@ class CampaignRepository:
             max_cost_usd=max_cost_usd,
             max_attempts=max_attempts,
             max_duration_seconds=max_duration_seconds,
-            max_mutations=max_mutations,
-            no_signal_limit=no_signal_limit,
             priority=priority,
             idempotency_key=idempotency_key,
         )
@@ -334,7 +330,7 @@ class FindingRepository:
         self.session.commit()
         return finding
 
-    def upsert_confirmed(
+    def create_confirmed(
         self,
         *,
         fingerprint: str,
@@ -349,42 +345,26 @@ class FindingRepository:
         expected_behavior: str,
         observed_behavior: str,
         target_version: str,
-    ) -> tuple[Finding, bool]:
-        finding = self.session.scalar(
-            select(Finding).where(Finding.fingerprint == fingerprint).with_for_update()
+    ) -> Finding:
+        finding = Finding(
+            vulnerability_id=vulnerability_id,
+            fingerprint=fingerprint,
+            source_attempt_id=source_attempt_id,
+            title=title,
+            category=category,
+            subcategory=subcategory,
+            severity=severity,
+            status="open",
+            description=description,
+            clinical_impact=clinical_impact,
+            expected_behavior=expected_behavior,
+            observed_behavior=observed_behavior,
+            first_seen_target_version=target_version,
+            last_seen_target_version=target_version,
         )
-        created = finding is None
-        if finding is None:
-            finding = Finding(
-                vulnerability_id=vulnerability_id,
-                fingerprint=fingerprint,
-                source_attempt_id=source_attempt_id,
-                title=title,
-                category=category,
-                subcategory=subcategory,
-                severity=severity,
-                status="open",
-                description=description,
-                clinical_impact=clinical_impact,
-                expected_behavior=expected_behavior,
-                observed_behavior=observed_behavior,
-                first_seen_target_version=target_version,
-                last_seen_target_version=target_version,
-            )
-            self.session.add(finding)
-        else:
-            finding.source_attempt_id = source_attempt_id
-            finding.title = title
-            finding.severity = severity
-            finding.description = description
-            finding.clinical_impact = clinical_impact
-            finding.expected_behavior = expected_behavior
-            finding.observed_behavior = observed_behavior
-            finding.last_seen_target_version = target_version
-            if finding.status == "resolved":
-                finding.status = "reopened"
+        self.session.add(finding)
         self.session.flush()
-        return finding, created
+        return finding
 
     def reopen(self, finding_id: uuid.UUID) -> Finding:
         finding = self.session.scalar(
@@ -491,10 +471,8 @@ class RegressionCaseRepository:
             active=case_payload["active"],
             setup=case_payload["setup"],
             ordered_sequence=case_payload["exact_ordered_sequence"],
-            expected_security_invariants=case_payload["expected_security_invariants"],
-            deterministic_checks=case_payload["deterministic_check_ids"],
-            judge_required=case_payload["judge_required"],
-            judge_rubric_subset=None,
+            judge_context=case_payload["judge_context"],
+            expected_behavior=case_payload["expected_behavior"],
             category=case_payload["category"],
             subcategory=case_payload["subcategory"],
             owasp_mappings=case_payload["owasp_mappings"],
@@ -569,9 +547,8 @@ class RegressionRunRepository:
         case_id: uuid.UUID,
         case_version: int,
         outcome: str,
-        deterministic_results: list[dict[str, Any]],
         judge_result: dict[str, Any] | None,
-        evidence_references: list[str],
+        evidence_hash: str | None,
         estimated_cost_usd: Decimal,
         latency_ms: int | None,
         trace_id: str | None,
@@ -581,9 +558,8 @@ class RegressionRunRepository:
             case_id=case_id,
             case_version=case_version,
             outcome=outcome,
-            deterministic_results=deterministic_results,
             judge_result=judge_result,
-            evidence_references=evidence_references,
+            evidence_hash=evidence_hash,
             estimated_cost_usd=estimated_cost_usd,
             latency_ms=latency_ms,
             trace_id=trace_id,
@@ -717,6 +693,22 @@ class OperationalRepository:
         )
         proposal_sources = Counter(attempt.proposal_source for attempt in attempts)
         objective_sources = Counter(attempt.objective_source for attempt in attempts)
+        attempts_by_id = {attempt.id: attempt for attempt in attempts}
+        generations: dict[uuid.UUID, int] = {}
+
+        def generation(attempt: AttackAttempt, seen: frozenset[uuid.UUID] = frozenset()) -> int:
+            if attempt.id in generations:
+                return generations[attempt.id]
+            if attempt.id in seen or attempt.parent_attempt_id is None:
+                generations[attempt.id] = 0
+                return 0
+            parent = attempts_by_id.get(attempt.parent_attempt_id)
+            value = 0 if parent is None else generation(parent, seen | {attempt.id}) + 1
+            generations[attempt.id] = value
+            return value
+
+        for attempt in attempts:
+            generation(attempt)
         proposal_verdict_counts: dict[str, Counter[str]] = {}
         for attempt in attempts:
             source_counts = proposal_verdict_counts.setdefault(
@@ -734,6 +726,7 @@ class OperationalRepository:
             "agent_runs": agent_runs,
             "proposal_sources": proposal_sources,
             "objective_sources": objective_sources,
+            "generations": generations,
             "proposal_verdict_counts": proposal_verdict_counts,
         }
 

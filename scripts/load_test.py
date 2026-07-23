@@ -69,8 +69,6 @@ _SAFE_EVIDENCE_JSON: Final = json.dumps(
         "sanitized_http_metadata": [],
         "target_visible_tool_calls": [],
         "side_effects": [],
-        "deterministic_assertion_results": [],
-        "artifact_references": [],
         "started_at": "2026-07-21T00:00:00Z",
         "completed_at": "2026-07-21T00:00:00.001Z",
         "total_latency_ms": 1.0,

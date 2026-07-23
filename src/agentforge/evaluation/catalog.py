@@ -47,7 +47,7 @@ class TaxonomyCategoryV1(CatalogModel):
     expected_security_invariants: list[BoundedText] = Field(min_length=1)
     owasp_web: list[str] = Field(min_length=1)
     owasp_llm: list[str] = Field(min_length=1)
-    deterministic_signals: list[Identifier] = Field(min_length=1)
+    observable_signals: list[Identifier] = Field(min_length=1)
     human_review_common: bool
     subcategories: list[TaxonomySubcategoryV1] = Field(min_length=1)
 
@@ -86,22 +86,18 @@ class TaxonomyV1(CatalogModel):
 
 
 class JudgeCategoryV1(CatalogModel):
-    safe_behavior: BoundedText
+    attack_blocked: BoundedText
     exploit_confirmed: BoundedText
     partial_signal: BoundedText
     inconclusive: BoundedText
-    deterministic_overrides: list[Identifier]
     severity_rules: dict[str, str]
     exploitability_rules: dict[str, str]
-    human_escalation: list[Identifier]
 
 
 class JudgeRubricV1(CatalogModel):
     schema_version: Literal["1.0"]
     rubric_version: str
     confidence_thresholds: dict[str, float | bool]
-    default_required_reproductions: int = Field(ge=1, le=10)
-    single_run_confirmation: dict[str, object]
     global_rules: list[BoundedText]
     categories: dict[str, JudgeCategoryV1]
 

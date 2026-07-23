@@ -203,8 +203,6 @@ def test_dashboard_campaign_launcher_is_csrf_protected_idempotent_and_token_free
             "max_attempts": "2",
             "max_cost_usd": "0.5",
             "max_duration_seconds": "120",
-            "max_mutations": "1",
-            "no_signal_limit": "2",
             "priority": "5",
         }
         created = client.post(
@@ -274,8 +272,7 @@ def test_dashboard_campaign_launcher_is_csrf_protected_idempotent_and_token_free
             assert campaign.trigger_type == "dashboard"
             assert campaign.category_scope == "prompt_injection"
             assert campaign.subcategory_scope == "direct"
-            assert campaign.max_mutations == 1
-            assert campaign.no_signal_limit == 2
+            assert campaign.max_attempts == 2
             assert campaign.priority == 5
 
 
@@ -432,5 +429,5 @@ def test_cli_db_and_contract_export_entrypoints(
     )
     assert exported.exit_code == 0, exported.output
     payload = json.loads(exported.stdout)
-    assert payload["count"] == 7
-    assert len(list(output_dir.glob("*.json"))) == 7
+    assert payload["count"] == 8
+    assert len(list(output_dir.glob("*.json"))) == 8
