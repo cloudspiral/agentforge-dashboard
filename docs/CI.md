@@ -1,19 +1,23 @@
-# GitLab CI verification check
+# GitLab CI pre-merge gate
 
-GitLab CI verifies the accepted repository state. It does **not** deploy AgentForge.
+GitLab CI verifies proposed repository changes before they can merge. It does **not**
+deploy AgentForge.
 Production deployment follows the independent GitLab-to-GitHub mirror and Railway's
 GitHub `main` integration.
 
 ## When it runs
 
-The pipeline runs only for updates to the protected default branch. Merge-request
-pipelines, other branch pushes, schedules, and manually created pipelines are
-intentionally excluded.
+The pipeline runs when a merge request is opened or updated. Ordinary branch pushes
+without an open merge request, accepted `main` updates, schedules, and manually
+created pipelines are intentionally excluded, so the full gate runs once per proposed
+revision rather than again after merge.
 
 Gauntlet's only available shared runner is administrator-managed and configured as a
-protected runner. GitLab therefore prevents it from executing jobs from ordinary,
-unprotected merge-request branches. Restricting this project to the protected default
-branch avoids hour-long stuck jobs and misleading failure notifications.
+protected runner. Both `main` and the trusted `codex/*` source-branch namespace are
+protected for this project, and protected-resource access is enabled for merge-request
+pipelines. GitLab can therefore assign these jobs to the runner without exposing it to
+untrusted refs. New working branches must use the `codex/*` namespace or receive an
+equivalent explicit protected-branch rule before opening a merge request.
 
 ## What it runs
 
@@ -43,11 +47,14 @@ package layers outside the project for efficiency, subject to runner cleanup pol
 Job logs and pipeline metadata remain in GitLab according to the instance retention
 policy. No CI-created database or image is pushed to Railway or a container registry.
 
-## Pre-merge gate limitation
+## Enforcement and deployment boundary
 
-This check runs after `main` changes, so it cannot stop that commit from being mirrored
-to GitHub or deployed by Railway. A true pre-merge gate requires an online runner that
-is permitted to execute unprotected merge-request refs. That capability must be
-provided by the GitLab administrator or by an independently hosted project runner.
-Once available, merge-request workflow rules and the GitLab "Pipelines must succeed"
-merge check can be enabled.
+GitLab protects `main` from direct pushes and requires the latest merge-request
+pipeline to succeed. A failed or pending job leaves the merge request open but blocks
+the merge; a successful job permits a Maintainer to merge it. Skipped pipelines are
+not considered successful.
+
+After a successful human-approved merge, GitLab's push mirror updates GitHub `main`.
+Railway watches that GitHub branch and performs the production build and deployment.
+The GitLab job never writes to Railway, GitHub, production PostgreSQL, or the Clinical
+Co-Pilot target.

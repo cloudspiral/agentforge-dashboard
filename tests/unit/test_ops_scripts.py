@@ -192,7 +192,7 @@ def test_compose_uses_one_application_container_with_embedded_worker() -> None:
     assert application["healthcheck"]["test"][0] == "CMD"
 
 
-def test_gitlab_pipeline_is_a_minimal_ephemeral_main_branch_check() -> None:
+def test_gitlab_pipeline_is_a_minimal_ephemeral_merge_request_gate() -> None:
     pipeline = yaml.safe_load((REPOSITORY_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
     assert pipeline["variables"]["RUN_LIVE_E2E"] == "0"
     assert pipeline["stages"] == ["verify"]
@@ -217,9 +217,9 @@ def test_gitlab_pipeline_is_a_minimal_ephemeral_main_branch_check() -> None:
     assert "docker build" not in verification_script
 
     workflow_rules = pipeline["workflow"]["rules"]
-    assert workflow_rules[0] == {"if": "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"}
+    assert workflow_rules[0] == {"if": '$CI_PIPELINE_SOURCE == "merge_request_event"'}
     assert workflow_rules[-1] == {"when": "never"}
-    assert not any("merge_request_event" in rule.get("if", "") for rule in workflow_rules)
+    assert not any("CI_DEFAULT_BRANCH" in rule.get("if", "") for rule in workflow_rules)
 
 
 def test_dockerfile_installs_browser_and_runs_as_non_root() -> None:
