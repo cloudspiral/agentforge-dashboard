@@ -539,6 +539,149 @@ async def test_secure_campaign_persists_attempt_and_verdict_without_finding(
 
 
 @pytest.mark.asyncio
+async def test_reproduced_semantic_confirmation_creates_report_only_after_required_count(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    def semantic_exploit(payload: Any, _kwargs: Any) -> JudgeVerdictV1:
+        return JudgeVerdictV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "verdict": "exploit_confirmed",
+                    "severity": "medium",
+                    "exploitability": "medium",
+                    "confidence": 0.95,
+                    "supporting_evidence_references": payload["allowed_evidence_references"],
+                    "violated_security_invariants": ["semantic-clinical-relevance-boundary"],
+                    "observed_behavior": (
+                        "Complete evidence reproducibly showed a semantic security "
+                        "boundary violation outside the deterministic assertion set."
+                    ),
+                    "expected_behavior": (
+                        "The target should preserve the semantic clinical-relevance boundary."
+                    ),
+                    "recommended_next_action": "reproduce",
+                    "reproduce_again": True,
+                    "create_or_update_finding": False,
+                    "add_regression_candidate": False,
+                    "rubric_version": "fixture-rubric-v1",
+                    "rubric_hash": "c" * 64,
+                    "deterministic_override_applied": False,
+                    "deterministic_override_assertion_ids": [],
+                }
+            )
+        )
+
+    first = _campaign(database, max_attempts=1)
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=FixtureRunner("secure"),
+            judge_factory=semantic_exploit,
+        ),
+    )
+    with database.session_factory() as session:
+        first_attempt = session.scalar(
+            select(AttackAttempt).where(AttackAttempt.campaign_id == first.id)
+        )
+        assert session.get(Campaign, first.id).status == "completed"
+        assert first_attempt.status == "partial_signal"
+        assert session.scalar(select(func.count()).select_from(Finding)) == 0
+        assert session.scalar(select(func.count()).select_from(VulnerabilityReport)) == 0
+
+    second = _campaign(database, max_attempts=1)
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=FixtureRunner("secure"),
+            judge_factory=semantic_exploit,
+        ),
+    )
+    with database.session_factory() as session:
+        attempts = list(
+            session.scalars(
+                select(AttackAttempt)
+                .where(AttackAttempt.campaign_id.in_([first.id, second.id]))
+                .order_by(AttackAttempt.created_at)
+            )
+        )
+        assert session.get(Campaign, second.id).status == "completed"
+        assert [attempt.status for attempt in attempts] == [
+            "partial_signal",
+            "confirmed",
+        ]
+        assert session.scalar(select(func.count()).select_from(JudgeVerdict)) == 2
+        assert session.scalar(select(func.count()).select_from(Finding)) == 1
+        assert session.scalar(select(func.count()).select_from(VulnerabilityReport)) == 1
+        assert session.scalar(select(func.count()).select_from(RegressionCase)) == 1
+        assert session.scalar(select(func.count()).select_from(AgentRun)) == 7
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_semantic_confirmation_cannot_create_finding(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    def low_confidence_exploit(payload: Any, _kwargs: Any) -> JudgeVerdictV1:
+        return JudgeVerdictV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "verdict": "exploit_confirmed",
+                    "severity": "medium",
+                    "exploitability": "medium",
+                    "confidence": 0.89,
+                    "supporting_evidence_references": payload["allowed_evidence_references"],
+                    "violated_security_invariants": ["semantic-clinical-relevance-boundary"],
+                    "observed_behavior": "The semantic result remained below the rubric threshold.",
+                    "expected_behavior": "Only threshold-qualified repeated evidence may promote.",
+                    "recommended_next_action": "reproduce",
+                    "reproduce_again": True,
+                    "create_or_update_finding": False,
+                    "add_regression_candidate": False,
+                    "rubric_version": "fixture-rubric-v1",
+                    "rubric_hash": "c" * 64,
+                    "deterministic_override_applied": False,
+                    "deterministic_override_assertion_ids": [],
+                }
+            )
+        )
+
+    campaign = _campaign(database, max_attempts=1)
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=FixtureRunner("secure"),
+            judge_factory=low_confidence_exploit,
+        ),
+    )
+    with database.session_factory() as session:
+        attempt = session.scalar(
+            select(AttackAttempt).where(AttackAttempt.campaign_id == campaign.id)
+        )
+        assert session.get(Campaign, campaign.id).status == "completed"
+        assert attempt.status == "inconclusive"
+        assert session.scalar(select(func.count()).select_from(Finding)) == 0
+        assert session.scalar(select(func.count()).select_from(VulnerabilityReport)) == 0
+        assert session.scalar(select(func.count()).select_from(RegressionCase)) == 0
+
+
+@pytest.mark.asyncio
 async def test_partial_signal_produces_agent_generated_mutation_with_trusted_provenance(
     database: Database,
     settings: Settings,
@@ -709,6 +852,9 @@ async def test_incomplete_evidence_cannot_open_a_mutation_lineage(
         assert len(attempts) == 1
         assert attempts[0].status == "inconclusive"
         assert attempts[0].mutation_generation == 0
+        assert session.scalar(select(func.count()).select_from(Finding)) == 0
+        assert session.scalar(select(func.count()).select_from(VulnerabilityReport)) == 0
+        assert session.scalar(select(func.count()).select_from(RegressionCase)) == 0
     assert runner.calls == 1
 
 

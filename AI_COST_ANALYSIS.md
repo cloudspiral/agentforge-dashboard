@@ -15,25 +15,31 @@ reconciliation.
 | Multi-agent browser-bound run - `8eb948ce...` | Orchestrator | `gpt-5.6-terra` | 1 | 1,535 | 328 | 3,149 ms | $0.009715 |
 | Multi-agent browser-bound run - `8eb948ce...` | Attack Generator | `gpt-5.6-terra` | 1 | 2,710 | 668 | 6,059 ms | $0.018487 |
 | Multi-agent browser-bound run - `8eb948ce...` | Judge | `gpt-5.6-terra` | 1 | 3,520 | 337 | 5,988 ms | $0.016053 |
-| **Measured total** |  |  | **7** | **23,356** | **2,721** | **32,826 ms** | **$0.113789** |
+| Host-Chrome discovery retry - `71386c97...` | Orchestrator | `gpt-5.6-terra` | 1 | 1,532 | 361 | 5,189 ms | $0.010201 |
+| Host-Chrome discovery retry - `71386c97...` | Attack Generator | `gpt-5.6-terra` | 1 | 2,708 | 654 | 6,683 ms | $0.018271 |
+| Host-Chrome discovery retry - `71386c97...` | Judge | `gpt-5.6-terra` | 1 | 3,844 | 649 | 7,448 ms | $0.021746 |
+| **Measured total** |  |  | **10** | **31,440** | **4,385** | **52,146 ms** | **$0.164007** |
 
 The three earlier campaigns each have one successful Judge `AgentRun`, no typed
 failure, and no bounded Judge-contract retry. The two current tool evaluations cost
 $0.036617 total, or $0.018309 average per completed evaluation. The static/browser
 OWASP controls made no AgentForge Judge or Documentation model call.
 
-The new full-discovery controller produced one successful, separately metered
-Orchestrator → Attack Generator → Judge sequence at `$0.044255`. Its browser could not
-initialize in the sandbox, so the Judge correctly returned `inconclusive` and the
-Documentation Agent did not run. Ten additional zero-token, zero-cost AgentRun rows
-recorded pre-provider schema failures encountered during validation; the adapter was
-then fixed and tested. They are retained as operational error evidence but do not
-change provider cost totals.
+The new full-discovery controller produced two successful, separately metered
+Orchestrator → Attack Generator → Judge sequences at `$0.044255` and `$0.050217`
+campaign cost. The first could not initialize Chrome in the restricted sandbox. The
+second used host Chrome, completed login and bounded target execution, and produced
+complete read-only evidence. Its Judge returned a 0.94-confidence semantic
+`exploit_confirmed` verdict, but the rubric requires two matching reproductions before
+finding/report promotion. The Documentation Agent therefore did not run. Ten
+additional zero-token, zero-cost AgentRun rows recorded pre-provider schema failures
+encountered during validation; the adapter was then fixed and tested. They are
+retained as operational error evidence but do not change provider cost totals.
 
 The historical dashboard single-case path did not call the Orchestrator, Attack
-Generator, or Documentation Agent. The new measurement is therefore the first
-observed three-role discovery cost, not yet a complete four-role confirmed-finding
-cost. Documentation usage remains unmeasured in a live run.
+Generator, or Documentation Agent. The new measurements provide two observed
+three-role discovery costs, but not yet a complete four-role confirmed-finding cost.
+Documentation usage remains unmeasured in a live run.
 
 Preserved Stage 3 JSON artifacts do not carry AgentRun token/cost rows, and their
 original campaign IDs are not present in the current production database. Their
@@ -55,21 +61,22 @@ validation.
 ## Full-attempt planning model
 
 The planning unit is one evaluated target attempt. The model-cost baseline is now
-`$0.050000`: the observed `$0.044255` Orchestrator/Attack Generator/Judge run rounded
-up by `$0.005745` for amortized Documentation use and ordinary token variance. This is
-a deliberately conservative planning assumption until a successful live
-Documentation Agent call is measured. The controller still reserves worst-case role
-usage before starting; this expected-cost model is only for capacity planning.
+`$0.060000`: the observed browser-complete `$0.050217` Orchestrator/Attack
+Generator/Judge run rounded up by `$0.009783` for amortized Documentation use and
+ordinary token variance. This is a deliberately conservative planning assumption
+until a successful live Documentation Agent call is measured. The controller still
+reserves worst-case role usage before starting; this expected-cost model is only for
+capacity planning.
 
 | Cost driver | Expected cost per evaluated attempt | Explicit assumption |
 | --- | ---: | --- |
-| Model inference | $0.050000 | Observed three-role discovery cost plus an explicit Documentation/variance allowance |
-| Bounded model retries | $0.002500 | 5% uplift; production evidence must replace this with measured typed retries |
+| Model inference | $0.060000 | Observed browser-complete three-role discovery cost plus an explicit Documentation/variance allowance |
+| Bounded model retries | $0.003000 | 5% uplift; production evidence must replace this with measured typed retries |
 | Browser and target compute | $0.003000 | 90 seconds of roughly two effective vCPUs at an assumed $0.06/vCPU-hour, including memory overhead |
 | PostgreSQL and artifact retention | $0.000150 | Approximately 200 KB retained for 90 days at an assumed $0.25/GB-month; excludes database minimum charge |
 | Trace/metrics ingestion | $0.000400 | Four role/runner trace groups at an assumed $0.0001 each |
 | Human security triage | $0.600000 | 2% of attempts reviewed for 15 minutes at $120/hour |
-| **Expected variable total** | **$0.656050** | Human review dominates; deduplication and confidence routing are economic controls |
+| **Expected variable total** | **$0.666550** | Human review dominates; deduplication and confidence routing are economic controls |
 
 A separate $60/month fixed placeholder covers a small application service,
 PostgreSQL minimum, backups, and observability minimums. It is an assumption, not a
@@ -81,10 +88,10 @@ excluded.
 
 | Evaluated attempts | Models | Retry reserve | Browser compute | DB/storage | Telemetry | Human triage | Fixed platform | Planning total |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | $5.00 | $0.25 | $0.30 | $0.02 | $0.04 | $60.00 | $60.00 | **$125.61** |
-| 1,000 | $50.00 | $2.50 | $3.00 | $0.15 | $0.40 | $600.00 | $60.00 | **$716.05** |
-| 10,000 | $500.00 | $25.00 | $30.00 | $1.50 | $4.00 | $6,000.00 | $60.00 | **$6,620.50** |
-| 100,000 | $5,000.00 | $250.00 | $300.00 | $15.00 | $40.00 | $60,000.00 | $60.00 | **$65,665.00** |
+| 100 | $6.00 | $0.30 | $0.30 | $0.02 | $0.04 | $60.00 | $60.00 | **$126.66** |
+| 1,000 | $60.00 | $3.00 | $3.00 | $0.15 | $0.40 | $600.00 | $60.00 | **$726.55** |
+| 10,000 | $600.00 | $30.00 | $30.00 | $1.50 | $4.00 | $6,000.00 | $60.00 | **$6,725.50** |
+| 100,000 | $6,000.00 | $300.00 | $300.00 | $15.00 | $40.00 | $60,000.00 | $60.00 | **$66,715.00** |
 
 These totals are deliberately not `token price x runs`. They include retries,
 headless-browser work, retained evidence, telemetry, a fixed platform floor, and

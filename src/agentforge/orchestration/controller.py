@@ -199,7 +199,17 @@ def _normalized_actions(proposal: ProposedAttackV1) -> list[dict[str, Any]]:
 def _finding_fingerprint(
     proposal: ProposedAttackV1,
     deterministic: DeterministicEvaluationV1,
+    verdict: JudgeVerdictV1,
 ) -> str:
+    if not deterministic.proven_violation_ids:
+        return canonical_hash(
+            {
+                "category": proposal.category,
+                "subcategory": proposal.subcategory,
+                "attack_family_id": proposal.attack_family_id,
+                "semantic_violated_invariants": sorted(verdict.violated_security_invariants),
+            }
+        )
     return canonical_hash(
         {
             "category": proposal.category,
@@ -239,6 +249,56 @@ async def _discover_version(
             profile=loaded_profile.profile,
             target_alias=target_alias,
         )
+
+
+def _semantic_confirmation_count(
+    session: Any,
+    *,
+    rubric: JudgeRubricV1,
+    campaign: Campaign,
+    attempt: AttackAttempt,
+    proposal: ProposedAttackV1,
+    verdict: JudgeVerdictV1,
+    deterministic: DeterministicEvaluationV1,
+) -> int:
+    threshold_value = rubric.confidence_thresholds.get(
+        "exploit_confirmed",
+        1.0,
+    )
+    threshold = float(threshold_value) if not isinstance(threshold_value, bool) else 1.0
+    if not (
+        verdict.verdict == JudgeVerdictKindV1.EXPLOIT_CONFIRMED
+        and verdict.confidence >= threshold
+        and verdict.supporting_evidence_references
+        and verdict.violated_security_invariants
+        and deterministic.secure_pass_eligible
+    ):
+        return 0
+
+    rows = session.execute(
+        select(AttackAttempt, JudgeVerdict)
+        .join(JudgeVerdict, JudgeVerdict.attempt_id == AttackAttempt.id)
+        .join(Campaign, Campaign.id == AttackAttempt.campaign_id)
+        .where(AttackAttempt.category == proposal.category)
+        .where(AttackAttempt.subcategory == proposal.subcategory)
+        .where(AttackAttempt.attack_family_id == proposal.attack_family_id)
+        .where(Campaign.target_version == campaign.target_version)
+        .where(JudgeVerdict.verdict == JudgeVerdictKindV1.EXPLOIT_CONFIRMED.value)
+        .where(JudgeVerdict.confidence >= threshold)
+    )
+    expected_invariants = set(verdict.violated_security_invariants)
+    confirmed_attempt_ids: set[uuid.UUID] = set()
+    for candidate_attempt, candidate_verdict in rows:
+        summary = candidate_attempt.evidence_summary or {}
+        if (
+            summary.get("secure_pass_eligible") is True
+            and not summary.get("proven_violation_ids")
+            and set(candidate_verdict.violated_invariants) == expected_invariants
+        ):
+            confirmed_attempt_ids.add(candidate_attempt.id)
+    if attempt.id not in confirmed_attempt_ids:
+        confirmed_attempt_ids.add(attempt.id)
+    return len(confirmed_attempt_ids)
 
 
 class CampaignController:
@@ -1630,14 +1690,32 @@ class CampaignController:
             attempt.completed_at = utc_now()
             campaign.actual_attempts += 1
 
-            if not deterministic.proven_violation_ids:
-                if (
+            semantic_confirmation_count = _semantic_confirmation_count(
+                session,
+                rubric=self.rubric,
+                campaign=campaign,
+                attempt=attempt,
+                proposal=proposal,
+                verdict=verdict,
+                deterministic=deterministic,
+            )
+            semantic_confirmation_required = self.rubric.default_required_reproductions
+            semantic_confirmation_pending = bool(
+                semantic_confirmation_count
+                and semantic_confirmation_count < semantic_confirmation_required
+            )
+            confirmed_by_semantic_reproduction = bool(
+                semantic_confirmation_count >= semantic_confirmation_required
+            )
+
+            if not deterministic.proven_violation_ids and not confirmed_by_semantic_reproduction:
+                if semantic_confirmation_pending or (
                     verdict.verdict == JudgeVerdictKindV1.PARTIAL_SIGNAL
                     and deterministic.secure_pass_eligible
                 ):
                     attempt.status = "partial_signal"
                     outcome = PriorAttemptOutcomeV1.PARTIAL_SIGNAL
-                    mutation_candidate = True
+                    mutation_candidate = bool(verdict.verdict == JudgeVerdictKindV1.PARTIAL_SIGNAL)
                     no_signal = False
                 elif (
                     verdict.verdict == JudgeVerdictKindV1.ATTACK_BLOCKED
@@ -1669,7 +1747,7 @@ class CampaignController:
                     no_signal=no_signal,
                 )
 
-            fingerprint = _finding_fingerprint(proposal, deterministic)
+            fingerprint = _finding_fingerprint(proposal, deterministic, verdict)
             finding, _ = FindingRepository(session).upsert_confirmed(
                 fingerprint=fingerprint,
                 source_attempt_id=attempt.id,
@@ -1723,7 +1801,7 @@ class CampaignController:
                     deterministic_assertion_results=evidence.deterministic_assertion_results,
                     evidence_references=[evidence_reference],
                 ),
-                reproduction_result_count=1,
+                reproduction_result_count=max(1, semantic_confirmation_count),
                 target_versions=[evidence.target_version],
                 existing_validation_history=[],
                 required_report_status=snapshot.status,

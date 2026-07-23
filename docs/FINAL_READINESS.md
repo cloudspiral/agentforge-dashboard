@@ -16,18 +16,18 @@ captured 2026-07-23. `VERIFIED` means directly inspected in the named environmen
 | Proposal provenance | `VERIFIED LOCALLY` | Trusted `agent_generated`, `agent_generated_mutation`, and `deterministic_seed_fallback` plus objective source, lineage, parent, generation, hash, and sanitized fallback reason are persisted before execution |
 | Health/readiness | `VERIFIED` | `/healthz` and `/readyz` return `200`; configuration, database, and worker are ready |
 | PostgreSQL durability | `VERIFIED` | Campaign, attempt, 8 assertions, Judge verdict, AgentRun usage/cost/latency/trace, and terminal state inspected through SELECT-only CLI |
-| Feature-branch migration | `VERIFIED LOCALLY` | `f43a8d7e91b2 (head)`; Alembic check reports no pending operations; 20 PostgreSQL lifecycle/controller tests pass |
+| Feature-branch migration | `VERIFIED LOCALLY` | `f43a8d7e91b2 (head)`; Alembic check reports no pending operations; 22 PostgreSQL lifecycle/controller tests pass |
 | Langfuse linkage | `VERIFIED` | Trace `e4ac48aa75342ec674ca38ebea64d49b` links matching campaign/attempt metadata and six observations; root input/output fully masked, observation payloads absent, trace private |
 | Current eval hashes | `VERIFIED` | Four portable exports validate against exact YAML bytes; catalog validates 9 seeds and 4 controls |
 | OWASP coverage | `PARTIAL` | A10 and LLM05 verified; A06 and LLM06 failed; A07/A09 and LLM03 partial; see `evals/OWASP_COVERAGE.md` |
 | Confirmed live vulnerabilities | `VERIFIED` | One: AF-TM-001 irrelevant chart-tool invocation; medium severity/high exploitability |
 | Three exploit reports | `UNMET` | One confirmed human-authored AF-TM-001 report; two A06 exposure/triage reports explicitly do not count as exploit reports |
-| Documentation Agent | `TESTED, NOT LIVE-CONFIRMED` | Controller finding/report/regression workflow passes PostgreSQL tests; no new live confirmed finding justified invoking it |
-| Bounded multi-agent trace | `PARTIAL` | One real Orchestrator → Attack Generator → Judge trace persisted with trusted provenance; sandbox browser initialization failed, so verdict was correctly inconclusive and Documentation did not run |
+| Documentation Agent | `TESTED, NOT LIVE-CONFIRMED` | Controller finding/report/regression workflow passes PostgreSQL tests; the new semantic observation needs one matching reproduction before Documentation may run |
+| Bounded multi-agent trace | `PARTIAL` | Host Chrome completed one real Orchestrator → Attack Generator → Judge target trace with trusted provenance and complete evidence; Judge returned semantic `exploit_confirmed` at 0.94, held as `partial_signal` pending the required second reproduction |
 | OpenEMR target unchanged | `VERIFIED` | `openemr-web` deployment `531630f7-da13-4aa3-b365-bbbb15dfdd50`; `agent-service` `9b7d9985-1e57-4735-9fe4-dcc536a91bc7` |
 | Optional 100-operation benchmark | `NOT RUN` | Deferred per final-hardening priority |
 | Simulated reports | `NOT RUN` | Optional and explicitly not used to inflate live finding count |
-| Feature-branch image build | `CI REQUIRED` | Local Docker metadata write was denied by the desktop approval layer; compose validates, but no local build claim is made |
+| Feature-branch image build | `VERIFIED LOCALLY` | Exact Dockerfile built as `agentforge-final-multi-agent-hardening:latest`, image `sha256:c9cc1b26e031b1117296b7154b774a01155a7a5db60d40ce18794e0c04519ff9`; CI remains the independent branch build gate |
 
 ## Verification commands
 

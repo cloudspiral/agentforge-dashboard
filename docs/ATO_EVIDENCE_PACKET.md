@@ -43,9 +43,15 @@ GitLab and GitHub `main` SHAs matched before Railway automatically deployed the 
 - The authenticated dashboard launcher uses CSRF, per-form idempotency, the same
   application validation as the API, and a server-side deployed synthetic-target
   confirmation. It does not expose the platform bearer token.
-- The local validation suite passed 201 tests with one explicit live-browser opt-in
+- The local validation suite passed 203 tests with one explicit live-browser opt-in
   skipped, plus all contract, eval, submission, control, compose, and migration
   checks.
+- A host-Chrome retry completed one bounded read-only target trace. Its
+  0.94-confidence semantic exploit verdict is preserved as `partial_signal` pending
+  the rubric's required second matching reproduction; it is not counted as a finding
+  or report.
+- The exact feature-branch Dockerfile built locally as image
+  `sha256:c9cc1b26e031b1117296b7154b774a01155a7a5db60d40ce18794e0c04519ff9`.
 
 ## Control evidence
 
@@ -73,11 +79,11 @@ identity layer remain outside verified scope.
 
 The process-local fixed-case evaluation manager remains intentionally distinct from
 the normal queue worker. The full-campaign path now implements
-Judge → finding → Documentation Agent report → regression case, and that path passes
-PostgreSQL integration tests. No new live finding was honestly confirmed, so the
-Documentation Agent has not produced a live report. The checked-in AF-TM-001 report
-is human-authored, and the assignment's minimum of three confirmed exploit reports
-remains unmet.
+Judge → reproduction gate → finding → Documentation Agent report → regression case,
+and that path passes PostgreSQL integration tests. The new host-Chrome semantic
+observation has one of two required reproductions, so the Documentation Agent has not
+produced a live report. The checked-in AF-TM-001 report is human-authored, and the
+assignment's minimum of three confirmed exploit reports remains unmet.
 
 ## Conditions for broader authorization
 
