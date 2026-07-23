@@ -23,7 +23,7 @@ captured 2026-07-23. `VERIFIED` means directly inspected in the named environmen
 | Confirmed live vulnerabilities | `VERIFIED` | One: AF-TM-001 irrelevant chart-tool invocation; medium severity/high exploitability |
 | Three exploit reports | `UNMET` | One confirmed human-authored AF-TM-001 report; two A06 exposure/triage reports explicitly do not count as exploit reports |
 | Documentation Agent | `TESTED, NOT LIVE-CONFIRMED` | Controller finding/report/regression workflow passes PostgreSQL tests; the new semantic observation needs one matching reproduction before Documentation may run |
-| Bounded multi-agent trace | `PARTIAL` | Host Chrome completed one real Orchestrator → Attack Generator → Judge target trace with trusted provenance and complete evidence; Judge returned semantic `exploit_confirmed` at 0.94, held as `partial_signal` pending the required second reproduction |
+| Bounded multi-agent trace | `PARTIAL` | Host Chrome completed one real Orchestrator → Attack Generator → Judge target trace with trusted provenance and complete evidence; Judge returned semantic `exploit_confirmed` at 0.94, but the pre-fix live row remained `inconclusive`; the branch fix now holds equivalent first confirmations as `partial_signal` pending reproduction |
 | OpenEMR target unchanged | `VERIFIED` | `openemr-web` deployment `531630f7-da13-4aa3-b365-bbbb15dfdd50`; `agent-service` `9b7d9985-1e57-4735-9fe4-dcc536a91bc7` |
 | Optional 100-operation benchmark | `NOT RUN` | Deferred per final-hardening priority |
 | Simulated reports | `NOT RUN` | Optional and explicitly not used to inflate live finding count |

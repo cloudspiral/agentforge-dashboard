@@ -47,9 +47,10 @@ GitLab and GitHub `main` SHAs matched before Railway automatically deployed the 
   skipped, plus all contract, eval, submission, control, compose, and migration
   checks.
 - A host-Chrome retry completed one bounded read-only target trace. Its
-  0.94-confidence semantic exploit verdict is preserved as `partial_signal` pending
-  the rubric's required second matching reproduction; it is not counted as a finding
-  or report.
+  0.94-confidence semantic exploit verdict remained `inconclusive` under the pre-fix
+  controller and exposed the missing reproduction state. The branch fix preserves
+  equivalent first confirmations as `partial_signal` pending the required second
+  match; this live observation is not counted as a finding or report.
 - The exact feature-branch Dockerfile built locally as image
   `sha256:c9cc1b26e031b1117296b7154b774a01155a7a5db60d40ce18794e0c04519ff9`.
 
