@@ -1,7 +1,8 @@
 # Final submission status
 
-Evidence captured 2026-07-22 against Clinical Co-Pilot build
-`fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d`.
+Production evidence was captured 2026-07-22 against Clinical Co-Pilot build
+`fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d`. Feature-branch evidence below was
+captured locally on 2026-07-23. The feature branch has not been merged or deployed.
 
 ## Submission verdict
 
@@ -9,6 +10,13 @@ The checked-in Stage 3 eval-dataset gate is met: `evals/results/submission/` con
 four sanitized, schema-valid live results across three distinct categories, and every
 current result's stored `case_sha256` matches the exact current YAML bytes. CI now
 fails if current result or OWASP control contracts drift.
+
+The feature branch adds the complete bounded discovery loop, trusted proposal and
+objective provenance, an authenticated dashboard campaign launcher, three additional
+seed cases, and explicit A06 exposure reports. Unit and PostgreSQL integration tests
+exercise all role-selection, fallback, mutation, rejection, lineage, budget, and
+incomplete-evidence paths. Current deployment behavior remains the 2026-07-22
+production baseline until this branch is reviewed and separately deployed.
 
 Final OWASP coverage is intentionally mixed rather than overstated:
 
@@ -55,19 +63,31 @@ exploitability high, and regression eligibility yes. It is not a cross-patient o
 write finding. No other result is promoted to a vulnerability solely from a scanner
 match, mapping, or unavailable evidence channel.
 
-Three measured Judge calls totaled 12,031 input tokens, 1,071 output tokens,
-13,275 ms, and `$0.053656` estimated cost. Documentation Agent use was zero/`NOT RUN`.
+Seven successful measured role calls totaled 23,356 input tokens, 2,721 output tokens,
+32,826 ms, and `$0.113789` estimated cost. The new full-discovery trace includes one
+successful Orchestrator → Attack Generator → Judge sequence totaling `$0.044255`.
+Documentation Agent use remains zero because no new finding was honestly confirmed.
 No provider billing reconciliation was available.
+
+The bounded feature-branch live-validation total was two of eight authorized attempts
+and `$0.060133` of the `$3` cap. Both were correctly inconclusive when the restricted
+environment could not initialize macOS Chrome. Neither attempt reached login,
+submitted a prompt, or changed target state. No result from those runs is counted as
+a pass or exploit.
 
 ## Release limitations
 
 - `AF-TM-001` needs target remediation and regression replay.
-- A06 dependency findings need applicability/remediation triage; no exploit was run.
+- A06 dependency findings need remediation triage. Both exposure reports explicitly
+  record that application-specific exploitability was not demonstrated.
 - A07/A09 need a defined denial contract and attributable security-log evidence.
 - LLM03 needs provider model provenance attestations.
 - The human-authored `AF-TM-001` report is not represented as Documentation Agent output.
+- The assignment's minimum of three confirmed exploit reports remains unmet: there is
+  one confirmed exploit report and two non-counting A06 exposure/triage reports.
+- Real-browser discovery and any resulting Documentation Agent report generation
+  require a supervised environment able to launch the authorized browser.
 - The optional benchmark and simulated reports were deferred and do not affect the gate.
 
-The final documentation/results commit is expected to trigger one additional automatic
-Railway deployment. Its exact SHA and deployment ID must be checked after push; this
-file does not invent a future self-referential commit hash.
+This branch is intended for a draft merge request only. No merge, Railway deployment,
+Clinical Co-Pilot patch, or regression replay is authorized by this work.

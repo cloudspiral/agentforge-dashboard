@@ -4,11 +4,45 @@
 
 AgentForge is a **hub-and-spoke, stateful multi-agent adversarial evaluation platform** for one authorized Clinical Co-Pilot target populated only with synthetic users and synthetic patient records. The core architectural rule is that model output is never execution authority. An LLM may recommend a campaign objective, draft a typed test sequence, interpret frozen evidence, or draft a vulnerability report, but it cannot select an arbitrary destination, hold target credentials, invoke the target directly, mutate durable workflow state, or publish a finding. Those powers remain in deterministic Python components operating over versioned Pydantic and JSON Schema contracts.
 
-Four distinct agent roles form the spokes. The **Orchestrator Agent** recommends the next bounded objective from coverage, cost, target-version, and unresolved-finding context. The **Attack Generator Agent** converts that objective into a typed `ProposedAttackV1`; for the MVP, checked-in seed cases are used instead of open-ended generation. A deterministic execution gate resolves symbolic actions against the checked-in target profile, validates the target alias, patient fixture, method, endpoint, sequence bounds, upload metadata, budget, and prohibited operations, and returns either a typed rejection or immutable `ValidatedAttackV1`. The HTTP or ephemeral Playwright runner accepts only that validated envelope and produces `AttackEvidenceV1`. Deterministic evaluators inspect patient binding, synthetic canaries, tool scope, side effects, evidence completeness, transport status, and resource limits before the **Judge Agent** interprets semantic behavior. The deterministic controller reconciles the result, applies stopping rules, persists evidence and usage, creates or reopens findings, and decides whether a result is eligible for regression. The **Documentation Agent** converts a confirmed finding into a versioned structured report and Markdown draft; publication remains a human decision.
+Four distinct agent roles form the spokes. The **Orchestrator Agent** chooses the next
+bounded objective from a controller-supplied taxonomy shortlist, coverage, prior
+outcomes, cost, target-version, and stopping-limit context. The **Attack Generator
+Agent** converts that objective into the exact typed `ProposedAttackV1` sequence and
+may mutate only a controller-designated partial-signal parent. Checked-in seed cases
+are deterministic fallback proposals, never silent replacements for usable agent
+output. A deterministic execution gate resolves symbolic actions against the
+checked-in target profile, validates the target alias, patient fixture, method,
+endpoint, sequence bounds, upload metadata, budget, duplicate semantic hash, and
+prohibited operations, and returns either a typed rejection or immutable
+`ValidatedAttackV1`. The HTTP or ephemeral Playwright runner accepts only that
+validated envelope and produces `AttackEvidenceV1`. Deterministic evaluators inspect
+patient binding, synthetic canaries, tool scope, side effects, evidence completeness,
+transport status, and resource limits before the **Judge Agent** interprets semantic
+behavior. The deterministic controller reconciles the result, applies stopping rules,
+persists evidence and usage, creates or reopens findings, and decides whether a result
+is eligible for regression. The **Documentation Agent** converts a confirmed finding
+into a versioned structured report and Markdown draft; publication remains a human
+decision.
 
 PostgreSQL is the authoritative store for campaigns, attempts, lifecycle events, evidence, verdicts, findings, reports, regression cases, regression runs, and usage. A polling worker claims queued campaigns transactionally with bounded concurrency and recoverable state transitions. Langfuse is optional, redacted telemetry: a Langfuse outage cannot erase evidence or change a verdict. Prometheus-compatible metrics and the FastAPI/Jinja dashboard expose queue state, campaign status, cost, findings, and regression history. The target remains a separate OpenEMR/Clinical Co-Pilot deployment reached only through approved target aliases and normal authenticated UI or status routes. AgentForge never connects to the OpenEMR database or Docker socket.
 
-The implementation has crossed the MVP boundary. The deterministic controller, gate-to-runner authorization handoff, PostgreSQL lifecycle, authenticated Playwright navigation, evidence construction, deterministic assertions, live Judge invocation, and result export have been exercised end to end. The current checked-in exports contain four live results across prompt injection, data exfiltration, and tool misuse, each bound to the exact current case bytes and target build. Three were `attack_blocked`; corrected `AF-TM-001` was `exploit_confirmed` because the target performed a clinically irrelevant `get_vitals` read. Final hardening also added target-specific OWASP control contracts and evidence without turning AgentForge into a general-purpose scanner. Autonomous mutation and production-scale scheduling remain forward-looking work.
+The implementation has crossed the MVP boundary. The deterministic controller,
+gate-to-runner authorization handoff, PostgreSQL lifecycle, authenticated Playwright
+navigation, evidence construction, deterministic assertions, live Judge invocation,
+and result export have been exercised end to end. The bounded discovery loop now
+rechecks cancellation, deadline, target version, cost, attempt, mutation, and
+no-signal limits before continuing. It persists controller-assigned proposal source,
+objective source, lineage, parent, mutation generation, semantic sequence hash, and a
+sanitized fallback reason before target execution. PostgreSQL tests cover valid agent
+selection, invalid-objective fallback, generated mutation, unusable proposal
+rejection, separate deterministic fallback, and regression replay. The current
+checked-in live exports still contain four results across prompt injection, data
+exfiltration, and tool misuse, each bound to the exact current case bytes and target
+build. Three were `attack_blocked`; corrected `AF-TM-001` was `exploit_confirmed`
+because the target performed a clinically irrelevant `get_vitals` read. Final
+hardening also adds state-corruption, bounded work-amplification, and text-only
+role-escalation seeds plus target-specific OWASP evidence without turning AgentForge
+into a general-purpose scanner.
 
 Operationally, a campaign is a bounded recoverable state machine, not an open-ended conversation. Every model call has a typed input/output, timeout, token and cost budget, and recorded model metadata. Every target attempt is tied to an exact target build, target profile, taxonomy version, case hash, rubric version, and evidence hash. Transport failure, missing evidence, patient-context drift, target-version drift, or incomplete execution produces `inconclusive` or `error`, never a secure pass. This keeps the highest-risk decisions—authorization, deterministic boundary failures, continuation, finding creation, and publication—inside code and human governance that can be tested and audited independently.
 
@@ -45,8 +79,8 @@ flowchart LR
 
 | Component | Inputs | Outputs | Trust and authority | MVP implementation state |
 | --- | --- | --- | --- | --- |
-| Orchestrator Agent | Taxonomy slice, coverage, limits, target version, prior outcomes | `CampaignObjectiveV1` | Recommendation only; no credentials, runner, or persistence authority | Adapter and contracts implemented; deterministic controller remains authoritative |
-| Attack Generator Agent | Approved objective and profile-derived symbols | `ProposedAttackV1` | Proposal only; cannot execute | Interface and adapter implemented; fixed seed cases used for MVP |
+| Orchestrator Agent | Allowed taxonomy objectives, deterministic rank, coverage, limits, target version, prior outcomes | `CampaignObjectiveV1` | Selects only among controller-allowed choices; no credentials, runner, or persistence authority | Adapter, contracts, selection validation, and deterministic invalid-output fallback implemented |
+| Attack Generator Agent | Controller-approved objective, prior partial-signal lineage, and seed fallback context | `ProposedAttackV1` | Creates the exact sequence but cannot execute or assign trusted provenance | New and mutation proposals implemented; unusable proposals are retained as rejected attempts and seed fallback uses a later attempt |
 | Execution gate | Proposal, authoritative bindings, fixtures, patient, target, budget | `ValidatedAttackV1` or typed rejection | Sole pre-execution authorization boundary | Implemented, fail-closed, and tested |
 | HTTP runner | Validated status/API actions | `AttackEvidenceV1` | Executes exact approved status actions only | Implemented and tested |
 | Playwright runner | Validated UI sequence and ephemeral execution context | `AttackEvidenceV1` plus bounded artifacts | Uses normal test login; no persistent browser state | Proven against local and deployed OpenEMR |
@@ -55,7 +89,7 @@ flowchart LR
 | Documentation Agent | Confirmed finding and evidence references | `VulnerabilityReportV1` and Markdown draft | No target or publication authority | Implemented and fixture-tested; not invoked by the dashboard single-case path, so the checked-in `AF-TM-001` report is human-authored |
 | Regression harness | Versioned case, new target version, new evidence | secure pass, reproduced, inconclusive, or error | Replays exact saved sequence and invariants | Persistence and outcome logic implemented and integration tested |
 | PostgreSQL | Versioned operational and audit records | Transactional source of truth | Authoritative state | Migrations and lifecycle verified against PostgreSQL |
-| API/dashboard | Operator commands and database reads | Campaign queue, views, metrics, exports | Mutations authenticated; production reads protected by deployment auth | Deployed on Railway; unauthenticated dashboard access returns `401` |
+| API/dashboard | Operator commands and database reads | Campaign queue, launcher, views, metrics, exports | Basic-auth boundary, CSRF-protected form, server-side deployed-target confirmation, no browser bearer token | Launcher implemented and unit-tested on this branch; current deployed `main` remains the previously verified release |
 | Langfuse | Redacted model/agent metadata | Supplemental trace correlation | Non-authoritative and failure-isolated | Live linkage verified; private trace payloads masked/absent and verdicts remain PostgreSQL-authoritative |
 
 ## Campaign sequence and communication
@@ -78,24 +112,30 @@ sequenceDiagram
     O-->>C: Typed objective recommendation
     C->>A: Controller-approved objective and symbols
     A-->>C: ProposedAttackV1
-    C->>G: Proposal plus authoritative bindings
 
-    alt rejected
-        G-->>C: Typed rejection
-        C->>P: Record rejection and terminal/next decision
-    else authorized
-        G-->>C: ValidatedAttackV1
-        C->>R: Frozen authorization + ephemeral context
-        R-->>C: AttackEvidenceV1
-        C->>E: Evidence + declared invariants
-        E-->>C: Deterministic results
-        C->>J: Frozen evidence + deterministic floor
-        J-->>C: JudgeVerdictV1
-        C->>P: Reconciled outcome, usage, cost, trace IDs
-        opt confirmed and reproducible
-            C->>D: Frozen finding packet
-            D-->>C: VulnerabilityReportV1 draft
-            C->>P: Store report and regression case
+    alt agent proposal invalid
+        C->>P: Record rejected attempt
+        C->>C: Stop mutation lineage; optional later seed fallback
+    else proposal structurally usable
+        C->>P: Store trusted provenance and lineage before execution
+        C->>G: Proposal plus authoritative bindings
+        alt gate rejected
+            G-->>C: Typed rejection
+            C->>P: Record rejected attempt
+        else authorized
+            G-->>C: ValidatedAttackV1
+            C->>R: Frozen authorization + ephemeral context
+            R-->>C: AttackEvidenceV1
+            C->>E: Evidence + declared invariants
+            E-->>C: Deterministic results
+            C->>J: Frozen evidence + deterministic floor
+            J-->>C: JudgeVerdictV1
+            C->>P: Reconciled outcome, usage, cost, trace IDs
+            opt confirmed and reproducible
+                C->>D: Frozen finding packet
+                D-->>C: VulnerabilityReportV1 draft
+                C->>P: Store report and regression case
+            end
         end
     end
 ```
@@ -104,7 +144,7 @@ Agents do not talk directly to one another. The controller validates and persist
 
 ## Orchestrator prioritization and stopping
 
-For seed-case and future discovery campaigns, the controller gives the Orchestrator a bounded view of:
+For every discovery iteration, the controller gives the Orchestrator a bounded view of:
 
 - categories and subcategories with low or stale coverage;
 - unresolved or high-severity findings;
@@ -112,7 +152,26 @@ For seed-case and future discovery campaigns, the controller gives the Orchestra
 - partially successful cases eligible for mutation;
 - attempts, latency, token usage, cost, and consecutive no-signal outcomes.
 
-The Orchestrator recommends a category/objective, but deterministic code enforces campaign limits and may reject or redirect the recommendation. Default ceilings are configurable for cost, attempts, duration, mutation depth, no-signal outcomes, duplicate sequences, and concurrency. A campaign stops on cancellation, budget exhaustion, time or attempt exhaustion, repeated no-signal results, target-version drift, authorization rejection, incomplete evidence, or a confirmed high-impact result requiring human review.
+The Orchestrator chooses only from the supplied category/subcategory options and may
+request either a fresh objective or mutation of the one eligible partial-signal
+attempt. Deterministic ranking selects an objective only when the Orchestrator fails
+or returns an invalid choice. The controller reconstructs the authoritative objective
+instead of trusting model-supplied limits or mappings.
+
+The controller, not either model, assigns `agent_generated`,
+`agent_generated_mutation`, or `deterministic_seed_fallback` proposal provenance and
+`orchestrator_selected` or `deterministic_ranked_fallback` objective provenance. An
+invalid generated proposal is stored as a rejected attempt; a later seed fallback
+consumes another attempt. A mutation label is possible only when the proposal names
+the valid partial-signal parent and retains its lineage. A failed mutation generation
+ends the lineage.
+
+Default ceilings are configurable for cost, attempts, duration, mutation depth,
+no-signal outcomes, duplicate sequences, and concurrency. A campaign stops on
+cancellation, budget exhaustion, time or attempt exhaustion, repeated no-signal
+results, target-version drift, authorization rejection, incomplete evidence, or a
+confirmed finding requiring documentation. Transport errors and incomplete evidence
+never open mutation or produce a secure verdict.
 
 ## Judge and regression flow
 
@@ -193,7 +252,7 @@ No generated report is automatically published or sent to another system.
 | Finding/report draft | Yes | No | Versioned persistence and human review |
 | Export/publication | No | N/A | Authenticated human action |
 
-## Current MVP acceptance boundary
+## Current acceptance boundary
 
 Verified MVP capabilities include:
 
@@ -205,6 +264,19 @@ Verified MVP capabilities include:
 - PostgreSQL campaign, attempt, evidence, verdict, lifecycle, AgentRun, finding/report, and regression persistence paths;
 - durable private Langfuse linkage with matching campaign/attempt identifiers and masked or absent payloads;
 - bounded target-specific OWASP controls and reproducible SCA/SBOM evidence;
-- API, CLI, dashboard, worker, metrics, migrations, and versioned contracts.
+- API, CLI, dashboard, worker, metrics, migrations, and versioned contracts;
+- controller-assigned proposal/objective provenance, lineage-aware mutation, rejected
+  proposal visibility, and semantic duplicate rejection;
+- an authenticated campaign launcher with taxonomy-driven scope, advanced limits,
+  CSRF protection, idempotency, and deployed-target confirmation;
+- nine seed definitions spanning prompt injection, data exfiltration, state
+  corruption, tool misuse, denial of service, and identity/role exploitation.
 
-One live vulnerability is confirmed: `AF-TM-001` caused an unnecessary `get_vitals` read and disclosed selected-patient synthetic values. The checked-in report is human-authored because this execution path does not invoke the Documentation Agent. Authentication/logging and model-provenance controls remain partial; affected dependency findings require applicability/remediation triage. Future work includes remediation/replay, autonomous case generation and mutation, broader live coverage for state corruption and denial of service, automated target-change regression triggers, Judge calibration, and higher-scale worker separation.
+One live vulnerability is confirmed: `AF-TM-001` caused an unnecessary `get_vitals`
+read and disclosed selected-patient synthetic values. The checked-in report is
+human-authored because that earlier single-case execution path did not invoke the
+Documentation Agent. Authentication/logging and model-provenance controls remain
+partial; affected dependency findings require applicability/remediation triage.
+Future work includes target remediation and replay, broader live discovery coverage,
+automated target-change regression triggers, Judge calibration, and higher-scale
+worker separation.

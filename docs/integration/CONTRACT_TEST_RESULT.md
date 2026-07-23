@@ -2,26 +2,28 @@
 
 ## Latest result
 
-On 2026-07-22, final-hardening verification produced:
+On 2026-07-23, feature-branch verification produced:
 
-- `uv sync --frozen`: passed; 87 packages checked.
-- `uv run ruff format --check .`: passed; 104 files formatted.
+- `ruff format --check .`: passed; 105 files formatted.
 - `uv run ruff check .`: passed.
-- `uv run pytest -q`: **179 passed, 16 skipped**; the skips are explicit
-  PostgreSQL/live-browser opt-ins, not unexpected omissions.
-- Explicit isolated PostgreSQL integration suite: **15 passed**.
+- Full `pytest -q` with the isolated PostgreSQL opt-in: **201 passed, 1 skipped**.
+  The only skip is the explicit live-browser smoke opt-in.
+- Explicit isolated PostgreSQL lifecycle/controller suite: **20 passed**.
 - Contract export drift: passed; 7 schemas current.
-- Mixed eval catalog: passed; 6 live seed definitions and 4 control definitions.
+- Mixed eval catalog: passed; 9 live seed definitions and 4 control definitions.
 - Current-result validation: passed; 4 exact-schema exports matched exact YAML bytes.
 - Control-result validation: passed; all 4 target-specific OWASP result/evidence
   envelopes validated.
 - `docker compose config --quiet`: passed.
-- Empty PostgreSQL database upgrade/current/check: passed at
-  `c71d9e5a4b20 (head)` with no pending operations.
-- Final Docker image build: passed as `agentforge-final-hardening:latest`.
+- Isolated PostgreSQL upgrade/current/check: passed at `f43a8d7e91b2 (head)` with
+  no pending operations or model/migration drift.
+- A new local Docker build could not start because the desktop approval layer denied
+  Docker's build-metadata write. Compose validation passed; the branch image build is
+  left to GitLab CI and is not claimed locally.
 
-The isolated database was named `agentforge_final_019f88a8_test`, verified absent
-before creation, and removed after the checks.
+The isolated database was named `agentforge_final_test`; it is distinct from
+development/production data. The bounded discovery evidence used a second isolated
+database, `agentforge_final_live_test`.
 
 ## What these checks establish
 
@@ -32,8 +34,10 @@ before creation, and removed after the checks.
 - OWASP controls use the strict per-mapping status vocabulary and carry target,
   build, case-hash, expected/observed, evidence, severity, exploitability, and
   regression metadata.
-- The migrations and controller/job lifecycles work on a fresh PostgreSQL database.
-- The production Dockerfile assembles with the pinned lock and matching Chromium.
+- The migrations and controller/job lifecycles work on an isolated PostgreSQL
+  database.
+- The production Dockerfile still requires the CI image-build result for this exact
+  branch.
 
 ## What these checks do not establish
 

@@ -17,10 +17,16 @@ AgentForge can:
 - Evaluate outcomes with deterministic invariants and an independent Judge Agent
 - Store campaigns, attempts, evidence, verdicts, findings, and regression results in PostgreSQL
 - Generate structured vulnerability reports when a finding is confirmed
+- Run autonomous, bounded discovery campaigns in which the Orchestrator selects an
+  objective and the Attack Generator creates the exact ordered sequence
+- Record controller-assigned proposal and objective provenance for every attempt
 - Surface campaign status, coverage, findings, costs, and regression history in a web dashboard
 - Replay confirmed findings against future target versions
 
-The current MVP uses checked-in YAML seed cases. The Red Team / Attack Generator Agent is designed to generate and mutate future cases, but it is not required for executing the fixed demo suite.
+Checked-in YAML cases remain deterministic seeds and standalone evaluations. Full
+discovery campaigns use them only when the Orchestrator or Attack Generator fails to
+return a usable typed result; the dashboard identifies those attempts explicitly as
+`deterministic_seed_fallback`.
 
 ## Architecture
 
@@ -45,7 +51,9 @@ flowchart LR
 ### Agent roles
 
 - **Orchestrator Agent / Controller** — selects and coordinates bounded work, applies budgets and stopping rules, and owns workflow decisions.
-- **Attack Generator Agent** — produces typed attack proposals for future autonomous campaigns. Fixed YAML cases are used in the current MVP flow.
+- **Attack Generator Agent** — produces the exact typed ordered sequence for the
+  controller-approved discovery objective; deterministic YAML sequences are clearly
+  labeled fallback only.
 - **Judge Agent** — independently evaluates frozen evidence and deterministic assertion results.
 - **Documentation Agent** — converts confirmed findings into structured vulnerability reports and Markdown exports.
 
@@ -53,7 +61,7 @@ Specialist agents do not communicate directly with one another. The Orchestrator
 
 ## Evaluation flow
 
-A dashboard button or CLI command selects an allowlisted YAML case. AgentForge then:
+A fixed-case evaluation selected from the dashboard or CLI follows this path:
 
 1. Loads and validates the current case definition
 2. Creates a campaign and attempt record
@@ -65,18 +73,37 @@ A dashboard button or CLI command selects an allowlisted YAML case. AgentForge t
 8. Persists the verdict and supporting metadata in PostgreSQL
 9. Creates a finding, report, and regression candidate only when warranted
 
+A full discovery campaign repeats a stricter four-agent loop. Deterministic code gives
+the Orchestrator the allowed taxonomy shortlist, coverage, prior outcomes, target
+constraints, and remaining limits. The Orchestrator chooses a new objective or a
+partial-signal lineage to mutate. The Attack Generator produces the exact sequence.
+The controller rejects invalid scope, lineage, unsafe actions, and duplicate semantic
+sequence hashes before target execution. Only a semantic `partial_signal` can open a
+mutation lineage. Confirmed deterministic evidence flows through Judge, finding
+deduplication, Documentation Agent reporting, and versioned regression-case creation.
+
+For each attempt the controller stores one trusted proposal source:
+`agent_generated`, `agent_generated_mutation`, or
+`deterministic_seed_fallback`. It separately stores
+`orchestrator_selected` or `deterministic_ranked_fallback` for the objective.
+Pre-migration records are displayed as `legacy_unknown (pre-provenance)` and are never
+retroactively inferred.
+
 PostgreSQL is the canonical source of truth. JSON files under `evals/results/` are portable exports for review and submission.
 
 ## Included evaluation categories
 
-The seed suite includes cases covering:
+The nine-case seed suite covers all six required threat families:
 
 - Direct prompt injection
 - Multi-turn prompt injection
 - Cross-patient data exposure
 - Trusted-context identifier spoofing
+- Evidence-precedence and conversation-state poisoning
 - Unintended tool invocation
 - Tool-parameter tampering
+- Bounded recursive work and cost amplification
+- Text-only identity and role escalation
 
 Each case defines its category, exact action sequence, expected safe behavior, exploit signals, deterministic assertions, severity, exploitability, and regression eligibility.
 
@@ -177,11 +204,37 @@ Replace the case path with any allowlisted file under `evals/seed-cases/`.
 
 A successful run persists its canonical records in PostgreSQL and writes a portable result to `evals/results/`.
 
+## Launch a full discovery campaign
+
+The authenticated dashboard at `/dashboard/campaigns` has a **Launch campaign**
+panel with quick target, taxonomy, attempt, and cost controls plus advanced duration,
+mutation, no-signal, and priority limits. Deployed campaigns require an explicit
+synthetic/authorized-target confirmation. The form is CSRF-protected and uses a
+per-form idempotency key; it never places the platform bearer token in HTML or
+JavaScript.
+
+The equivalent CLI command is:
+
+```bash
+uv run agentforge campaign create \
+  --target deployed \
+  --category prompt_injection \
+  --max-attempts 1 \
+  --max-cost-usd 0.25 \
+  --max-mutations 1 \
+  --no-signal-limit 2
+```
+
+Campaigns are queued for the background worker. The detail page polls the durable
+campaign state and shows the ordered Orchestrator, Attack Generator, Judge, and
+Documentation Agent timeline together with proposal provenance and lineage.
+
 ## Dashboard
 
 The dashboard provides views for:
 
 - Campaign status and lifecycle events
+- An authenticated, bounded full-campaign launcher
 - Queue and worker state
 - Attempts and evidence
 - Deterministic assertion outcomes
@@ -189,6 +242,8 @@ The dashboard provides views for:
 - Findings and vulnerability reports
 - Regression runs and results
 - Cost, latency, and coverage summaries
+- Proposal-source utilization and per-source verdict counts
+- Target-version resilience rates
 
 Allowlisted seed cases can be launched from the dashboard when run controls are enabled. Campaign execution occurs asynchronously through the background worker, and campaign details are read from PostgreSQL.
 
@@ -252,4 +307,9 @@ See [`THREAT_MODEL.md`](THREAT_MODEL.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md
 
 ## Current scope
 
-AgentForge currently demonstrates a trustworthy MVP path using fixed, version-controlled test cases against a live target. The architecture supports future autonomous campaigns in which the Attack Generator produces and mutates typed proposals based on coverage gaps and prior results, while the Orchestrator retains authority over storage, budgets, validation, execution, and stopping conditions.
+AgentForge supports both fixed, version-controlled evaluations and bounded autonomous
+discovery campaigns. The four-agent loop, trusted provenance, partial-signal mutation,
+finding/report/regression path, and PostgreSQL recovery behavior are covered by
+deterministic and isolated PostgreSQL tests. The current public deployment still
+reflects the previously verified `main` release until this feature branch is reviewed
+and deployed; this branch does not deploy itself.

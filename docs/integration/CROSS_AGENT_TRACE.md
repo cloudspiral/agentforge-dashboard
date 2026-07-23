@@ -39,3 +39,37 @@ railway ssh --service agentforge-dashboard python scripts/verify_production_link
 ```
 
 The command is local/read-only and emits identifiers, counts, usage, cost, latency, metadata keys, and payload presence—not raw evidence or prompts. Dashboard detail separately displayed the trace ID and terminal evidence.
+
+## Local full-discovery trace (2026-07-23)
+
+This feature-branch trace verifies controller-assigned provenance and independent
+multi-agent role accounting. It is not presented as a successful target evaluation:
+macOS Chrome could not initialize inside the restricted validation sandbox.
+
+| Field | Value |
+| --- | --- |
+| Campaign | `8eb948ce-76d9-4864-86a3-1d3e72662c18` |
+| Attempt | `9baaafdb-a719-4386-a412-f3ee50896a92` |
+| Target build | `fe8268f8953bc7c9bde9b01020b9ddf8b5c5649d` |
+| Objective provenance | `orchestrator_selected` |
+| Proposal provenance | `agent_generated` |
+| Lineage | `AF-TM-UI-002`, generation 0, no parent |
+| Sequence hash | `97e31dba0869e6a4928929db5180d9061c1a7dbe5d8b1d489b0dd9b82cca0c38` |
+| Orchestrator | 1,535 input / 328 output; 3,149 ms; `$0.009715` |
+| Attack Generator | 2,710 input / 668 output; 6,059 ms; `$0.018487` |
+| Judge | 3,520 input / 337 output; 5,988 ms; `$0.016053` |
+| Verdict | `inconclusive` |
+| Documentation Agent | Correctly not invoked: no confirmed finding |
+
+The controller supplied the allowed taxonomy objectives, coverage counts, prior
+outcomes, target constraints, and remaining limits. The Orchestrator selected an
+allowed objective. The Attack Generator produced the exact sequence, and the
+controller assigned both trusted provenance labels before execution. When the runner
+returned incomplete transport evidence, deterministic safeguards prevented mutation,
+a secure verdict, a finding, a report, or a passing regression.
+
+The bounded live-validation total was two attempts and `$0.060133`, below the
+authorized limits of eight attempts and `$3`. Neither attempt initialized the
+browser, authenticated, submitted a target prompt, or changed target state. Further
+real-browser exploit discovery is therefore a supervised follow-up rather than
+fabricated submission evidence.

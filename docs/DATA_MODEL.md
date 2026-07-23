@@ -2,7 +2,11 @@
 
 ## Authority and revision
 
-PostgreSQL is the operational source of truth. The current schema is represented by SQLAlchemy models and Alembic head `c71d9e5a4b20`. Empty-database upgrade/current/check and the explicit PostgreSQL integration suite have been exercised, and the deployed database persisted live campaign, attempt, assertion, Judge, AgentRun, usage, cost, latency, trace, and terminal records.
+PostgreSQL is the operational source of truth. The feature-branch schema is
+represented by SQLAlchemy models and Alembic head `f43a8d7e91b2`. Empty-database
+upgrade/current/check and the explicit PostgreSQL integration suite have been
+exercised. The current deployment remains on the earlier `c71d9e5a4b20` schema until
+this branch is reviewed and separately deployed.
 
 ```mermaid
 erDiagram
@@ -26,7 +30,7 @@ erDiagram
 | --- | --- | --- |
 | `target_versions` | Environment, version label, Git SHA, deployment ID, URL alias, profile hash, metadata | Unique version label; records exact evaluated runtime, not assumed checkout HEAD |
 | `campaigns` | Type/trigger/status, target alias/version, category scope, budgets, attempts, priority, heartbeat, cancellation, sanitized error | Unique idempotency key; indexed queue/status/category/version; parent for attempts and agent runs |
-| `attack_attempts` | Family/parent/mutation generation, objective, proposed/executed sequences, prompt/taxonomy/profile versions, evidence hash, usage/cost/latency/trace | Cascades with campaign; self-parent becomes null; immutable evidence identity should be treated append-only after completion |
+| `attack_attempts` | Family/lineage/parent/mutation generation, trusted proposal and objective provenance, sanitized fallback reason, sequence hash, objective, proposed/executed sequences, prompt/taxonomy/profile versions, evidence hash, usage/cost/latency/trace | Cascades with campaign; self-parent becomes null; immutable proposal provenance and evidence identity should be treated append-only after creation/completion |
 | `judge_verdicts` | Verdict, severity, exploitability, confidence, evidence references, violated invariants, rubric version/hash, deterministic override | Exactly zero or one per attempt; cascades with attempt |
 | `findings` | Stable vulnerability ID/fingerprint, source attempt, category/severity/status, clinical impact, expected/observed behavior, first/last target versions | Fingerprint and vulnerability ID unique; source attempt restricted from deletion; current regression pointer optional |
 | `vulnerability_reports` | Finding/version, structured report, Markdown, export path, draft status, validation summary, prompt/schema versions | Unique finding/version; cascades with finding; export path is metadata, not evidence authority |
@@ -37,7 +41,14 @@ erDiagram
 
 ## State rules
 
-Campaign states should be changed only by repository/controller transitions. Queue claiming and heartbeat recovery are transactional. A cancelled or stale run becomes an explicit terminal/interrupted record, not silently retried. Attempts retain proposal, actual execution, versions, and frozen evidence separately. Findings are deduplicated by fingerprint and progress through human-controlled status. Reports and regression cases are new versions, not destructive updates.
+Campaign states should be changed only by repository/controller transitions. Queue
+claiming and heartbeat recovery are transactional. A cancelled or stale run becomes
+an explicit terminal/interrupted record, not silently retried. Attempts retain
+controller-assigned proposal/objective provenance, lineage, proposal, actual
+execution, versions, and frozen evidence separately. Historical attempts are
+explicitly `legacy_unknown`; provenance is never inferred retrospectively. Findings
+are deduplicated by fingerprint and progress through human-controlled status. Reports
+and regression cases are new versions, not destructive updates.
 
 Regression outcomes are `secure_pass`, `vulnerability_reproduced`, `inconclusive`, or `error`. A secure pass requires affirmative evidence for every saved invariant; a transport failure or missing Judge result for a Judge-required case cannot pass.
 
@@ -60,4 +71,6 @@ Existing indexes cover queue/status time, target version, category/subcategory, 
 - No schema-level enum/check constraints enforce status vocabularies.
 - No row-level access control, tenant boundary, retention job, or encryption policy is implemented.
 - Multi-worker kill/recovery and backup/restore exercises remain outstanding.
-- The process-local dashboard evaluation path persists a valid lifecycle but intentionally bypasses controller Finding/Documentation Agent creation.
+- The process-local fixed-case dashboard evaluation path persists a valid lifecycle
+  but intentionally bypasses controller Finding/Documentation Agent creation. The
+  new full-campaign launcher uses the durable queue and normal controller instead.
