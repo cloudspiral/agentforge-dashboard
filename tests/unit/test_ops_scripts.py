@@ -196,6 +196,7 @@ def test_gitlab_pipeline_is_a_minimal_ephemeral_merge_request_gate() -> None:
     pipeline = yaml.safe_load((REPOSITORY_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
     assert pipeline["variables"]["RUN_LIVE_E2E"] == "0"
     assert pipeline["stages"] == ["verify"]
+    assert pipeline["default"]["image"] == ("ghcr.io/astral-sh/uv:0.11.25-python3.12-trixie-slim")
     assert "cache" not in pipeline["default"]
     assert "artifacts" not in pipeline["verify"]
     assert pipeline["verify"]["services"] == [{"name": "postgres:17-alpine", "alias": "postgres"}]
