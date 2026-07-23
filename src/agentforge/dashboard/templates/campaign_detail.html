@@ -14,12 +14,35 @@
   <article><span>Attempts</span><strong>{{ attempts | length }}</strong></article>
   <article><span>Cost</span><strong class="text">${{ campaign.actual_cost_usd }} / ${{ campaign.max_cost_usd }}</strong></article>
 </section>
+<section class="stat-grid" aria-label="Proposal provenance">
+  <article><span>Agent generated</span><strong>{{ proposal_sources.get('agent_generated', 0) }}</strong></article>
+  <article><span>Agent mutations</span><strong>{{ proposal_sources.get('agent_generated_mutation', 0) }}</strong></article>
+  <article><span>Seed fallback</span><strong>{{ proposal_sources.get('deterministic_seed_fallback', 0) }}</strong></article>
+  <article><span>Legacy unknown</span><strong>{{ proposal_sources.get('legacy_unknown', 0) }}</strong></article>
+</section>
+<section class="panel">
+  <h2>Proposal-source outcomes</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Proposal source</th><th>Attempts</th><th>Confirmed</th><th>Partial</th><th>Blocked</th><th>Inconclusive</th><th>No verdict</th></tr></thead>
+    <tbody>{% for source, counts in proposal_verdict_counts.items() %}<tr>
+      <td>{% if source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% else %}{{ source }}{% endif %}</td>
+      <td>{{ counts.get('attempts', 0) }}</td>
+      <td>{{ counts.get('exploit_confirmed', 0) }}</td>
+      <td>{{ counts.get('partial_signal', 0) }}</td>
+      <td>{{ counts.get('attack_blocked', 0) }}</td>
+      <td>{{ counts.get('inconclusive', 0) }}</td>
+      <td>{{ counts.get('no_verdict', 0) }}</td>
+    </tr>{% else %}<tr><td colspan="7">No proposal provenance has been recorded.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
 
 <section class="panel two-column">
   <div><h2>Scope and limits</h2><dl class="summary-list">
     <div><dt>Category</dt><dd>{{ campaign.category_scope or 'automatic' }}</dd></div>
     <div><dt>Subcategory</dt><dd>{{ campaign.subcategory_scope or 'automatic' }}</dd></div>
     <div><dt>Maximum attempts</dt><dd>{{ campaign.max_attempts }}</dd></div>
+    <div><dt>Maximum mutations</dt><dd>{{ campaign.max_mutations }}</dd></div>
+    <div><dt>No-signal limit</dt><dd>{{ campaign.no_signal_limit }}</dd></div>
     <div><dt>Maximum duration</dt><dd>{{ campaign.max_duration_seconds }}s</dd></div>
     <div><dt>Priority</dt><dd>{{ campaign.priority }}</dd></div>
   </dl></div>
@@ -48,18 +71,37 @@
 </section>
 
 <section class="panel">
+  <h2>Ordered agent timeline</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Role</th><th>Status</th><th>Attempt</th><th>Model</th><th>Tokens</th><th>Cost</th><th>Trace ID</th></tr></thead>
+    <tbody>{% for run in agent_runs %}<tr>
+      <td>{{ run.created_at }}</td>
+      <td>{{ run.role | replace('_', ' ') }}</td>
+      <td><span class="badge badge-{{ 'completed' if run.status == 'succeeded' else 'failed' }}">{{ run.status }}</span></td>
+      <td class="mono">{{ run.attempt_id or 'planning only' }}</td>
+      <td>{{ run.model }}<small>{{ run.prompt_version }}</small></td>
+      <td>{{ run.input_tokens }} in / {{ run.output_tokens }} out</td>
+      <td>${{ run.estimated_cost_usd }}</td>
+      <td class="mono">{{ run.langfuse_trace_id or 'not available' }}</td>
+    </tr>{% else %}<tr><td colspan="8">No agent runs have been persisted.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel">
   <h2>Attempts and results</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>Status</th><th>Family</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
+    <thead><tr><th>Status</th><th>Proposal source</th><th>Objective source</th><th>Lineage</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
     <tbody>{% for item in attempts %}<tr>
       <td>{{ item.status }}</td>
-      <td>{{ item.attack_family_id }}</td>
+      <td><span class="badge badge-provenance">{% if item.proposal_source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% else %}{{ item.proposal_source | replace('_', ' ') }}{% endif %}</span>{% if item.proposal_fallback_reason %}<small>{{ item.proposal_fallback_reason | replace('_', ' ') }}</small>{% endif %}</td>
+      <td>{% if item.objective_source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% else %}{{ item.objective_source | replace('_', ' ') }}{% endif %}</td>
+      <td class="mono">{{ item.lineage_id or item.attack_family_id }}<small>generation {{ item.mutation_generation }}{% if item.parent_attempt_id %} · parent {{ item.parent_attempt_id }}{% endif %}</small></td>
       <td>{{ item.category }} / {{ item.subcategory }}</td>
       <td>{{ verdicts[item.id].verdict if item.id in verdicts else 'not produced' if item.status == 'error' else 'pending' }}</td>
       <td>{{ item.latency_ms ~ 'ms' if item.latency_ms is not none else '—' }}</td>
       <td>${{ item.estimated_cost_usd }}</td>
       <td class="mono">{{ item.langfuse_trace_id or 'not available' }}</td>
-    </tr>{% else %}<tr><td colspan="7">No attempts recorded.</td></tr>{% endfor %}</tbody>
+    </tr>{% else %}<tr><td colspan="9">No attempts recorded.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 

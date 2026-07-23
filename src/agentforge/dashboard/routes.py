@@ -11,14 +11,17 @@ from typing import Any
 from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
+from agentforge.api.schemas import CampaignCreateRequest
+from agentforge.api.services import ApplicationService
 from agentforge.dashboard.evaluations import (
     DashboardEvaluationManager,
     DashboardEvaluationSnapshot,
     EvaluationAlreadyRunning,
     EvaluationStartFailed,
 )
-from agentforge.evaluation import load_seed_cases
+from agentforge.evaluation import load_seed_cases, load_taxonomy
 from agentforge.observability.metrics import AgentForgeMetrics
 from agentforge.observability.metrics import metrics as default_metrics
 from agentforge.persistence.repositories import (
@@ -34,7 +37,14 @@ from agentforge.security.redaction import redact
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 TERMINAL_CAMPAIGN_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
-CATEGORY_ORDER = ("prompt_injection", "data_exfiltration", "tool_misuse")
+CATEGORY_ORDER = (
+    "prompt_injection",
+    "data_exfiltration",
+    "state_corruption",
+    "tool_misuse",
+    "denial_of_service",
+    "identity_role_exploitation",
+)
 
 
 def _app_metrics(application: FastAPI) -> AgentForgeMetrics:
@@ -110,6 +120,73 @@ def _evaluation_snapshot(request: Request) -> DashboardEvaluationSnapshot:
 
 def _csrf_token(request: Request) -> str:
     return str(getattr(request.app.state, "dashboard_csrf_token", ""))
+
+
+def _campaign_form_defaults(request: Request) -> dict[str, str]:
+    settings = request.app.state.settings
+    return {
+        "target_alias": "local",
+        "category": "",
+        "subcategory": "",
+        "max_attempts": "1",
+        "max_cost_usd": "0.25",
+        "max_duration_seconds": str(
+            getattr(settings, "default_campaign_max_duration_seconds", 900)
+        ),
+        "max_mutations": str(getattr(settings, "default_max_mutations", 3)),
+        "no_signal_limit": str(getattr(settings, "default_no_signal_limit", 4)),
+        "priority": "0",
+        "idempotency_key": f"dashboard-{uuid.uuid4().hex}",
+        "confirm_authorized": "",
+    }
+
+
+def _taxonomy_options(request: Request) -> list[dict[str, Any]]:
+    taxonomy = getattr(request.app.state, "taxonomy", None)
+    if taxonomy is None:
+        taxonomy = load_taxonomy(_repository_root(request) / "config" / "attack-taxonomy.yaml")
+    return [
+        {
+            "id": category.id,
+            "description": category.description,
+            "subcategories": [
+                {"id": item.id, "description": item.description} for item in category.subcategories
+            ],
+        }
+        for category in taxonomy.categories
+    ]
+
+
+def _campaign_page_context(
+    request: Request,
+    *,
+    offset: int,
+    limit: int,
+    launch_values: dict[str, str] | None = None,
+    launch_error: str | None = None,
+) -> dict[str, Any]:
+    with request.app.state.database.session_factory() as session:
+        operations = OperationalRepository(session)
+        items, total = operations.campaign_rows(offset=offset, limit=limit)
+        queue = operations.queue_summary(stale_after_seconds=_stale_after_seconds(request))
+    settings = request.app.state.settings
+    return {
+        "campaigns": items,
+        "total": total,
+        "queue": queue,
+        "taxonomy_options": _taxonomy_options(request),
+        "launch_values": launch_values or _campaign_form_defaults(request),
+        "launch_error": launch_error,
+        "csrf_token": _csrf_token(request),
+        "campaign_ceiling_usd": getattr(settings, "default_campaign_max_cost_usd", 2.0),
+        "global_ceiling_usd": getattr(settings, "global_max_cost_usd", 10.0),
+        **_pagination(offset=offset, limit=limit, total=total),
+    }
+
+
+def _optional_form_value(value: str) -> str | None:
+    normalized = value.strip()
+    return normalized or None
 
 
 def _attempt_result_rows(detail: dict[str, Any]) -> dict[uuid.UUID, dict[str, Any]]:
@@ -259,16 +336,100 @@ def campaigns(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> HTMLResponse:
-    with request.app.state.database.session_factory() as session:
-        items, total = OperationalRepository(session).campaign_rows(offset=offset, limit=limit)
     return templates.TemplateResponse(
         request=request,
         name="campaigns.html",
-        context={
-            "campaigns": items,
-            "total": total,
-            **_pagination(offset=offset, limit=limit, total=total),
-        },
+        context=_campaign_page_context(request, offset=offset, limit=limit),
+    )
+
+
+@router.post(
+    "/dashboard/campaigns",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+def launch_campaign(
+    request: Request,
+    csrf_token: str = Form(...),
+    idempotency_key: str = Form(...),
+    target_alias: str = Form("local"),
+    category: str = Form(""),
+    subcategory: str = Form(""),
+    max_attempts: str = Form("1"),
+    max_cost_usd: str = Form("0.25"),
+    max_duration_seconds: str = Form(""),
+    max_mutations: str = Form(""),
+    no_signal_limit: str = Form(""),
+    priority: str = Form("0"),
+    confirm_authorized: str = Form(""),
+) -> Response:
+    expected_csrf = _csrf_token(request)
+    if not expected_csrf or not hmac.compare_digest(csrf_token, expected_csrf):
+        raise HTTPException(status_code=403, detail="invalid dashboard action token")
+    values = {
+        "target_alias": target_alias,
+        "category": category,
+        "subcategory": subcategory,
+        "max_attempts": max_attempts,
+        "max_cost_usd": max_cost_usd,
+        "max_duration_seconds": max_duration_seconds,
+        "max_mutations": max_mutations,
+        "no_signal_limit": no_signal_limit,
+        "priority": priority,
+        "idempotency_key": idempotency_key,
+        "confirm_authorized": confirm_authorized,
+    }
+    try:
+        if target_alias == "deployed" and confirm_authorized != "yes":
+            raise ValueError(
+                "Deployed campaigns require confirmation that the target is authorized "
+                "and contains synthetic data only."
+            )
+        body = CampaignCreateRequest.model_validate(
+            {
+                "campaign_type": "discovery",
+                "target_alias": target_alias,
+                "category": _optional_form_value(category),
+                "subcategory": _optional_form_value(subcategory),
+                "max_attempts": _optional_form_value(max_attempts),
+                "max_cost_usd": _optional_form_value(max_cost_usd),
+                "max_duration_seconds": _optional_form_value(max_duration_seconds),
+                "max_mutations": _optional_form_value(max_mutations),
+                "no_signal_limit": _optional_form_value(no_signal_limit),
+                "priority": _optional_form_value(priority) or "0",
+                "idempotency_key": idempotency_key,
+            }
+        )
+        with request.app.state.database.session_factory() as session:
+            campaign = ApplicationService(
+                session,
+                settings=request.app.state.settings,
+                target_profile=request.app.state.target_profile,
+                taxonomy=request.app.state.taxonomy,
+            ).create_campaign(
+                body,
+                trigger_type="dashboard",
+                idempotency_key=idempotency_key,
+            )
+    except (ValidationError, ValueError) as exc:
+        message = str(exc)
+        if isinstance(exc, ValidationError) and exc.errors():
+            message = str(exc.errors()[0].get("msg", message))
+        return templates.TemplateResponse(
+            request=request,
+            name="campaigns.html",
+            context=_campaign_page_context(
+                request,
+                offset=0,
+                limit=50,
+                launch_values=values,
+                launch_error=message,
+            ),
+            status_code=400,
+        )
+    return RedirectResponse(
+        url=f"/dashboard/campaigns/{campaign.id}",
+        status_code=303,
     )
 
 

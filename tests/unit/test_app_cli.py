@@ -8,12 +8,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
+from sqlalchemy import select
 from typer.testing import CliRunner
 
 from agentforge.main import create_app
 from agentforge.observability import AgentForgeMetrics
 from agentforge.orchestration.worker import CampaignProcessResult
 from agentforge.persistence import Base, Database
+from agentforge.persistence.models import Campaign
 from agentforge.settings import Settings
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -172,6 +174,109 @@ def test_production_protects_dashboard_api_and_metrics_but_not_health(
         assert client.get("/docs").status_code == 404
         assert client.get("/redoc").status_code == 404
         assert client.get("/openapi.json").status_code == 404
+
+
+def test_dashboard_campaign_launcher_is_csrf_protected_idempotent_and_token_free(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    database = _database(settings)
+    application = create_app(
+        settings=settings,
+        database=database,
+        telemetry=FakeTelemetry(),  # type: ignore[arg-type]
+        app_metrics=AgentForgeMetrics(CollectorRegistry()),
+    )
+
+    with TestClient(application) as client:
+        page = client.get("/dashboard/campaigns")
+        assert page.status_code == 200
+        assert "Launch a discovery campaign" in page.text
+        assert "unit-platform-token" not in page.text
+
+        form = {
+            "csrf_token": application.state.dashboard_csrf_token,
+            "idempotency_key": "dashboard-unit-launch",
+            "target_alias": "local",
+            "category": "prompt_injection",
+            "subcategory": "direct",
+            "max_attempts": "2",
+            "max_cost_usd": "0.5",
+            "max_duration_seconds": "120",
+            "max_mutations": "1",
+            "no_signal_limit": "2",
+            "priority": "5",
+        }
+        created = client.post(
+            "/dashboard/campaigns",
+            data=form,
+            follow_redirects=False,
+        )
+        duplicate = client.post(
+            "/dashboard/campaigns",
+            data=form,
+            follow_redirects=False,
+        )
+        assert created.status_code == 303
+        assert duplicate.status_code == 303
+        assert duplicate.headers["location"] == created.headers["location"]
+
+        deployed_without_confirmation = client.post(
+            "/dashboard/campaigns",
+            data={
+                **form,
+                "idempotency_key": "dashboard-deployed-without-confirmation",
+                "target_alias": "deployed",
+            },
+        )
+        assert deployed_without_confirmation.status_code == 400
+        assert "require confirmation" in deployed_without_confirmation.text.lower()
+        assert 'value="deployed" selected' in deployed_without_confirmation.text
+
+        invalid_taxonomy = client.post(
+            "/dashboard/campaigns",
+            data={
+                **form,
+                "idempotency_key": "dashboard-invalid-taxonomy",
+                "category": "not_a_real_category",
+                "subcategory": "",
+            },
+        )
+        assert invalid_taxonomy.status_code == 400
+        assert "unknown taxonomy category" in invalid_taxonomy.text
+        assert 'value="not_a_real_category" selected' in invalid_taxonomy.text
+        assert 'value="2"' in invalid_taxonomy.text
+
+        deployed = client.post(
+            "/dashboard/campaigns",
+            data={
+                **form,
+                "idempotency_key": "dashboard-deployed-confirmed",
+                "target_alias": "deployed",
+                "confirm_authorized": "yes",
+            },
+            follow_redirects=False,
+        )
+        assert deployed.status_code == 303
+        assert (
+            client.post(
+                "/dashboard/campaigns",
+                data={**form, "csrf_token": "wrong"},
+            ).status_code
+            == 403
+        )
+
+    with database.session_factory() as session:
+        campaigns = list(session.scalars(select(Campaign).order_by(Campaign.created_at)))
+        assert len(campaigns) == 2
+        assert {item.target_alias for item in campaigns} == {"local", "deployed"}
+        for campaign in campaigns:
+            assert campaign.trigger_type == "dashboard"
+            assert campaign.category_scope == "prompt_injection"
+            assert campaign.subcategory_scope == "direct"
+            assert campaign.max_mutations == 1
+            assert campaign.no_signal_limit == 2
+            assert campaign.priority == 5
 
 
 def test_enabled_worker_is_started_once_and_stopped_with_lifespan(tmp_path: Path) -> None:

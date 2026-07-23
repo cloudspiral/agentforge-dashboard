@@ -77,6 +77,8 @@
     <h2>Stored activity</h2>
     <dl class="summary-list">
       <div><dt>Attempts</dt><dd>{{ activity.attempts }}</dd></div>
+      <div><dt>Agent-generated proposals</dt><dd>{{ activity.proposal_sources.get('agent_generated', 0) + activity.proposal_sources.get('agent_generated_mutation', 0) }}</dd></div>
+      <div><dt>Deterministic fallbacks</dt><dd>{{ activity.proposal_sources.get('deterministic_seed_fallback', 0) }}</dd></div>
       <div><dt>Average attempt latency</dt><dd>{{ '%.1f' | format(activity.average_attempt_latency_ms) }}ms</dd></div>
       <div><dt>Findings</dt><dd>{{ finding_summary.total }}</dd></div>
       <div><dt>Reports</dt><dd>{{ finding_summary.reports }}</dd></div>
@@ -144,10 +146,10 @@
 </section>
 
 <section class="panel">
-  <h2>Category coverage</h2>
+  <h2>Category and target-version resilience</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>Category</th><th>Subcategory</th><th>Version</th><th>Attempts</th><th>Confirmed</th><th>Partial</th></tr></thead>
-    <tbody>{% for row in coverage %}<tr><td>{{ row.category }}</td><td>{{ row.subcategory }}</td><td>{{ row.target_version }}</td><td>{{ row.attempts }}</td><td>{{ row.exploit_confirmed }}</td><td>{{ row.partial_signal }}</td></tr>{% else %}<tr><td colspan="6">Coverage begins with the first completed attempt.</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>Category</th><th>Subcategory</th><th>Version</th><th>Attempts</th><th>Confirmed</th><th>Partial</th><th>Blocked</th><th>Inconclusive</th><th>Secure rate</th><th>Confirmed rate</th></tr></thead>
+    <tbody>{% for row in coverage %}<tr><td>{{ row.category }}</td><td>{{ row.subcategory }}</td><td>{{ row.target_version }}</td><td>{{ row.attempts }}</td><td>{{ row.exploit_confirmed }}</td><td>{{ row.partial_signal }}</td><td>{{ row.attack_blocked }}</td><td>{{ row.inconclusive }}</td><td>{{ '%.0f%%' | format(row.secure_rate * 100) }}</td><td>{{ '%.0f%%' | format(row.confirmed_rate * 100) }}</td></tr>{% else %}<tr><td colspan="10">Coverage begins with the first completed attempt.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% endblock %}
