@@ -17,6 +17,7 @@ from agentforge.contracts.v1 import (
     EstimatedCostClassV1,
     EvidenceKindV1,
     OwaspMappingsV1,
+    PriorAttemptSummaryV1,
     ProposedAttackV1,
     RemainingBudgetAndLimitsV1,
     RequestedActionV1,
@@ -93,6 +94,9 @@ def build_objective(
     remaining_duration_seconds: int,
     max_mutations: int,
     no_signal_limit: int,
+    relevant_prior_attempts: list[PriorAttemptSummaryV1] | None = None,
+    requested_action: RequestedActionV1 = RequestedActionV1.NEW_ATTACK,
+    mutation_source_attempt_id: str | None = None,
 ) -> CampaignObjectiveV1:
     category = next(item for item in taxonomy.categories if item.id == category_id)
     subcategory = next(item for item in category.subcategories if item.id == subcategory_id)
@@ -115,7 +119,7 @@ def build_objective(
             "runner_surface": "authenticated_openemr_ui",
             "persistent_upload_confirmation": False,
         },
-        relevant_prior_attempts=[],
+        relevant_prior_attempts=relevant_prior_attempts or [],
         remaining_budget_and_limits=RemainingBudgetAndLimitsV1(
             remaining_cost_usd=float(max(Decimal("0"), remaining_cost_usd)),
             remaining_attempts=max(0, remaining_attempts),
@@ -126,7 +130,8 @@ def build_objective(
             max_mutations_per_lineage=max_mutations,
             max_consecutive_no_signal=no_signal_limit,
         ),
-        requested_action=RequestedActionV1.NEW_ATTACK,
+        requested_action=requested_action,
+        mutation_source_attempt_id=mutation_source_attempt_id,
     )
 
 
@@ -136,12 +141,21 @@ def validate_objective_choice(
     campaign_id: str,
     target_version: str,
     shortlist: list[tuple[str, str]],
+    allowed_mutation_source_ids: set[str] | None = None,
 ) -> bool:
+    mutation_sources = allowed_mutation_source_ids or set()
+    action_is_allowed = (
+        objective.requested_action == RequestedActionV1.NEW_ATTACK
+        and objective.mutation_source_attempt_id is None
+    ) or (
+        objective.requested_action == RequestedActionV1.MUTATION
+        and objective.mutation_source_attempt_id in mutation_sources
+    )
     return bool(
         objective.campaign_id == campaign_id
         and objective.target_version == target_version
         and (objective.selected_category, objective.selected_subcategory) in shortlist
-        and objective.requested_action == RequestedActionV1.NEW_ATTACK
+        and action_is_allowed
     )
 
 
@@ -232,6 +246,13 @@ def proposal_from_seed(
         flags.append(RiskFlagV1.CROSS_PATIENT_REFERENCE)
     if case.subcategory == "parameter_tampering":
         flags.append(RiskFlagV1.PARAMETER_TAMPERING)
+    if case.subcategory in {"cost_amplification", "infinite_loops", "token_exhaustion"}:
+        flags.append(RiskFlagV1.COST_AMPLIFICATION)
+    if case.category == "identity_role_exploitation":
+        flags.append(RiskFlagV1.PRIVILEGE_BOUNDARY)
+        flags.append(RiskFlagV1.HUMAN_REVIEW_RECOMMENDED)
+    if case.category == "state_corruption":
+        flags.append(RiskFlagV1.HUMAN_REVIEW_RECOMMENDED)
     return ProposedAttackV1(
         schema_version="v1",
         proposal_id=f"proposal-{uuid.uuid4().hex}",

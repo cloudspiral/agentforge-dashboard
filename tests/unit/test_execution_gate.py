@@ -404,6 +404,25 @@ def test_time_budget_and_duplicate_sequence_limits_are_enforced() -> None:
     assert isinstance(repeated, GateRejectionV1)
     assert repeated.code == GateRejectionCodeV1.DUPLICATE_SEQUENCE
 
+    cosmetic_variant = candidate.model_dump(mode="json")
+    cosmetic_variant["proposal_id"] = "proposal-cosmetic-variant"
+    cosmetic_variant["novelty_rationale"] = (
+        "Different prose must not disguise identical executable semantics."
+    )
+    for index, action in enumerate(cosmetic_variant["ordered_actions"]):
+        action["action_id"] = f"cosmetic-{index}"
+        action["description"] = f"Cosmetically renamed step {index}"
+        if action["action_type"] == "send_chat_message":
+            action["conversation_alias"] = "cosmetic-conversation"
+    cosmetic_repeat = validate_attack(
+        ProposedAttackV1.model_validate_json(json.dumps(cosmetic_variant)),
+        profile(),
+        context(attempted_sequence_counts={accepted.sequence_hash: 1}),
+        now=NOW,
+    )
+    assert isinstance(cosmetic_repeat, GateRejectionV1)
+    assert cosmetic_repeat.code == GateRejectionCodeV1.DUPLICATE_SEQUENCE
+
     no_budget = validate_attack(
         candidate,
         profile(),

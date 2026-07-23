@@ -23,6 +23,7 @@ from agentforge.orchestration.execution_gate import (
     EndpointBindingV1,
     EndpointPurposeV1,
     ValidatedAttackV1,
+    proposal_sequence_hash,
 )
 from agentforge.runners.base import RunnerActionRejected, TargetExecutionContext
 from agentforge.runners.composite import CompositeAttackRunner
@@ -171,7 +172,6 @@ def _validated(
                 )
             )
     now = datetime.now(UTC)
-    canonical = json.dumps(attack.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
     return ValidatedAttackV1(
         campaign_id=context.campaign_id,
         proposal=attack,
@@ -180,7 +180,7 @@ def _validated(
         selected_patient_alias=context.selected_patient_alias,
         authorized_endpoint_bindings=list(bindings.values()),
         authorized_fixtures=fixtures,
-        sequence_hash=hashlib.sha256(canonical.encode()).hexdigest(),
+        sequence_hash=proposal_sequence_hash(attack),
         authorized_at=now - timedelta(seconds=1),
         expires_at=expires_at or now + timedelta(minutes=5),
         budget_reservation_id="fixture-reservation",

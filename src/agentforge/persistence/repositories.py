@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -707,11 +708,33 @@ class OperationalRepository:
             if attempt_ids
             else {}
         )
+        agent_runs = list(
+            self.session.scalars(
+                select(AgentRun)
+                .where(AgentRun.campaign_id == campaign_id)
+                .order_by(AgentRun.created_at, AgentRun.id)
+            )
+        )
+        proposal_sources = Counter(attempt.proposal_source for attempt in attempts)
+        objective_sources = Counter(attempt.objective_source for attempt in attempts)
+        proposal_verdict_counts: dict[str, Counter[str]] = {}
+        for attempt in attempts:
+            source_counts = proposal_verdict_counts.setdefault(
+                attempt.proposal_source,
+                Counter(),
+            )
+            source_counts["attempts"] += 1
+            verdict = verdicts.get(attempt.id)
+            source_counts[verdict.verdict if verdict is not None else "no_verdict"] += 1
         return {
             "campaign": campaign,
             "attempts": attempts,
             "events": events,
             "verdicts": verdicts,
+            "agent_runs": agent_runs,
+            "proposal_sources": proposal_sources,
+            "objective_sources": objective_sources,
+            "proposal_verdict_counts": proposal_verdict_counts,
         }
 
     def queue_summary(self, *, stale_after_seconds: int) -> dict[str, Any]:
@@ -810,10 +833,19 @@ class OperationalRepository:
             select(func.avg(AttackAttempt.latency_ms)).where(AttackAttempt.latency_ms.is_not(None))
         )
         total_attempts = self.session.scalar(select(func.count()).select_from(AttackAttempt)) or 0
+        proposal_sources = {
+            source: count
+            for source, count in self.session.execute(
+                select(AttackAttempt.proposal_source, func.count(AttackAttempt.id)).group_by(
+                    AttackAttempt.proposal_source
+                )
+            )
+        }
         return {
             "actual_cost_usd": total_cost,
             "average_attempt_latency_ms": float(average_latency or 0),
             "attempts": total_attempts,
+            "proposal_sources": proposal_sources,
         }
 
     def metrics_snapshot(self, *, stale_after_seconds: int) -> dict[str, Any]:
@@ -956,6 +988,8 @@ def coverage_summary(session: Session) -> list[dict[str, Any]]:
             "partial_signal": row[5],
             "attack_blocked": row[6],
             "inconclusive": row[7],
+            "secure_rate": (row[6] / sum(row[4:8]) if sum(row[4:8]) else 0.0),
+            "confirmed_rate": (row[4] / sum(row[4:8]) if sum(row[4:8]) else 0.0),
         }
         for row in session.execute(statement)
     ]

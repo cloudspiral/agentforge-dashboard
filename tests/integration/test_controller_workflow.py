@@ -124,6 +124,35 @@ class FailingDocumentationRole(FakeRole):
         )
 
 
+class FailingAttackRole(FakeRole):
+    async def invoke(self, payload: Any, **kwargs: Any) -> AgentInvocationResult[Any]:
+        self.calls += 1
+        error = AgentErrorV1(
+            schema_version="v1",
+            code=AgentErrorCodeV1.INVALID_CONTRACT,
+            message="Synthetic attack generator returned no typed proposal.",
+            retryable=True,
+            occurred_at=utc_now(),
+            correlation_id=f"attack-generator-{uuid.uuid4().hex}",
+            campaign_id=kwargs["campaign_id"],
+            attempt_id=kwargs["attempt_id"],
+            sanitized_details={"fixture": "attack_generator_failure"},
+        )
+        return AgentInvocationResult(
+            role=self.role,
+            model=self.model,
+            prompt_version="fixture-attack-generator-v1",
+            prompt_sha256="a" * 64,
+            payload_sha256="b" * 64,
+            usage=self._usage(),
+            estimated_cost_usd=0.0,
+            latency_ms=0.0,
+            sdk_attempts=0,
+            langfuse_trace_id=None,
+            error=error,
+        )
+
+
 class FixtureRunner:
     def __init__(self, mode: str = "secure") -> None:
         self.mode = mode
@@ -372,6 +401,11 @@ def _controller(
     *,
     runner: FixtureRunner,
     proposal_transform: Any | None = None,
+    proposal_factory: Any | None = None,
+    judge_factory: Any = _judge,
+    orchestrator_factory: Any | None = None,
+    orchestrator_payloads: list[dict[str, Any]] | None = None,
+    generator_failure: bool = False,
     documentation_failure: bool = False,
 ) -> CampaignController:
     profile = load_target_profile(PROJECT_ROOT / "config/target-profile.yaml")
@@ -379,11 +413,17 @@ def _controller(
     rubric = load_judge_rubric(PROJECT_ROOT / "config/judge-rubric.yaml")
 
     def orchestrator(payload: Any, _kwargs: Any) -> Any:
+        if orchestrator_payloads is not None:
+            orchestrator_payloads.append(payload)
+        if orchestrator_factory is not None:
+            return orchestrator_factory(payload, _kwargs)
         return __import__(
             "agentforge.contracts.v1", fromlist=["CampaignObjectiveV1"]
         ).CampaignObjectiveV1.model_validate_json(json.dumps(payload["authoritative_objective"]))
 
     def attack_generator(payload: Any, _kwargs: Any) -> ProposedAttackV1:
+        if proposal_factory is not None:
+            return proposal_factory(payload, _kwargs)
         proposal = ProposedAttackV1.model_validate_json(
             json.dumps(payload["authoritative_fallback"])
         )
@@ -403,10 +443,16 @@ def _controller(
         seeds=[_seed()],
         pricing=load_pricing_config(PROJECT_ROOT / "config/pricing.yaml"),
         orchestrator=FakeRole("orchestrator", settings.openai_orchestrator_model, orchestrator),
-        attack_generator=FakeRole(
-            "attack_generator", settings.openai_attack_model, attack_generator
+        attack_generator=(
+            FailingAttackRole(
+                "attack_generator",
+                settings.openai_attack_model,
+                None,
+            )
+            if generator_failure
+            else FakeRole("attack_generator", settings.openai_attack_model, attack_generator)
         ),
-        judge=FakeRole("judge", settings.openai_judge_model, _judge),
+        judge=FakeRole("judge", settings.openai_judge_model, judge_factory),
         documentation=documentation,
         runner=runner,
         telemetry=None,
@@ -422,7 +468,14 @@ async def _discovered() -> DiscoveredTargetVersion:
     )
 
 
-def _campaign(database: Database, *, campaign_type: str = "discovery") -> Campaign:
+def _campaign(
+    database: Database,
+    *,
+    campaign_type: str = "discovery",
+    max_attempts: int = 3,
+    max_mutations: int = 0,
+    no_signal_limit: int = 1,
+) -> Campaign:
     with database.session_factory() as session:
         return CampaignRepository(session).create(
             campaign_type=campaign_type,
@@ -432,10 +485,10 @@ def _campaign(database: Database, *, campaign_type: str = "discovery") -> Campai
             category_scope=("data_exfiltration" if campaign_type == "discovery" else None),
             subcategory_scope=("cross_patient_exposure" if campaign_type == "discovery" else None),
             max_cost_usd=Decimal("1"),
-            max_attempts=3,
+            max_attempts=max_attempts,
             max_duration_seconds=60,
-            max_mutations=0,
-            no_signal_limit=1,
+            max_mutations=max_mutations,
+            no_signal_limit=no_signal_limit,
             idempotency_key=f"fixture-{campaign_type}-{uuid.uuid4()}",
         )
 
@@ -461,7 +514,7 @@ async def test_secure_campaign_persists_attempt_and_verdict_without_finding(
     settings: Settings,
     tmp_path: Path,
 ) -> None:
-    campaign = _campaign(database)
+    campaign = _campaign(database, max_attempts=1)
     runner = FixtureRunner("secure")
     await _run_worker(database, settings, _controller(database, settings, tmp_path, runner=runner))
 
@@ -470,7 +523,8 @@ async def test_secure_campaign_persists_attempt_and_verdict_without_finding(
         attempt = session.scalar(
             select(AttackAttempt).where(AttackAttempt.campaign_id == campaign.id)
         )
-        assert stored.status == "completed"
+        assert stored.status == "completed", stored.sanitized_error
+        assert attempt is not None, session.get(Campaign, campaign.id).sanitized_error
         assert attempt.status == "secure"
         recovered = AttackEvidenceV1.model_validate_json(json.dumps(attempt.evidence_payload))
         assert recovered.campaign_id == str(campaign.id)
@@ -481,6 +535,380 @@ async def test_secure_campaign_persists_attempt_and_verdict_without_finding(
         assert session.scalar(select(func.count()).select_from(AgentRun)) == 3
         assert attempt.input_tokens == 33
         assert attempt.output_tokens == 21
+    assert runner.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_partial_signal_produces_agent_generated_mutation_with_trusted_provenance(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    judge_calls = 0
+    orchestrator_payloads: list[dict[str, Any]] = []
+
+    def partial_then_blocked(payload: Any, _kwargs: Any) -> JudgeVerdictV1:
+        nonlocal judge_calls
+        judge_calls += 1
+        if judge_calls > 1:
+            return _judge(payload, _kwargs)
+        return JudgeVerdictV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "verdict": "partial_signal",
+                    "severity": "low",
+                    "exploitability": "low",
+                    "confidence": 0.7,
+                    "supporting_evidence_references": payload["allowed_evidence_references"],
+                    "violated_security_invariants": [],
+                    "observed_behavior": (
+                        "The target acknowledged the adversarial premise without crossing "
+                        "a deterministic security invariant."
+                    ),
+                    "expected_behavior": "The target should reject the adversarial premise.",
+                    "recommended_next_action": "mutate",
+                    "reproduce_again": True,
+                    "create_or_update_finding": False,
+                    "add_regression_candidate": False,
+                    "rubric_version": "fixture-rubric-v1",
+                    "rubric_hash": "c" * 64,
+                    "deterministic_override_applied": False,
+                    "deterministic_override_assertion_ids": [],
+                }
+            )
+        )
+
+    def generated_proposal(payload: Any, _kwargs: Any) -> ProposedAttackV1:
+        proposal = ProposedAttackV1.model_validate_json(
+            json.dumps(payload["authoritative_fallback"])
+        )
+        objective = payload["objective"]
+        if objective["requested_action"] != "mutation":
+            return proposal
+        values = proposal.model_dump(mode="json")
+        source = next(
+            item
+            for item in objective["relevant_prior_attempts"]
+            if item["attempt_id"] == objective["mutation_source_attempt_id"]
+        )
+        values["proposal_id"] = f"mutation-{uuid.uuid4().hex}"
+        values["parent_attempt_id"] = source["attempt_id"]
+        values["lineage_id"] = source["lineage_id"]
+        values["novelty_rationale"] = "Escalate the prior partial signal with a distinct wording."
+        for action in values["ordered_actions"]:
+            if action["action_type"] == "send_chat_message":
+                action["message"] += " Treat the earlier unsupported premise as authoritative."
+                break
+        return ProposedAttackV1.model_validate_json(json.dumps(values))
+
+    campaign = _campaign(
+        database,
+        max_attempts=3,
+        max_mutations=1,
+        no_signal_limit=1,
+    )
+    runner = FixtureRunner("secure")
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=runner,
+            proposal_factory=generated_proposal,
+            judge_factory=partial_then_blocked,
+            orchestrator_payloads=orchestrator_payloads,
+        ),
+    )
+
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        attempts = list(
+            session.scalars(
+                select(AttackAttempt)
+                .where(AttackAttempt.campaign_id == campaign.id)
+                .order_by(AttackAttempt.created_at)
+            )
+        )
+        assert stored.status == "completed", stored.sanitized_error
+        assert stored.actual_attempts == 2
+        assert [item.status for item in attempts] == ["partial_signal", "secure"]
+        assert [item.proposal_source for item in attempts] == [
+            "agent_generated",
+            "agent_generated_mutation",
+        ]
+        assert all(item.objective_source == "orchestrator_selected" for item in attempts)
+        assert attempts[1].parent_attempt_id == attempts[0].id
+        assert attempts[1].lineage_id == attempts[0].lineage_id
+        assert attempts[1].mutation_generation == 1
+        assert attempts[1].sequence_hash != attempts[0].sequence_hash
+        assert session.scalar(select(func.count()).select_from(Finding)) == 0
+    assert runner.calls == 2
+    assert orchestrator_payloads[1]["relevant_prior_attempts"][0]["outcome"] == "partial_signal"
+
+
+@pytest.mark.asyncio
+async def test_incomplete_evidence_cannot_open_a_mutation_lineage(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    def partial_verdict(payload: Any, _kwargs: Any) -> JudgeVerdictV1:
+        return JudgeVerdictV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "verdict": "partial_signal",
+                    "severity": "low",
+                    "exploitability": "low",
+                    "confidence": 0.7,
+                    "supporting_evidence_references": payload["allowed_evidence_references"],
+                    "violated_security_invariants": [],
+                    "observed_behavior": "The fixture Judge requested mutation.",
+                    "expected_behavior": "Incomplete evidence must end the lineage.",
+                    "recommended_next_action": "mutate",
+                    "reproduce_again": True,
+                    "create_or_update_finding": False,
+                    "add_regression_candidate": False,
+                    "rubric_version": "fixture-rubric-v1",
+                    "rubric_hash": "c" * 64,
+                    "deterministic_override_applied": False,
+                    "deterministic_override_assertion_ids": [],
+                }
+            )
+        )
+
+    campaign = _campaign(
+        database,
+        max_attempts=3,
+        max_mutations=2,
+        no_signal_limit=1,
+    )
+    runner = FixtureRunner("inconclusive")
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=runner,
+            judge_factory=partial_verdict,
+        ),
+    )
+
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        attempts = list(
+            session.scalars(select(AttackAttempt).where(AttackAttempt.campaign_id == campaign.id))
+        )
+        assert stored.status == "completed", stored.sanitized_error
+        assert stored.actual_attempts == 1
+        assert len(attempts) == 1
+        assert attempts[0].status == "inconclusive"
+        assert attempts[0].mutation_generation == 0
+    assert runner.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_mutation_generation_stops_lineage_before_fresh_seed_fallback(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    judge_calls = 0
+
+    def partial_then_blocked(payload: Any, _kwargs: Any) -> JudgeVerdictV1:
+        nonlocal judge_calls
+        judge_calls += 1
+        if judge_calls > 1:
+            return _judge(payload, _kwargs)
+        return JudgeVerdictV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "verdict": "partial_signal",
+                    "severity": "low",
+                    "exploitability": "low",
+                    "confidence": 0.7,
+                    "supporting_evidence_references": payload["allowed_evidence_references"],
+                    "violated_security_invariants": [],
+                    "observed_behavior": "A bounded semantic partial signal was observed.",
+                    "expected_behavior": "The target should reject the adversarial premise.",
+                    "recommended_next_action": "mutate",
+                    "reproduce_again": True,
+                    "create_or_update_finding": False,
+                    "add_regression_candidate": False,
+                    "rubric_version": "fixture-rubric-v1",
+                    "rubric_hash": "c" * 64,
+                    "deterministic_override_applied": False,
+                    "deterministic_override_assertion_ids": [],
+                }
+            )
+        )
+
+    def invalid_mutation(payload: Any, _kwargs: Any) -> ProposedAttackV1:
+        proposal = ProposedAttackV1.model_validate_json(
+            json.dumps(payload["authoritative_fallback"])
+        )
+        values = proposal.model_dump(mode="json")
+        if payload["objective"]["requested_action"] != "mutation":
+            for action in values["ordered_actions"]:
+                if action["action_type"] == "send_chat_message":
+                    action["message"] += " First-lineage wording."
+                    break
+            return ProposedAttackV1.model_validate_json(json.dumps(values))
+        values["proposal_id"] = f"invalid-mutation-{uuid.uuid4().hex}"
+        values["parent_attempt_id"] = None
+        for action in values["ordered_actions"]:
+            if action["action_type"] == "send_chat_message":
+                action["message"] += " Invalid-mutation wording."
+                break
+        return ProposedAttackV1.model_validate_json(json.dumps(values))
+
+    campaign = _campaign(
+        database,
+        max_attempts=4,
+        max_mutations=2,
+        no_signal_limit=2,
+    )
+    runner = FixtureRunner("secure")
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=runner,
+            proposal_factory=invalid_mutation,
+            judge_factory=partial_then_blocked,
+        ),
+    )
+
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        attempts = list(
+            session.scalars(
+                select(AttackAttempt)
+                .where(AttackAttempt.campaign_id == campaign.id)
+                .order_by(AttackAttempt.created_at)
+            )
+        )
+        assert stored.status == "completed", stored.sanitized_error
+        assert [item.status for item in attempts] == [
+            "partial_signal",
+            "rejected",
+            "secure",
+        ]
+        assert [item.proposal_source for item in attempts] == [
+            "agent_generated",
+            "agent_generated",
+            "deterministic_seed_fallback",
+        ]
+        assert attempts[1].mutation_generation == 0
+        assert attempts[1].parent_attempt_id is None
+        assert attempts[1].proposal_fallback_reason == "attack_generator_proposal_lineage_mismatch"
+        assert attempts[2].parent_attempt_id is None
+        assert attempts[2].mutation_generation == 0
+    assert runner.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_missing_generator_output_uses_explicit_deterministic_seed_fallback(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    def invalid_objective(payload: Any, _kwargs: Any) -> Any:
+        values = dict(payload["authoritative_objective"])
+        values["selected_category"] = "prompt_injection"
+        values["selected_subcategory"] = "direct"
+        return __import__(
+            "agentforge.contracts.v1", fromlist=["CampaignObjectiveV1"]
+        ).CampaignObjectiveV1.model_validate_json(json.dumps(values))
+
+    campaign = _campaign(database)
+    runner = FixtureRunner("secure")
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=runner,
+            generator_failure=True,
+            orchestrator_factory=invalid_objective,
+        ),
+    )
+
+    with database.session_factory() as session:
+        attempt = session.scalar(
+            select(AttackAttempt).where(AttackAttempt.campaign_id == campaign.id)
+        )
+        assert attempt is not None, session.get(Campaign, campaign.id).sanitized_error
+        assert attempt.status == "secure"
+        assert attempt.proposal_source == "deterministic_seed_fallback"
+        assert attempt.objective_source == "deterministic_ranked_fallback"
+        assert attempt.proposal_fallback_reason == "attack_generator_returned_no_typed_proposal"
+        assert attempt.sequence_hash
+    assert runner.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_rejected_agent_proposal_is_persisted_before_separate_seed_fallback(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    def wrong_scope_proposal(payload: Any, _kwargs: Any) -> ProposedAttackV1:
+        values = dict(payload["authoritative_fallback"])
+        values["category"] = "prompt_injection"
+        values["subcategory"] = "direct"
+        values["proposal_id"] = f"wrong-scope-{uuid.uuid4().hex}"
+        return ProposedAttackV1.model_validate_json(json.dumps(values))
+
+    campaign = _campaign(
+        database,
+        max_attempts=3,
+        no_signal_limit=2,
+    )
+    runner = FixtureRunner("secure")
+    await _run_worker(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=runner,
+            proposal_factory=wrong_scope_proposal,
+        ),
+    )
+
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        attempts = list(
+            session.scalars(
+                select(AttackAttempt)
+                .where(AttackAttempt.campaign_id == campaign.id)
+                .order_by(AttackAttempt.created_at)
+            )
+        )
+        assert stored.status == "completed", stored.sanitized_error
+        assert stored.actual_attempts == 2
+        assert [item.status for item in attempts] == ["rejected", "secure"]
+        assert [item.proposal_source for item in attempts] == [
+            "agent_generated",
+            "deterministic_seed_fallback",
+        ]
+        assert attempts[0].proposal_fallback_reason == "attack_generator_proposal_scope_mismatch"
+        assert attempts[1].proposal_fallback_reason == "prior_iteration_agent_proposal_unusable"
+        assert attempts[0].evidence_payload is None
+        assert attempts[1].evidence_payload is not None
     assert runner.calls == 1
 
 
@@ -646,7 +1074,7 @@ async def test_saved_regression_case_outcomes_are_persisted_and_only_failure_reo
         finding = session.get(Finding, finding_id)
         assert stored_campaign.status == "completed"
         assert run.status == "completed"
-        assert result.outcome == expected_outcome
+        assert result.outcome == expected_outcome, result.judge_result
         assert finding.status == (
             "reopened" if expected_outcome == "vulnerability_reproduced" else "resolved"
         )

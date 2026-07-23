@@ -30,6 +30,7 @@ class OrchestratorAgent(BaseAgentAdapter[CampaignObjectiveV1]):
             prompt_path=prompt_path,
             max_output_tokens=900,
             max_turns=1,
+            strict_json_schema=False,
             settings=configured,
             **adapter_options,
         )

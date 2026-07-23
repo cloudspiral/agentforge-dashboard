@@ -13,6 +13,7 @@ import re
 import uuid
 from collections import Counter
 from contextlib import nullcontext
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -36,7 +37,10 @@ from agentforge.contracts.v1 import (
     JudgeVerdictKindV1,
     JudgeVerdictV1,
     MinimalEvidencePackageV1,
+    PriorAttemptOutcomeV1,
+    PriorAttemptSummaryV1,
     ProposedAttackV1,
+    RequestedActionV1,
     SeverityV1,
 )
 from agentforge.contracts.v1.common import utc_now
@@ -68,6 +72,7 @@ from agentforge.orchestration.execution_gate import (
     GateLimitsV1,
     GateRejectionV1,
     ValidatedAttackV1,
+    proposal_sequence_hash,
     validate_attack,
 )
 from agentforge.orchestration.objectives import (
@@ -114,6 +119,22 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _HEX_SHA = re.compile(r"^[0-9a-fA-F]{7,64}$")
 _CONTROLLER_PROMPT_VERSION = "controller-policy-v1-2026-07-21"
 _MAX_INPUT_PER_CALL = 8_000
+
+PROPOSAL_AGENT_GENERATED = "agent_generated"
+PROPOSAL_AGENT_GENERATED_MUTATION = "agent_generated_mutation"
+PROPOSAL_DETERMINISTIC_FALLBACK = "deterministic_seed_fallback"
+OBJECTIVE_ORCHESTRATOR_SELECTED = "orchestrator_selected"
+OBJECTIVE_DETERMINISTIC_FALLBACK = "deterministic_ranked_fallback"
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryIterationResult:
+    terminal_result: CampaignProcessResult | None = None
+    prior_attempt: PriorAttemptSummaryV1 | None = None
+    mutation_candidate: bool = False
+    deterministic_fallback_candidate: bool = False
+    no_signal: bool = False
+    gate_rejected: bool = False
 
 
 class VersionDiscoverer(Protocol):
@@ -423,7 +444,7 @@ class CampaignController:
                     max_cost_usd=campaign.max_cost_usd,
                     max_calls=max(5, campaign.max_attempts * 5),
                     max_input_tokens=max(40_000, campaign.max_attempts * 40_000),
-                    max_output_tokens=max(5_000, campaign.max_attempts * 6_000),
+                    max_output_tokens=max(6_100, campaign.max_attempts * 6_100),
                 ),
                 actual=usage(campaign_row),
             ),
@@ -517,15 +538,29 @@ class CampaignController:
         objective: CampaignObjectiveV1,
         proposal: ProposedAttackV1,
         prompt_version: str,
+        proposal_source: str,
+        objective_source: str,
+        fallback_reason: str | None,
+        mutation_generation: int,
+        sequence_hash: str,
     ) -> AttackAttempt:
+        parent_attempt_id: uuid.UUID | None = None
+        if proposal.parent_attempt_id is not None:
+            try:
+                parent_attempt_id = uuid.UUID(proposal.parent_attempt_id)
+            except ValueError:
+                parent_attempt_id = None
         return AttackAttempt(
             id=attempt_id,
             campaign_id=campaign.id,
             attack_family_id=proposal.attack_family_id,
-            parent_attempt_id=(
-                uuid.UUID(proposal.parent_attempt_id) if proposal.parent_attempt_id else None
-            ),
-            mutation_generation=0,
+            lineage_id=proposal.lineage_id,
+            parent_attempt_id=parent_attempt_id,
+            mutation_generation=mutation_generation,
+            proposal_source=proposal_source,
+            objective_source=objective_source,
+            proposal_fallback_reason=fallback_reason,
+            sequence_hash=sequence_hash,
             category=proposal.category,
             subcategory=proposal.subcategory,
             owasp_mappings=objective.owasp_mappings.model_dump(mode="json"),
@@ -574,7 +609,7 @@ class CampaignController:
                 max_total_message_bytes=20_000,
                 max_upload_count=0,
                 max_total_upload_bytes=0,
-                max_sequence_repetitions=2,
+                max_sequence_repetitions=1,
             ),
             campaign_started_at=campaign.started_at,
             campaign_deadline_at=deadline,
@@ -791,11 +826,172 @@ class CampaignController:
             description="Frozen sanitized evidence package persisted for this attempt.",
         )
 
+    @staticmethod
+    def _prior_attempt_summary(
+        attempt: AttackAttempt,
+        *,
+        outcome: PriorAttemptOutcomeV1,
+        summary: str,
+    ) -> PriorAttemptSummaryV1:
+        if attempt.sequence_hash is None:
+            raise ValueError("completed discovery attempt is missing its sequence hash")
+        return PriorAttemptSummaryV1(
+            attempt_id=str(attempt.id),
+            attack_family_id=attempt.attack_family_id,
+            lineage_id=attempt.lineage_id or attempt.attack_family_id,
+            mutation_generation=attempt.mutation_generation,
+            outcome=outcome,
+            summary=summary[:1_000],
+            sequence_hash=attempt.sequence_hash,
+            evidence_hash=attempt.evidence_hash,
+        )
+
+    @staticmethod
+    def _action_stop_reason(
+        session: Any,
+        campaign: Campaign,
+        deadline: datetime,
+    ) -> str | None:
+        session.refresh(campaign)
+        if campaign.cancellation_requested:
+            return "cancellation_requested"
+        if utc_now() >= deadline:
+            return "campaign_deadline_exceeded"
+        return None
+
     async def _process_discovery(
         self,
         campaign_id: uuid.UUID,
         target_alias: ResolvedTargetAlias,
     ) -> CampaignProcessResult:
+        prior_attempts: list[PriorAttemptSummaryV1] = []
+        consecutive_no_signal = 0
+        current_lineage_mutations = 0
+        mutation_source: PriorAttemptSummaryV1 | None = None
+        force_deterministic_fallback = False
+        had_target_result = False
+        last_gate_rejection: dict[str, Any] | None = None
+        with self.database.session_factory() as session:
+            sequence_counts: Counter[str] = Counter(
+                value
+                for value in session.scalars(
+                    select(AttackAttempt.sequence_hash)
+                    .where(AttackAttempt.campaign_id == campaign_id)
+                    .where(AttackAttempt.sequence_hash.is_not(None))
+                )
+                if value is not None
+            )
+
+        while True:
+            with self.database.session_factory() as session:
+                campaign = session.get(Campaign, campaign_id)
+                if campaign is None:
+                    return CampaignProcessResult(
+                        status="failed",
+                        sanitized_error={
+                            "code": "campaign_not_found",
+                            "message": "campaign not found",
+                        },
+                    )
+                if campaign.started_at is None:
+                    return CampaignProcessResult(
+                        status="failed",
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": "campaign_not_started",
+                            "message": "campaign has no controller start time",
+                        },
+                    )
+                budget_state = self._initial_budget_state(session, campaign)
+                stop = evaluate_stopping(
+                    CampaignStopStateV1(
+                        attempts_completed=campaign.actual_attempts,
+                        max_attempts=campaign.max_attempts,
+                        campaign_started_at=campaign.started_at,
+                        evaluated_at=utc_now(),
+                        max_duration_seconds=campaign.max_duration_seconds,
+                        consecutive_no_signal_attempts=consecutive_no_signal,
+                        max_consecutive_no_signal_attempts=campaign.no_signal_limit,
+                        current_lineage_mutations=current_lineage_mutations,
+                        max_mutations_per_lineage=campaign.max_mutations,
+                        cancellation_requested=campaign.cancellation_requested,
+                        cleanup_failed=False,
+                        budget_state=budget_state,
+                    )
+                )
+                if stop.stop_current_lineage:
+                    mutation_source = None
+                    current_lineage_mutations = 0
+                if stop.stop_campaign:
+                    if campaign.cancellation_requested:
+                        return CampaignProcessResult(
+                            status="cancelled",
+                            actual_cost_usd=campaign.actual_cost_usd,
+                            sanitized_error={
+                                "code": "cancellation_requested",
+                                "message": "campaign cancellation was requested",
+                            },
+                        )
+                    if had_target_result:
+                        return CampaignProcessResult(
+                            status="completed",
+                            actual_cost_usd=campaign.actual_cost_usd,
+                        )
+                    return CampaignProcessResult(
+                        status="failed",
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error=last_gate_rejection
+                        or {
+                            "code": "campaign_stopped",
+                            "message": "campaign limits prevented an executable attempt",
+                            "reasons": [reason.value for reason in stop.reasons],
+                        },
+                    )
+
+            iteration = await self._process_discovery_iteration(
+                campaign_id,
+                target_alias,
+                prior_attempts=prior_attempts,
+                mutation_source=mutation_source,
+                force_deterministic_fallback=force_deterministic_fallback,
+                current_lineage_mutations=current_lineage_mutations,
+                consecutive_no_signal=consecutive_no_signal,
+                sequence_counts=sequence_counts,
+            )
+            if iteration.terminal_result is not None:
+                return iteration.terminal_result
+            if iteration.prior_attempt is not None:
+                prior_attempts.append(iteration.prior_attempt)
+                prior_attempts = prior_attempts[-20:]
+                sequence_counts[iteration.prior_attempt.sequence_hash] += 1
+            if iteration.gate_rejected:
+                last_gate_rejection = {
+                    "code": "execution_gate_rejected",
+                    "message": "the deterministic execution gate rejected every proposal",
+                }
+            else:
+                had_target_result = had_target_result or iteration.prior_attempt is not None
+            consecutive_no_signal = consecutive_no_signal + 1 if iteration.no_signal else 0
+            force_deterministic_fallback = iteration.deterministic_fallback_candidate
+            if iteration.mutation_candidate and iteration.prior_attempt is not None:
+                mutation_source = iteration.prior_attempt
+                current_lineage_mutations = iteration.prior_attempt.mutation_generation
+            else:
+                mutation_source = None
+                current_lineage_mutations = 0
+
+    async def _process_discovery_iteration(
+        self,
+        campaign_id: uuid.UUID,
+        target_alias: ResolvedTargetAlias,
+        *,
+        prior_attempts: list[PriorAttemptSummaryV1],
+        mutation_source: PriorAttemptSummaryV1 | None,
+        force_deterministic_fallback: bool,
+        current_lineage_mutations: int,
+        consecutive_no_signal: int,
+        sequence_counts: Counter[str],
+    ) -> DiscoveryIterationResult:
         attempt_id = uuid.uuid4()
         agent_results: list[AgentInvocationResult[Any]] = []
         with self.database.session_factory() as session:
@@ -803,38 +999,17 @@ class CampaignController:
                 select(Campaign).where(Campaign.id == campaign_id).with_for_update()
             )
             if campaign is None:
-                return CampaignProcessResult(
-                    status="failed",
-                    sanitized_error={"code": "campaign_not_found", "message": "campaign not found"},
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status="failed",
+                        sanitized_error={
+                            "code": "campaign_not_found",
+                            "message": "campaign not found",
+                        },
+                    )
                 )
             deadline = campaign.started_at + timedelta(seconds=campaign.max_duration_seconds)
             budget_state = self._initial_budget_state(session, campaign)
-            stop = evaluate_stopping(
-                CampaignStopStateV1(
-                    attempts_completed=campaign.actual_attempts,
-                    max_attempts=campaign.max_attempts,
-                    campaign_started_at=campaign.started_at,
-                    evaluated_at=utc_now(),
-                    max_duration_seconds=campaign.max_duration_seconds,
-                    consecutive_no_signal_attempts=0,
-                    max_consecutive_no_signal_attempts=campaign.no_signal_limit,
-                    current_lineage_mutations=0,
-                    max_mutations_per_lineage=campaign.max_mutations,
-                    cancellation_requested=campaign.cancellation_requested,
-                    cleanup_failed=False,
-                    budget_state=budget_state,
-                )
-            )
-            if stop.stop_campaign:
-                return CampaignProcessResult(
-                    status="cancelled" if campaign.cancellation_requested else "failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error={
-                        "code": "campaign_stopped",
-                        "message": "campaign limits prevent another attempt",
-                        "reasons": [reason.value for reason in stop.reasons],
-                    },
-                )
 
             reservation_result = reserve_worst_case(
                 budget_state,
@@ -845,14 +1020,16 @@ class CampaignController:
                 reserved_at=utc_now(),
             )
             if not reservation_result.approved or reservation_result.reservation is None:
-                return CampaignProcessResult(
-                    status="failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error={
-                        "code": "budget_reservation_rejected",
-                        "message": "campaign budget could not reserve bounded role usage",
-                        "breaches": [item.value for item in reservation_result.breaches],
-                    },
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status="failed",
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": "budget_reservation_rejected",
+                            "message": "campaign budget could not reserve bounded role usage",
+                            "breaches": [item.value for item in reservation_result.breaches],
+                        },
+                    )
                 )
             budget_state = reservation_result.state
             reservation = reservation_result.reservation
@@ -874,15 +1051,39 @@ class CampaignController:
                 coverage_counts=coverage,
             )
             if not shortlist:
-                return CampaignProcessResult(
-                    status="failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error={
-                        "code": "empty_objective_scope",
-                        "message": "campaign scope does not match the loaded taxonomy",
-                    },
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status="failed",
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": "empty_objective_scope",
+                            "message": "campaign scope does not match the loaded taxonomy",
+                        },
+                    )
                 )
-            category, subcategory = shortlist[0]
+            source_attempt = (
+                session.get(AttackAttempt, uuid.UUID(mutation_source.attempt_id))
+                if mutation_source is not None
+                else None
+            )
+            mutation_is_allowed = bool(
+                source_attempt is not None
+                and source_attempt.mutation_generation < campaign.max_mutations
+                and (source_attempt.category, source_attempt.subcategory) in shortlist
+            )
+            category, subcategory = (
+                (source_attempt.category, source_attempt.subcategory)
+                if mutation_is_allowed and source_attempt is not None
+                else shortlist[0]
+            )
+            fallback_action = (
+                RequestedActionV1.MUTATION if mutation_is_allowed else RequestedActionV1.NEW_ATTACK
+            )
+            fallback_mutation_source_id = (
+                str(source_attempt.id)
+                if fallback_action == RequestedActionV1.MUTATION and source_attempt is not None
+                else None
+            )
             fallback_objective = build_objective(
                 campaign_id=str(campaign.id),
                 campaign_type=campaign.campaign_type,
@@ -895,10 +1096,38 @@ class CampaignController:
                 remaining_duration_seconds=max(0, int((deadline - utc_now()).total_seconds())),
                 max_mutations=campaign.max_mutations,
                 no_signal_limit=campaign.no_signal_limit,
+                relevant_prior_attempts=prior_attempts,
+                requested_action=fallback_action,
+                mutation_source_attempt_id=fallback_mutation_source_id,
             )
+            stop_reason = self._action_stop_reason(session, campaign, deadline)
+            if stop_reason is not None:
+                release_reservation(budget_state, reservation)
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status=(
+                            "cancelled" if stop_reason == "cancellation_requested" else "failed"
+                        ),
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": stop_reason,
+                            "message": "campaign stopped before Orchestrator invocation",
+                        },
+                    )
+                )
             orchestrator_result = await self.orchestrator.invoke(
                 {
                     "deterministic_shortlist": shortlist,
+                    "coverage_counts": {
+                        f"{item_category}/{item_subcategory}": count
+                        for (item_category, item_subcategory), count in coverage.items()
+                    },
+                    "relevant_prior_attempts": [
+                        item.model_dump(mode="json") for item in prior_attempts
+                    ],
+                    "remaining_limits": fallback_objective.remaining_budget_and_limits.model_dump(
+                        mode="json"
+                    ),
                     "authoritative_objective": fallback_objective.model_dump(mode="json"),
                 },
                 campaign_id=str(campaign.id),
@@ -908,13 +1137,54 @@ class CampaignController:
             )
             agent_results.append(orchestrator_result)
             objective = fallback_objective
+            objective_source = OBJECTIVE_DETERMINISTIC_FALLBACK
+            allowed_mutation_ids = (
+                {str(source_attempt.id)}
+                if mutation_is_allowed and source_attempt is not None
+                else set()
+            )
             if orchestrator_result.output is not None and validate_objective_choice(
                 orchestrator_result.output,
                 campaign_id=str(campaign.id),
                 target_version=campaign.target_version,
                 shortlist=shortlist,
+                allowed_mutation_source_ids=allowed_mutation_ids,
             ):
-                objective = orchestrator_result.output
+                selected = orchestrator_result.output
+                selected_source = (
+                    session.get(AttackAttempt, uuid.UUID(selected.mutation_source_attempt_id))
+                    if selected.mutation_source_attempt_id is not None
+                    else None
+                )
+                mutation_matches_lineage = bool(
+                    selected.requested_action != RequestedActionV1.MUTATION
+                    or (
+                        selected_source is not None
+                        and selected_source.category == selected.selected_category
+                        and selected_source.subcategory == selected.selected_subcategory
+                        and selected_source.mutation_generation < campaign.max_mutations
+                    )
+                )
+                if mutation_matches_lineage:
+                    objective = build_objective(
+                        campaign_id=str(campaign.id),
+                        campaign_type=campaign.campaign_type,
+                        target_version=campaign.target_version,
+                        taxonomy=self.taxonomy,
+                        category_id=selected.selected_category,
+                        subcategory_id=selected.selected_subcategory,
+                        remaining_cost_usd=campaign.max_cost_usd - campaign.actual_cost_usd,
+                        remaining_attempts=campaign.max_attempts - campaign.actual_attempts,
+                        remaining_duration_seconds=max(
+                            0, int((deadline - utc_now()).total_seconds())
+                        ),
+                        max_mutations=campaign.max_mutations,
+                        no_signal_limit=campaign.no_signal_limit,
+                        relevant_prior_attempts=prior_attempts,
+                        requested_action=selected.requested_action,
+                        mutation_source_attempt_id=selected.mutation_source_attempt_id,
+                    )
+                    objective_source = OBJECTIVE_ORCHESTRATOR_SELECTED
 
             seed = choose_seed_case(
                 self.seeds,
@@ -922,7 +1192,175 @@ class CampaignController:
                 subcategory=objective.selected_subcategory,
                 attempt_index=campaign.actual_attempts,
             )
-            if seed is None:
+            fallback_proposal = (
+                proposal_from_seed(
+                    seed,
+                    campaign_id=str(campaign.id),
+                    taxonomy=self.taxonomy,
+                    profile=self.loaded_profile.profile,
+                )
+                if seed is not None
+                else None
+            )
+            generator_result: AgentInvocationResult[Any] | None = None
+            if not force_deterministic_fallback:
+                stop_reason = self._action_stop_reason(session, campaign, deadline)
+                if stop_reason is not None:
+                    self._persist_agent_runs(
+                        session,
+                        campaign_id=campaign.id,
+                        attempt_id=None,
+                        finding_id=None,
+                        results=agent_results,
+                    )
+                    self._reconcile_budget(
+                        campaign=campaign,
+                        budget_state=budget_state,
+                        reservation=reservation,
+                        results=agent_results,
+                    )
+                    session.commit()
+                    return DiscoveryIterationResult(
+                        terminal_result=CampaignProcessResult(
+                            status=(
+                                "cancelled" if stop_reason == "cancellation_requested" else "failed"
+                            ),
+                            actual_cost_usd=campaign.actual_cost_usd,
+                            sanitized_error={
+                                "code": stop_reason,
+                                "message": "campaign stopped before Attack Generator invocation",
+                            },
+                        )
+                    )
+                generator_result = await self.attack_generator.invoke(
+                    {
+                        "objective": objective.model_dump(mode="json"),
+                        "authoritative_fallback": (
+                            fallback_proposal.model_dump(mode="json")
+                            if fallback_proposal is not None
+                            else None
+                        ),
+                    },
+                    campaign_id=str(campaign.id),
+                    attempt_id=str(attempt_id),
+                    category=objective.selected_category,
+                    target_version=campaign.target_version,
+                )
+                agent_results.append(generator_result)
+            generated = generator_result.output if generator_result is not None else None
+            fallback_reason: str | None = None
+            proposal_source: str
+            expected_parent = objective.mutation_source_attempt_id
+            source_for_mutation = (
+                session.get(AttackAttempt, uuid.UUID(expected_parent))
+                if expected_parent is not None
+                else None
+            )
+            generated_scope_matches = bool(
+                generated is not None
+                and generated.category == objective.selected_category
+                and generated.subcategory == objective.selected_subcategory
+            )
+            generated_lineage_matches = bool(
+                generated is not None
+                and (
+                    (
+                        objective.requested_action == RequestedActionV1.NEW_ATTACK
+                        and generated.parent_attempt_id is None
+                    )
+                    or (
+                        objective.requested_action == RequestedActionV1.MUTATION
+                        and source_for_mutation is not None
+                        and generated.parent_attempt_id == expected_parent
+                        and generated.lineage_id
+                        == (source_for_mutation.lineage_id or source_for_mutation.attack_family_id)
+                    )
+                )
+            )
+            if force_deterministic_fallback and fallback_proposal is not None:
+                proposal = fallback_proposal
+                proposal_source = PROPOSAL_DETERMINISTIC_FALLBACK
+                fallback_reason = "prior_iteration_agent_proposal_unusable"
+            elif generated_scope_matches and generated_lineage_matches and generated is not None:
+                proposal = generated
+                proposal_source = (
+                    PROPOSAL_AGENT_GENERATED_MUTATION
+                    if objective.requested_action == RequestedActionV1.MUTATION
+                    else PROPOSAL_AGENT_GENERATED
+                )
+            elif generated is not None:
+                rejection_reason = (
+                    "attack_generator_proposal_scope_mismatch"
+                    if not generated_scope_matches
+                    else "attack_generator_proposal_lineage_mismatch"
+                )
+                rejected = self._new_attempt(
+                    attempt_id=attempt_id,
+                    campaign=campaign,
+                    objective=objective,
+                    proposal=generated,
+                    prompt_version=(
+                        generator_result.prompt_version
+                        if generator_result is not None
+                        else _CONTROLLER_PROMPT_VERSION
+                    ),
+                    proposal_source=PROPOSAL_AGENT_GENERATED,
+                    objective_source=objective_source,
+                    fallback_reason=rejection_reason,
+                    mutation_generation=0,
+                    sequence_hash=proposal_sequence_hash(generated),
+                )
+                rejected.status = "rejected"
+                rejected.completed_at = utc_now()
+                rejected.evidence_summary = {
+                    "controller_rejection": {
+                        "code": rejection_reason,
+                        "message": (
+                            "Agent-generated proposal did not match the controller-assigned "
+                            "objective or mutation lineage."
+                        ),
+                    }
+                }
+                session.add(rejected)
+                session.flush()
+                self._persist_agent_runs(
+                    session,
+                    campaign_id=campaign.id,
+                    attempt_id=rejected.id,
+                    finding_id=None,
+                    results=agent_results,
+                )
+                self._update_attempt_usage(rejected, agent_results)
+                campaign.actual_attempts += 1
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return DiscoveryIterationResult(
+                    prior_attempt=self._prior_attempt_summary(
+                        rejected,
+                        outcome=PriorAttemptOutcomeV1.ERROR,
+                        summary=f"Controller rejected proposal: {rejection_reason}.",
+                    ),
+                    deterministic_fallback_candidate=fallback_proposal is not None,
+                    no_signal=True,
+                )
+            elif (
+                objective.requested_action == RequestedActionV1.NEW_ATTACK
+                and fallback_proposal is not None
+            ):
+                proposal = fallback_proposal
+                proposal_source = PROPOSAL_DETERMINISTIC_FALLBACK
+                if generated is None:
+                    fallback_reason = "attack_generator_returned_no_typed_proposal"
+                elif not generated_scope_matches:
+                    fallback_reason = "attack_generator_proposal_scope_mismatch"
+                else:
+                    fallback_reason = "attack_generator_proposal_lineage_mismatch"
+            else:
                 self._persist_agent_runs(
                     session,
                     campaign_id=campaign.id,
@@ -937,44 +1375,34 @@ class CampaignController:
                     results=agent_results,
                 )
                 session.commit()
-                return CampaignProcessResult(
-                    status="failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error={
-                        "code": "no_approved_fixture_proposal",
-                        "message": "no approved deterministic proposal matches the objective",
-                    },
+                return DiscoveryIterationResult(
+                    deterministic_fallback_candidate=fallback_proposal is not None,
+                    no_signal=True,
                 )
-            fallback_proposal = proposal_from_seed(
-                seed,
-                campaign_id=str(campaign.id),
-                taxonomy=self.taxonomy,
-                profile=self.loaded_profile.profile,
+
+            mutation_generation = (
+                source_for_mutation.mutation_generation + 1
+                if proposal_source == PROPOSAL_AGENT_GENERATED_MUTATION
+                and source_for_mutation is not None
+                else 0
             )
-            generator_result = await self.attack_generator.invoke(
-                {
-                    "objective": objective.model_dump(mode="json"),
-                    "authoritative_fallback": fallback_proposal.model_dump(mode="json"),
-                },
-                campaign_id=str(campaign.id),
-                attempt_id=str(attempt_id),
-                category=objective.selected_category,
-                target_version=campaign.target_version,
-            )
-            agent_results.append(generator_result)
-            proposal = generator_result.output or fallback_proposal
-            if (
-                proposal.category != objective.selected_category
-                or proposal.subcategory != objective.selected_subcategory
-            ):
-                proposal = fallback_proposal
+            sequence_hash = proposal_sequence_hash(proposal)
 
             attempt = self._new_attempt(
                 attempt_id=attempt_id,
                 campaign=campaign,
                 objective=objective,
                 proposal=proposal,
-                prompt_version=generator_result.prompt_version,
+                prompt_version=(
+                    generator_result.prompt_version
+                    if generator_result is not None
+                    else _CONTROLLER_PROMPT_VERSION
+                ),
+                proposal_source=proposal_source,
+                objective_source=objective_source,
+                fallback_reason=fallback_reason,
+                mutation_generation=mutation_generation,
+                sequence_hash=sequence_hash,
             )
             session.add(attempt)
             session.flush()
@@ -994,7 +1422,7 @@ class CampaignController:
                 budget_state=budget_state,
                 reservation=reservation,
                 deadline=deadline,
-                sequence_counts=Counter(),
+                sequence_counts=sequence_counts,
             )
             validated = validate_attack(
                 proposal,
@@ -1014,23 +1442,45 @@ class CampaignController:
                     results=agent_results,
                 )
                 session.commit()
-                return CampaignProcessResult(
-                    status="failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error={
-                        "code": "execution_gate_rejected",
-                        "message": "the deterministic execution gate rejected the proposal",
-                        "gate_code": validated.code.value,
-                        "retryable": validated.retryable_after_revision,
-                    },
+                rejection_error = {
+                    "code": "execution_gate_rejected",
+                    "message": "the deterministic execution gate rejected the proposal",
+                    "gate_code": validated.code.value,
+                    "retryable": validated.retryable_after_revision,
+                }
+                prior = self._prior_attempt_summary(
+                    attempt,
+                    outcome=PriorAttemptOutcomeV1.ERROR,
+                    summary=f"Execution gate rejected proposal: {validated.code.value}.",
+                )
+                if not validated.retryable_after_revision:
+                    return DiscoveryIterationResult(
+                        terminal_result=CampaignProcessResult(
+                            status="failed",
+                            actual_cost_usd=campaign.actual_cost_usd,
+                            sanitized_error=rejection_error,
+                        ),
+                        prior_attempt=prior,
+                        no_signal=True,
+                        gate_rejected=True,
+                    )
+                return DiscoveryIterationResult(
+                    prior_attempt=prior,
+                    deterministic_fallback_candidate=(
+                        proposal_source != PROPOSAL_DETERMINISTIC_FALLBACK
+                        and fallback_proposal is not None
+                    ),
+                    no_signal=True,
+                    gate_rejected=True,
                 )
 
             attempt.status = "executing"
             session.commit()
-            session.refresh(campaign)
-            if campaign.cancellation_requested or utc_now() >= deadline:
-                attempt.status = "cancelled" if campaign.cancellation_requested else "error"
+            stop_reason = self._action_stop_reason(session, campaign, deadline)
+            if stop_reason is not None:
+                attempt.status = "cancelled" if stop_reason == "cancellation_requested" else "error"
                 attempt.completed_at = utc_now()
+                campaign.actual_attempts += 1
                 self._reconcile_budget(
                     campaign=campaign,
                     budget_state=budget_state,
@@ -1038,17 +1488,57 @@ class CampaignController:
                     results=agent_results,
                 )
                 session.commit()
-                return CampaignProcessResult(
-                    status="cancelled" if campaign.cancellation_requested else "failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error={
-                        "code": (
-                            "cancellation_requested"
-                            if campaign.cancellation_requested
-                            else "campaign_deadline_exceeded"
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status=(
+                            "cancelled" if stop_reason == "cancellation_requested" else "failed"
                         ),
-                        "message": "campaign stopped before target execution",
-                    },
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": stop_reason,
+                            "message": "campaign stopped before target execution",
+                        },
+                    ),
+                    prior_attempt=self._prior_attempt_summary(
+                        attempt,
+                        outcome=PriorAttemptOutcomeV1.ERROR,
+                        summary="Campaign stopped before target execution.",
+                    ),
+                    no_signal=True,
+                )
+            discovered = await self.version_discoverer(self.loaded_profile, target_alias)
+            if discovered.version != campaign.target_version:
+                attempt.status = "error"
+                attempt.completed_at = utc_now()
+                attempt.evidence_summary = {
+                    "target_version_drift": {
+                        "expected": campaign.target_version,
+                        "observed": discovered.version,
+                    }
+                }
+                campaign.actual_attempts += 1
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status="failed",
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": "target_version_drift",
+                            "message": "target version changed before attack execution",
+                        },
+                    ),
+                    prior_attempt=self._prior_attempt_summary(
+                        attempt,
+                        outcome=PriorAttemptOutcomeV1.ERROR,
+                        summary="Target version changed before execution.",
+                    ),
+                    no_signal=True,
                 )
             execution_context = self._execution_context(
                 campaign=campaign,
@@ -1086,6 +1576,38 @@ class CampaignController:
             attempt.status = "evaluating"
             session.commit()
 
+            stop_reason = self._action_stop_reason(session, campaign, deadline)
+            if stop_reason is not None:
+                attempt.status = (
+                    "cancelled" if stop_reason == "cancellation_requested" else "inconclusive"
+                )
+                attempt.completed_at = utc_now()
+                campaign.actual_attempts += 1
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status=(
+                            "cancelled" if stop_reason == "cancellation_requested" else "failed"
+                        ),
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": stop_reason,
+                            "message": "campaign stopped before Judge invocation",
+                        },
+                    ),
+                    prior_attempt=self._prior_attempt_summary(
+                        attempt,
+                        outcome=PriorAttemptOutcomeV1.INCONCLUSIVE,
+                        summary="Evidence was collected but the Judge was not invoked.",
+                    ),
+                    no_signal=True,
+                )
             verdict, judge_result = await self._judge_evidence(
                 campaign=campaign,
                 attempt_id=attempt.id,
@@ -1109,7 +1631,27 @@ class CampaignController:
             campaign.actual_attempts += 1
 
             if not deterministic.proven_violation_ids:
-                attempt.status = "secure" if deterministic.secure_pass_eligible else "inconclusive"
+                if (
+                    verdict.verdict == JudgeVerdictKindV1.PARTIAL_SIGNAL
+                    and deterministic.secure_pass_eligible
+                ):
+                    attempt.status = "partial_signal"
+                    outcome = PriorAttemptOutcomeV1.PARTIAL_SIGNAL
+                    mutation_candidate = True
+                    no_signal = False
+                elif (
+                    verdict.verdict == JudgeVerdictKindV1.ATTACK_BLOCKED
+                    and deterministic.secure_pass_eligible
+                ):
+                    attempt.status = "secure"
+                    outcome = PriorAttemptOutcomeV1.ATTACK_BLOCKED
+                    mutation_candidate = False
+                    no_signal = True
+                else:
+                    attempt.status = "inconclusive"
+                    outcome = PriorAttemptOutcomeV1.INCONCLUSIVE
+                    mutation_candidate = False
+                    no_signal = True
                 self._reconcile_budget(
                     campaign=campaign,
                     budget_state=budget_state,
@@ -1117,9 +1659,14 @@ class CampaignController:
                     results=agent_results,
                 )
                 session.commit()
-                return CampaignProcessResult(
-                    status="completed",
-                    actual_cost_usd=campaign.actual_cost_usd,
+                return DiscoveryIterationResult(
+                    prior_attempt=self._prior_attempt_summary(
+                        attempt,
+                        outcome=outcome,
+                        summary=verdict.observed_behavior,
+                    ),
+                    mutation_candidate=mutation_candidate,
+                    no_signal=no_signal,
                 )
 
             fingerprint = _finding_fingerprint(proposal, deterministic)
@@ -1181,6 +1728,33 @@ class CampaignController:
                 existing_validation_history=[],
                 required_report_status=snapshot.status,
             )
+            stop_reason = self._action_stop_reason(session, campaign, deadline)
+            if stop_reason is not None:
+                attempt.status = "documentation_failed"
+                self._reconcile_budget(
+                    campaign=campaign,
+                    budget_state=budget_state,
+                    reservation=reservation,
+                    results=agent_results,
+                )
+                session.commit()
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status=(
+                            "cancelled" if stop_reason == "cancellation_requested" else "failed"
+                        ),
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": stop_reason,
+                            "message": "confirmed evidence could not be documented before stop",
+                        },
+                    ),
+                    prior_attempt=self._prior_attempt_summary(
+                        attempt,
+                        outcome=PriorAttemptOutcomeV1.EXPLOIT_CONFIRMED,
+                        summary=verdict.observed_behavior,
+                    ),
+                )
             try:
                 documentation_result = await self.documentation.invoke(
                     documentation_request,
@@ -1198,16 +1772,23 @@ class CampaignController:
                     results=agent_results,
                 )
                 session.commit()
-                return CampaignProcessResult(
-                    status="failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error=redact(
-                        {
-                            "code": "documentation_failed",
-                            "type": type(exc).__name__,
-                            "message": "documentation role failed before producing a report",
-                            "retryable": True,
-                        }
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status="failed",
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error=redact(
+                            {
+                                "code": "documentation_failed",
+                                "type": type(exc).__name__,
+                                "message": "documentation role failed before producing a report",
+                                "retryable": True,
+                            }
+                        ),
+                    ),
+                    prior_attempt=self._prior_attempt_summary(
+                        attempt,
+                        outcome=PriorAttemptOutcomeV1.EXPLOIT_CONFIRMED,
+                        summary=verdict.observed_behavior,
                     ),
                 )
             agent_results.append(documentation_result)
@@ -1228,14 +1809,21 @@ class CampaignController:
                     results=agent_results,
                 )
                 session.commit()
-                return CampaignProcessResult(
-                    status="failed",
-                    actual_cost_usd=campaign.actual_cost_usd,
-                    sanitized_error={
-                        "code": "documentation_failed",
-                        "message": "documentation role returned a typed failure",
-                        "retryable": True,
-                    },
+                return DiscoveryIterationResult(
+                    terminal_result=CampaignProcessResult(
+                        status="failed",
+                        actual_cost_usd=campaign.actual_cost_usd,
+                        sanitized_error={
+                            "code": "documentation_failed",
+                            "message": "documentation role returned a typed failure",
+                            "retryable": True,
+                        },
+                    ),
+                    prior_attempt=self._prior_attempt_summary(
+                        attempt,
+                        outcome=PriorAttemptOutcomeV1.EXPLOIT_CONFIRMED,
+                        summary=verdict.observed_behavior,
+                    ),
                 )
 
             report_output = documentation_result.output
@@ -1296,9 +1884,16 @@ class CampaignController:
                 results=agent_results,
             )
             session.commit()
-            return CampaignProcessResult(
-                status="completed",
-                actual_cost_usd=campaign.actual_cost_usd,
+            return DiscoveryIterationResult(
+                terminal_result=CampaignProcessResult(
+                    status="completed",
+                    actual_cost_usd=campaign.actual_cost_usd,
+                ),
+                prior_attempt=self._prior_attempt_summary(
+                    attempt,
+                    outcome=PriorAttemptOutcomeV1.EXPLOIT_CONFIRMED,
+                    summary=verdict.observed_behavior,
+                ),
             )
 
     @staticmethod
@@ -1454,6 +2049,11 @@ class CampaignController:
                         objective=objective,
                         proposal=proposal,
                         prompt_version=_CONTROLLER_PROMPT_VERSION,
+                        proposal_source=PROPOSAL_DETERMINISTIC_FALLBACK,
+                        objective_source=OBJECTIVE_DETERMINISTIC_FALLBACK,
+                        fallback_reason="saved_regression_replay",
+                        mutation_generation=0,
+                        sequence_hash=proposal_sequence_hash(proposal),
                     )
                     attempt.status = "executing"
                     session.add(attempt)

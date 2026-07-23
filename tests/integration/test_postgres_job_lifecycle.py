@@ -32,7 +32,7 @@ from agentforge.persistence.models import Campaign, CampaignEvent
 from agentforge.persistence.repositories import CampaignRepository
 
 TEST_DATABASE_URL = os.getenv("AGENTFORGE_TEST_DATABASE_URL")
-MIGRATION_HEAD = "c71d9e5a4b20"
+MIGRATION_HEAD = "f43a8d7e91b2"
 API_TOKEN = uuid.UUID(int=0).hex
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 

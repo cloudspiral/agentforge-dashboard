@@ -234,9 +234,22 @@ def _reject(
     )
 
 
-def _sequence_hash(proposal: ProposedAttackV1) -> str:
+def proposal_sequence_hash(proposal: ProposedAttackV1) -> str:
+    """Hash executable semantics, excluding model-controlled cosmetic identifiers."""
+
+    actions = []
+    for action in proposal.ordered_actions:
+        payload = action.model_dump(mode="json")
+        payload.pop("action_id", None)
+        payload.pop("description", None)
+        payload.pop("conversation_alias", None)
+        actions.append(payload)
     canonical = json.dumps(
-        proposal.model_dump(mode="json"),
+        {
+            "category": proposal.category,
+            "subcategory": proposal.subcategory,
+            "ordered_actions": actions,
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -830,7 +843,7 @@ def validate_attack(
                 retryable=False,
             )
 
-    sequence_hash = _sequence_hash(proposal)
+    sequence_hash = proposal_sequence_hash(proposal)
     if (
         context.attempted_sequence_counts.get(sequence_hash, 0)
         >= context.limits.max_sequence_repetitions
@@ -867,5 +880,6 @@ __all__ = [
     "GateRejectionCodeV1",
     "GateRejectionV1",
     "ValidatedAttackV1",
+    "proposal_sequence_hash",
     "validate_attack",
 ]

@@ -35,6 +35,7 @@ from agentforge.contracts.v1.evidence import (
 from agentforge.orchestration.execution_gate import (
     EndpointPurposeV1,
     ValidatedAttackV1,
+    proposal_sequence_hash,
 )
 from agentforge.security.allowlist import require_allowed_url
 from agentforge.target.fixtures import ApprovedFixtureAuthorization
@@ -219,12 +220,7 @@ def require_validated_attack(
         raise RunnerActionRejected("approved synthetic patient does not match execution context")
 
     proposal = attack.proposal
-    canonical = json.dumps(
-        proposal.model_dump(mode="json"),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    if hashlib.sha256(canonical.encode()).hexdigest() != attack.sequence_hash:
+    if proposal_sequence_hash(proposal) != attack.sequence_hash:
         raise RunnerActionRejected("approved attack sequence hash does not match its proposal")
 
     selected_actions = [

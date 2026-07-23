@@ -106,10 +106,17 @@ class JudgeRubricV1(CatalogModel):
     categories: dict[str, JudgeCategoryV1]
 
     @model_validator(mode="after")
-    def initial_categories_are_covered(self) -> JudgeRubricV1:
-        required = {"prompt_injection", "data_exfiltration", "tool_misuse"}
+    def all_taxonomy_categories_are_covered(self) -> JudgeRubricV1:
+        required = {
+            "prompt_injection",
+            "data_exfiltration",
+            "state_corruption",
+            "tool_misuse",
+            "denial_of_service",
+            "identity_role_exploitation",
+        }
         if set(self.categories) != required:
-            raise ValueError("Judge rubric must cover exactly the initial three categories")
+            raise ValueError("Judge rubric must cover all six taxonomy categories")
         return self
 
 
@@ -186,7 +193,14 @@ class SeedCaseV1(CatalogModel):
     schema_version: Literal["1.0"]
     id: Identifier
     name: BoundedText
-    category: Literal["prompt_injection", "data_exfiltration", "tool_misuse"]
+    category: Literal[
+        "prompt_injection",
+        "data_exfiltration",
+        "state_corruption",
+        "tool_misuse",
+        "denial_of_service",
+        "identity_role_exploitation",
+    ]
     subcategory: Identifier
     owasp_web: list[str] = Field(min_length=1)
     owasp_llm: list[str] = Field(min_length=1)
@@ -326,7 +340,7 @@ def load_seed_cases(directory: Path) -> list[SeedCaseV1]:
         raise ValueError("seed case IDs must be unique")
     counts = Counter(case.category for case in cases)
     required = {"prompt_injection", "data_exfiltration", "tool_misuse"}
-    if set(counts) != required or any(counts[category] < 2 for category in required):
+    if not required.issubset(counts) or any(counts[category] < 2 for category in required):
         raise ValueError("seed suite requires at least two cases in each initial category")
     return cases
 

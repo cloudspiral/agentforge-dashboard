@@ -127,10 +127,19 @@ class AttackAttempt(TimestampMixin, Base):
         ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True
     )
     attack_family_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    lineage_id: Mapped[str | None] = mapped_column(String(255))
     parent_attempt_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("attack_attempts.id", ondelete="SET NULL")
     )
     mutation_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    proposal_source: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="legacy_unknown"
+    )
+    objective_source: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="legacy_unknown"
+    )
+    proposal_fallback_reason: Mapped[str | None] = mapped_column(String(255))
+    sequence_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
     owasp_mappings: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)

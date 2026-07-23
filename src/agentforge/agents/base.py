@@ -25,6 +25,7 @@ from uuid import UUID, uuid4
 import yaml
 from agents import (
     Agent,
+    AgentOutputSchema,
     ModelRetrySettings,
     ModelSettings,
     RunConfig,
@@ -313,6 +314,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         base_backoff_seconds: float = DEFAULT_BASE_BACKOFF_SECONDS,
         max_backoff_seconds: float = DEFAULT_MAX_BACKOFF_SECONDS,
         max_input_characters: int = DEFAULT_MAX_INPUT_CHARACTERS,
+        strict_json_schema: bool = True,
     ) -> None:
         if not _SAFE_IDENTIFIER.fullmatch(role):
             raise ValueError("agent role must be a safe identifier")
@@ -331,6 +333,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         self.model = model
         self.max_output_tokens = max_output_tokens
         self.max_turns = max_turns
+        self.strict_json_schema = strict_json_schema
         self.prompt = load_versioned_prompt(prompt_path)
         self.settings = settings or get_settings()
         self.pricing = pricing or PricingCatalog.from_yaml(self.settings.pricing_path)
@@ -627,9 +630,11 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "provider": "openai"},
             )
-        except Exception:
+        except Exception as exc:
             # No exception text crosses the boundary: provider/HTTP messages can
-            # contain request excerpts, headers, or schema content.
+            # contain request excerpts, headers, or schema content. The exception
+            # class is safe diagnostic metadata and lets operators distinguish
+            # local adapter defects from provider transport failures.
             return self._failure(
                 code=AgentErrorCodeV1.UNEXPECTED_INTERNAL_ERROR,
                 message="The agent role failed before producing a validated result.",
@@ -642,7 +647,11 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 payload_sha256=prepared.sha256,
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
-                details={"agent_role": self.role, "provider": "openai"},
+                details={
+                    "agent_role": self.role,
+                    "provider": "openai",
+                    "exception_type": type(exc).__name__,
+                },
             )
 
         try:
@@ -708,7 +717,10 @@ class BaseAgentAdapter[OutputT: BaseModel]:
             instructions=self.prompt.content,
             model=model,
             model_settings=settings,
-            output_type=self.output_type,
+            output_type=AgentOutputSchema(
+                self.output_type,
+                strict_json_schema=self.strict_json_schema,
+            ),
             tools=[],
             handoffs=[],
             mcp_servers=[],

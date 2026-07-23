@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 import pytest
-from agents import Agent, RunConfig
+from agents import Agent, AgentOutputSchema, RunConfig
 from agents.exceptions import ModelBehaviorError, ModelRefusalError
 from agents.usage import Usage
 from openai import APIStatusError
@@ -136,12 +136,47 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    ("agent_type", "output_type", "model", "max_tokens"),
+    (
+        "agent_type",
+        "output_type",
+        "model",
+        "max_tokens",
+        "prompt_version",
+        "strict_json_schema",
+    ),
     [
-        (OrchestratorAgent, CampaignObjectiveV1, "gpt-5.6-terra", 900),
-        (AttackGeneratorAgent, ProposedAttackV1, "gpt-5.6-terra", 1200),
-        (JudgeAgent, JudgeVerdictV1, "gpt-5.6-terra", 1000),
-        (DocumentationAgent, VulnerabilityReportV1, "gpt-5.6-luna", 1800),
+        (
+            OrchestratorAgent,
+            CampaignObjectiveV1,
+            "gpt-5.6-terra",
+            900,
+            "orchestrator-v2-2026-07-23",
+            False,
+        ),
+        (
+            AttackGeneratorAgent,
+            ProposedAttackV1,
+            "gpt-5.6-terra",
+            1200,
+            "attack-generator-v2-2026-07-23",
+            False,
+        ),
+        (
+            JudgeAgent,
+            JudgeVerdictV1,
+            "gpt-5.6-terra",
+            1000,
+            "judge-v1-2026-07-21",
+            True,
+        ),
+        (
+            DocumentationAgent,
+            VulnerabilityReportV1,
+            "gpt-5.6-luna",
+            1800,
+            "documentation-v1-2026-07-21",
+            False,
+        ),
     ],
 )
 @pytest.mark.asyncio
@@ -150,6 +185,8 @@ async def test_roles_use_one_turn_typed_agents_without_tools_or_handoffs(
     output_type: type[Any],
     model: str,
     max_tokens: int,
+    prompt_version: str,
+    strict_json_schema: bool,
 ) -> None:
     expected = _output(output_type)
     runner = FakeRunner(_usage_result(expected))
@@ -164,14 +201,16 @@ async def test_roles_use_one_turn_typed_agents_without_tools_or_handoffs(
     assert outcome.succeeded is True
     assert outcome.output is expected
     assert outcome.model == model
-    assert outcome.prompt_version.endswith("v1-2026-07-21")
+    assert outcome.prompt_version == prompt_version
     assert len(outcome.prompt_sha256) == 64
     assert outcome.sdk_attempts == 1
 
     call = runner.calls[0]
     assert call.max_turns == 1
     assert call.agent.model == model
-    assert call.agent.output_type is output_type
+    assert isinstance(call.agent.output_type, AgentOutputSchema)
+    assert call.agent.output_type.output_type is output_type
+    assert call.agent.output_type.is_strict_json_schema() is strict_json_schema
     assert call.agent.tools == []
     assert call.agent.handoffs == []
     assert call.agent.mcp_servers == []
@@ -379,6 +418,23 @@ async def test_invalid_fake_runner_output_is_a_nonretryable_contract_failure() -
     assert outcome.error.code == AgentErrorCodeV1.INVALID_CONTRACT
     assert outcome.error.retryable is False
     assert len(runner.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_unexpected_sdk_failure_records_only_the_safe_exception_type() -> None:
+    runner = FakeRunner(RuntimeError("private provider payload must not cross the boundary"))
+    adapter = AttackGeneratorAgent(**_agent_options(runner))
+
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.error is not None
+    assert outcome.error.code == AgentErrorCodeV1.UNEXPECTED_INTERNAL_ERROR
+    assert outcome.error.sanitized_details["exception_type"] == "RuntimeError"
+    assert "private provider payload" not in json.dumps(outcome.error.model_dump(mode="json"))
 
 
 @pytest.mark.asyncio
