@@ -72,14 +72,19 @@ and a database reset makes surviving exports untrusted archives.
 
 The fixed YAML harness may compute deterministic assertions for a selected case.
 Those assertions stay outside discovery evidence, are not sent to the Judge, cannot
-override its verdict, and cannot create a discovery Finding.
+override its verdict, and cannot themselves create or suppress a Finding. Raw seed
+evidence receives an independent Judge verdict; a Judge-confirmed seed uses the same
+semantic Finding-promotion path as agent-generated discovery.
 
 ## Finding and documentation boundary
 
-One `exploit_confirmed` verdict creates one Finding for that attempt. The controller
-does not reproduce, deduplicate, score, or reinterpret the issue. It mechanically
-invokes the Documentation Agent and then creates a regression case from the saved
-sequence and Judge context.
+Every `exploit_confirmed` verdict enters mechanical semantic promotion without a
+reproduction gate or deterministic reinterpretation. The promotion service derives a
+fingerprint from the Judge finding key, taxonomy scope, and violated invariants. A new
+fingerprint creates one pending-review Finding, invokes the Documentation Agent, and
+creates a regression case from the saved sequence and Judge context. Rediscovery
+appends an immutable observation and validation history to the existing Finding
+instead of manufacturing a duplicate.
 
 Documentation output must validate against its typed contract. The controller
 mechanically replaces its transcript with the committed source-evidence transcript,

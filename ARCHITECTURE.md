@@ -1,17 +1,59 @@
 # AgentForge architecture
 
-## Design rule
+## Executive summary
 
-AgentForge separates **semantic security judgment** from **mechanical control**.
+AgentForge is an evidence-first adversarial security platform for an authorized,
+synthetic Clinical Co-Pilot. It gives an application-security team two complementary
+ways to evaluate a stateful, tool-using AI system. Discovery campaigns let model
+agents select and generate bounded attacks across the configured taxonomy, while
+fixed-case evaluations replay explicitly chosen YAML scenarios with deterministic
+case assertions. Both lanes use the same authorized runners, typed evidence contract,
+independent Judge verdict, durable PostgreSQL records, and semantic Finding-promotion
+service. Fixed assertions describe only whether a case's narrow expectations were
+met; they never determine or override the security verdict.
 
-Agents decide what to explore, which surface and technique to use, what exact attack
-to try, what the observed behavior means, and how to document a confirmed exploit.
-Deterministic code validates authorization and contract shape, expands a model-chosen
-fuzz plan reproducibly, runs the approved action, constructs typed transport, persists
-immutable evidence, and enforces campaign limits.
+The architecture's central rule is that semantic reasoning and mechanical authority
+are separate. The Orchestrator chooses whether to explore a new objective, mutate a
+Judge-identified partial signal, or stop. The Attack Generator creates the exact
+ordered scenario or bounded fuzz strategy. The Judge is the only component that
+classifies executed evidence as `exploit_confirmed`, `partial_signal`,
+`attack_blocked`, or `inconclusive`. The Documentation Agent drafts a report for a
+newly confirmed semantic Finding. None of these agents receives credentials or direct
+browser, network, filesystem, database, shell, publication, or target-modification
+authority.
 
-No deterministic evaluator can create, replace, upgrade, or downgrade a discovery
-verdict.
+Deterministic code owns the controls that must not depend on model judgment. An
+authenticated operator creates a campaign with target, scope, attempt, duration, and
+cost limits. The controller supplies neutral coverage and capability facts to the
+agents, validates their typed outputs, and sends an immutable proposed sequence
+through the execution gate. That gate resolves server-owned target, patient,
+identity, endpoint, fixture, and operation bindings and rejects arbitrary URLs,
+secrets, persistent actions, duplicate sequences, and unsupported payloads. Only a
+`ValidatedAttackV1` reaches a Playwright or HTTP runner.
+
+The runner constructs `AttackEvidenceV1` directly from the observed execution,
+including ordered actions, transcript, tool calls, HTTP metadata, side effects,
+errors, timestamps, and target version. The controller verifies its canonical hash
+and 5 MiB bound, commits the full payload to PostgreSQL, and only then derives an
+export or invokes the Judge. A runner crash is an operational failure with no verdict;
+partial or error-bearing evidence successfully returned by the runner is preserved
+and judged unchanged. PostgreSQL is authoritative, while JSON, Markdown, Langfuse,
+and metrics are derived or supplemental views that cannot change platform state.
+
+A new Judge-confirmed semantic fingerprint creates one pending-review Finding, one
+canonical report, and one saved regression case. Rediscovery appends an immutable
+observation instead of creating a duplicate. Regression runs replay the saved
+sequence against an exact target version and conservatively project only valid Judge
+outcomes. A secure pass requires consistent blocking evidence on a changed version;
+same-version, incomplete, mixed, or failed runs remain inconclusive or error.
+
+The platform is deliberately bounded rather than autonomous. Transactional queue
+claiming, cancellation, stale recovery, idempotency, cost controls, and evidence
+persistence make long-running work reliable, but uncertain external effects are
+never retried as though they were exactly-once. Humans authorize targets and
+credentials, review Findings, judge clinical impact, approve remediation and residual
+risk, and control disclosure. AgentForge automates exploration and evidence handling
+without granting a stochastic model security authority.
 
 ## System map
 
