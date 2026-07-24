@@ -1233,6 +1233,12 @@ async def test_saved_regression_requires_two_judge_blocked_changed_version_repla
     settings: Settings,
     tmp_path: Path,
 ) -> None:
+    regression_escalations: list[bool] = []
+
+    def regression_judge(_payload: Any, kwargs: Any) -> JudgeVerdictV1:
+        regression_escalations.append(kwargs["escalate_to_sol"])
+        return _verdict("attack_blocked")
+
     _campaign(database)
     await _run(
         database,
@@ -1259,6 +1265,7 @@ async def test_saved_regression_requires_two_judge_blocked_changed_version_repla
             database,
             settings,
             tmp_path,
+            judge_factory=regression_judge,
             version_discoverer=_discover_changed,
         ),
     )
@@ -1283,6 +1290,7 @@ async def test_saved_regression_requires_two_judge_blocked_changed_version_repla
         assert all(attempt.proposal_source == "fixed_regression_case" for attempt in attempts)
         assert all(attempt.state == "completed" for attempt in attempts)
         assert session.scalar(select(func.count()).select_from(RegressionReplay)) == 2
+        assert regression_escalations == [True, True]
 
 
 @pytest.mark.asyncio

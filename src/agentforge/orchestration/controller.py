@@ -1078,7 +1078,7 @@ class CampaignController:
             correlation_id=f"judge-{attempt.id}",
             category=proposal.category,
             target_version=evidence.target_version,
-            escalate_to_sol=False,
+            escalate_to_sol=regression_case is not None,
         )
         if result.output is None:
             return None, result, payload

@@ -397,8 +397,13 @@ class BaseAgentAdapter[OutputT: BaseModel]:
     def maximum_invocation_cost_usd(self) -> float:
         """Worst-case configured cost reserved before a live provider call."""
 
+        return self.maximum_invocation_cost_for_model(self.model)
+
+    def maximum_invocation_cost_for_model(self, model: str) -> float:
+        """Return the conservative reservation for an explicitly selected model."""
+
         return self.pricing.maximum_invocation_cost(
-            self.model,
+            model,
             max_input_characters=self._max_input_characters,
             max_output_tokens=self.max_output_tokens,
             max_turns=self.max_turns,
