@@ -38,6 +38,15 @@ class JudgeAgent(BaseAgentAdapter[JudgeVerdictV1]):
             **adapter_options,
         )
 
+    @property
+    def maximum_invocation_cost_usd(self) -> float:
+        """Reserve for the more expensive of routine and escalated Judge routes."""
+
+        return max(
+            super().maximum_invocation_cost_usd,
+            self.maximum_invocation_cost_for_model(self.escalation_model),
+        )
+
     async def run(
         self,
         payload: BaseModel | Mapping[str, Any],

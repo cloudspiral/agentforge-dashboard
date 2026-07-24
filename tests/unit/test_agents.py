@@ -635,6 +635,20 @@ def test_adapter_exposes_conservative_pre_call_budget_reservation() -> None:
     )
 
 
+def test_judge_budget_reservation_covers_the_escalation_model() -> None:
+    judge = JudgeAgent(
+        **_agent_options(
+            FakeRunner(),
+            settings=_settings(),
+        )
+    )
+
+    assert judge.maximum_invocation_cost_usd == judge.maximum_invocation_cost_for_model(
+        judge.escalation_model
+    )
+    assert judge.maximum_invocation_cost_usd > judge.maximum_invocation_cost_for_model(judge.model)
+
+
 @pytest.mark.asyncio
 async def test_unpriced_model_is_rejected_before_any_live_call() -> None:
     runner = FakeRunner()
