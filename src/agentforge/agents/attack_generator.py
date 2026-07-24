@@ -28,7 +28,7 @@ class AttackGeneratorAgent(BaseAgentAdapter[ProposedAttackV1]):
             output_type=ProposedAttackV1,
             model=configured.openai_attack_model,
             prompt_path=prompt_path,
-            max_output_tokens=1200,
+            max_output_tokens=2400,
             max_turns=1,
             strict_json_schema=False,
             settings=configured,

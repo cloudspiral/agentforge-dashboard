@@ -157,8 +157,8 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             AttackGeneratorAgent,
             ProposedAttackV1,
             "gpt-5.6-terra",
-            1200,
-            "attack-generator-v4-2026-07-24",
+            2400,
+            "attack-generator-v5-2026-07-24",
             False,
         ),
         (
@@ -401,6 +401,39 @@ async def test_contract_refusal_and_nonretryable_http_errors_are_not_retried(
     assert outcome.sdk_attempts == 1
     assert len(runner.calls) == 1
     assert "private" not in outcome.error.message
+    assert outcome.error.sanitized_details["cost_basis"] == (
+        "provider_usage_unavailable_conservative_estimate"
+    )
+    assert outcome.usage.tokens.calls == 1
+    assert outcome.usage.tokens.output_tokens == 2400
+    assert outcome.estimated_cost_usd > 0
+
+
+@pytest.mark.asyncio
+async def test_model_behavior_failure_recovers_provider_usage_without_raw_output() -> None:
+    usage = Usage(requests=1, input_tokens=180, output_tokens=72)
+    failure = ModelBehaviorError("private malformed structured output")
+    failure.run_data = SimpleNamespace(context_wrapper=SimpleNamespace(usage=usage))
+    runner = FakeRunner(failure)
+    adapter = AttackGeneratorAgent(**_agent_options(runner))
+
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.error is not None
+    assert outcome.error.code == AgentErrorCodeV1.INVALID_CONTRACT
+    assert outcome.error.sanitized_details["cost_basis"] == "provider_reported"
+    assert outcome.usage.tokens.input_tokens == 180
+    assert outcome.usage.tokens.output_tokens == 72
+    assert outcome.usage.tokens.calls == 1
+    assert outcome.estimated_cost_usd == adapter.pricing.estimate_cost(
+        outcome.model,
+        outcome.usage,
+    )
+    assert "private malformed" not in json.dumps(outcome.error.model_dump(mode="json"))
 
 
 @pytest.mark.asyncio
@@ -418,6 +451,10 @@ async def test_invalid_fake_runner_output_is_a_nonretryable_contract_failure() -
     assert outcome.error.code == AgentErrorCodeV1.INVALID_CONTRACT
     assert outcome.error.retryable is False
     assert len(runner.calls) == 1
+    assert outcome.error.sanitized_details["cost_basis"] == (
+        "provider_usage_unavailable_conservative_estimate"
+    )
+    assert outcome.estimated_cost_usd > 0
 
 
 @pytest.mark.asyncio

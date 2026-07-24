@@ -23,7 +23,6 @@ from agentforge.contracts.v1 import (
     AgentErrorCodeV1,
     AgentErrorV1,
     AttackEvidenceV1,
-    FuzzPlanV2,
     JudgeVerdictV1,
     OrchestratorDecisionV2,
     ProposedAttackV1,
@@ -738,19 +737,14 @@ async def test_confirmed_fuzz_variant_runs_three_bounded_minimizations_and_versi
     def fuzz_attack(payload: dict[str, Any], _kwargs: Any) -> ProposedAttackV1:
         objective = payload["objective"]
         actions = _actions("Bounded fuzz baseline " + ("x" * 256))
-        plan = FuzzPlanV2.model_validate_json(
-            json.dumps(
-                {
-                    "schema_version": "v2",
-                    "base_sequence": actions,
-                    "mutation_point_action_id": "a3",
-                    "operator_ids": ["append_fragment"],
-                    "corpus_ids": ["text.long_bounded"],
-                    "rng_seed": 99,
-                    "max_variants": 1,
-                }
-            )
-        )
+        plan = {
+            "schema_version": "v2",
+            "mutation_point_action_id": "a3",
+            "operator_ids": ["append_fragment"],
+            "corpus_ids": ["text.long_bounded"],
+            "rng_seed": 99,
+            "max_variants": 1,
+        }
         return ProposedAttackV1.model_validate_json(
             json.dumps(
                 {
@@ -771,7 +765,7 @@ async def test_confirmed_fuzz_variant_runs_three_bounded_minimizations_and_versi
                     "risk_flags": [],
                     "estimated_turns": 1,
                     "estimated_cost_class": "low",
-                    "fuzz_plan": plan.model_dump(mode="json"),
+                    "fuzz_plan": plan,
                 }
             )
         )
