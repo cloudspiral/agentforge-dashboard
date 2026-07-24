@@ -1,1 +1,2 @@
 *.pdf binary
+reports/submission/*.md whitespace=-blank-at-eol

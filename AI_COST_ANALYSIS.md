@@ -1,19 +1,19 @@
 # AI Cost Analysis
 
-Generated from durable evidence at `2026-07-24T10:20:42.740410+00:00` using assumptions schema `1.0`. One projected run means: One workload unit is one seed evaluation, ordinary discovery attempt, fuzz variant, or full two-replay regression case according to the scenario mix.
+Generated from durable evidence at `2026-07-24T15:37:21.576835+00:00` using assumptions schema `1.0`. One projected run means: One workload unit is one seed evaluation, ordinary discovery attempt, fuzz variant, or full two-replay regression case according to the scenario mix.
 
 ## 1. Actual development and testing spend
 
 | Source | Unique AgentForge calls | Input tokens | Output tokens | Configured cost |
 | --- | ---: | ---: | ---: | ---: |
 | local-development | 3 | 11,643 | 1,046 | $0.052069 |
-| production-final-2026-07-24 | 80 | 920,931 | 67,529 | $3.820690 |
-| **Deduplicated total** | **83** | **932,574** | **68,575** | **$3.872759** |
+| production-final-2026-07-24 | 109 | 1,032,419 | 81,483 | $4.526458 |
+| **Deduplicated total** | **112** | **1,044,062** | **82,529** | **$4.578527** |
 
-Final overnight campaign spend: `$3.767034` across 17 explicitly selected campaigns.
+Final overnight campaign spend: `$3.928412` across 19 explicitly selected campaigns.
 
 - Provider billing reconciliation — **UNMEASURED: no project-scoped provider billing export was available.**
-- Target OpenEMR model inference — **UNMEASURED: 42 target executions observed without target-provider usage.**
+- Target OpenEMR model inference — **UNMEASURED: 57 target executions observed without target-provider usage.**
 - Railway/Langfuse/infrastructure — **UNMEASURED: Railway, PostgreSQL, and Langfuse invoices were not available.**
 - Codex subscription usage — **UNMEASURED: Codex subscription usage is outside AgentRun.**
 - Developer labor — **UNMEASURED: developer labor was not time-tracked.**
@@ -35,15 +35,15 @@ Verified `2026-07-24` from [the official OpenAI API pricing page](https://develo
 | confirmed finding iteration | 3 | $0.027037 | Agent calls linked to a confirmed observation; campaign-level Orchestrator planning remains reported separately. |
 | fuzz plan | 6 | $0.020760 | Attack Generator calls in campaigns containing expanded fuzz variants. |
 | fuzz variant | 2 | $0.021096 | Mean model cost stored on the completed/gated attempt. |
-| ordinary discovery | 22 | $0.030026 | Mean model cost stored on the completed/gated attempt. |
+| ordinary discovery | 24 | $0.029948 | Mean model cost stored on the completed/gated attempt. |
 | regression case two replays | 0 | UNMEASURED | Mean aggregate of durable regression results with at least two replays. |
-| seed evaluation | 9 | $0.015907 | Mean model cost stored on the completed/gated attempt. |
+| seed evaluation | 13 | $0.014051 | Mean model cost stored on the completed/gated attempt. |
 
-- Database evidence payload: `596,072` bytes.
+- Database evidence payload: `1,234,700` bytes.
 - Artifact files: `0` bytes.
-- Browser time: `609.37` seconds.
-- Mean target latency: `17333.88095238095238095238095` ms.
-- Bounded model retry rate: `25.24%`.
+- Browser time: `807.082` seconds.
+- Mean target latency: `16240.96491228070175438596491` ms.
+- Bounded model retry rate: `19.70%`.
 - Human-review rate: `0.00%`.
 
 ## 3. Production projections at 100 / 1K / 10K / 100K runs
