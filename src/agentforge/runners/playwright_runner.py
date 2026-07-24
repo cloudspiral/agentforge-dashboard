@@ -119,6 +119,43 @@ class BrowserApiResult:
     synthetic_artifact_reference: str | None = None
 
 
+async def _wait_for_upload_outcome(
+    *,
+    review: Locator,
+    error: Locator,
+    timeout_seconds: float,
+) -> Literal["review", "error"]:
+    """Wait once for either a staged review or a rendered target error."""
+
+    review_task = asyncio.create_task(review.wait_for(state="visible", timeout=0))
+    error_task = asyncio.create_task(error.wait_for(state="visible", timeout=0))
+    tasks = {review_task, error_task}
+    try:
+        done, _pending = await asyncio.wait(
+            tasks,
+            timeout=timeout_seconds,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if not done:
+            raise RunnerFailure(
+                AgentErrorCodeV1.AGENT_TIMEOUT,
+                "staged document extraction did not reach review before the bounded timeout",
+                retryable=True,
+                status=ActionExecutionStatusV1.TIMED_OUT,
+                details={"phase": "upload_review"},
+            )
+        if review_task in done:
+            review_task.result()
+            return "review"
+        error_task.result()
+        return "error"
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 class UISmokeStep(StrEnum):
     VALIDATE_TARGET = "validate_target"
     LOAD_CREDENTIALS = "load_credentials"
@@ -964,14 +1001,38 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
         await frame.locator(profile.upload.file_selector).set_input_files(str(fixture.path))
         await frame.locator(profile.upload.submit_selector).click()
         review = frame.locator(profile.upload.review_selector)
-        review_text = ""
-        timeout_ms = min(timeout_seconds, self.execution.request_timeout_seconds) * 1_000
+        error = frame.locator(f"{profile.upload.error_selector}:not(:empty)")
         try:
-            await review.wait_for(state="visible", timeout=timeout_ms)
-            review_text = (await review.inner_text()).strip()[:20_000]
-        finally:
+            outcome = await _wait_for_upload_outcome(
+                review=review,
+                error=error,
+                timeout_seconds=profile.upload.processing_timeout_seconds,
+            )
+        except RunnerFailure:
+            raise
+        except PlaywrightError as exc:
+            raise RunnerFailure(
+                AgentErrorCodeV1.INVALID_CONTRACT,
+                "staged document upload outcome could not be observed",
+                details={"phase": "upload_review"},
+            ) from exc
+        if outcome == "error":
+            raise RunnerFailure(
+                AgentErrorCodeV1.INVALID_CONTRACT,
+                "staged document upload did not reach review",
+                details={"phase": "upload_review", "error_visible": True},
+            )
+        review_text = (await review.inner_text()).strip()[:20_000]
+        cleanup_timeout_ms = min(timeout_seconds, self.execution.request_timeout_seconds) * 1_000
+        try:
             await frame.locator(profile.upload.reject_selector).click()
-            await review.wait_for(state="hidden", timeout=timeout_ms)
+            await review.wait_for(state="hidden", timeout=cleanup_timeout_ms)
+        except (PlaywrightError, PlaywrightTimeoutError) as exc:
+            raise RunnerFailure(
+                AgentErrorCodeV1.INVALID_CONTRACT,
+                "temporary staged document could not be discarded",
+                details={"phase": "upload_reject"},
+            ) from exc
         await self._bind_and_validate_card(first_binding=False)
         return BrowserUploadResult(review_text or "Upload staged and rejected without persistence.")
 

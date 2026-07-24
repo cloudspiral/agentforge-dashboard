@@ -31,6 +31,8 @@ def test_checked_in_configuration_validates() -> None:
         "identity_role_exploitation",
     }
     assert len(profile.profile_hash) == 64
+    assert profile.profile.upload.error_selector == ".clinical-copilot-upload-error"
+    assert profile.profile.upload.processing_timeout_seconds == 180
     assert len(seeds) == 9
     assert {control.id for control in controls} == {
         "AF-SC-001",

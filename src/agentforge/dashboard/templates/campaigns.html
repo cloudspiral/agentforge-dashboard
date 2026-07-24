@@ -43,7 +43,7 @@
         <input name="max_attempts" type="number" min="1" max="100" required value="{{ launch_values.max_attempts }}">
       </label>
       <label>Maximum model cost (USD)
-        <input name="max_cost_usd" type="number" min="0.000001" max="{{ campaign_ceiling_usd }}" step="0.01" required value="{{ launch_values.max_cost_usd }}">
+        <input name="max_cost_usd" type="number" min="0.000001" max="{{ campaign_ceiling_usd }}" step="0.000001" required value="{{ launch_values.max_cost_usd }}">
       </label>
     </div>
     <details>

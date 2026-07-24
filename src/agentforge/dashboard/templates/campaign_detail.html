@@ -70,7 +70,7 @@
 
 <section class="panel">
   <h2>Ordered agent timeline</h2>
-  <div class="table-wrap"><table>
+  <div class="table-wrap"><table class="agent-timeline-table">
     <thead><tr><th>Time</th><th>Role</th><th>Status</th><th>Attempt</th><th>Model</th><th>Tokens</th><th>Cost</th><th>Orchestrator decision / error</th><th>Trace ID</th></tr></thead>
     <tbody>{% for run in agent_runs %}<tr>
       <td>{{ run.created_at }}</td>
@@ -88,7 +88,7 @@
 
 <section class="panel">
   <h2>Attempts and results</h2>
-  <div class="table-wrap"><table>
+  <div class="table-wrap"><table class="attempt-results-table">
     <thead><tr><th>State</th><th>Proposal source</th><th>Objective source</th><th>Parent</th><th>Orchestrator decision</th><th>Surface / technique</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
     <tbody>{% for item in attempts %}<tr>
       <td>{{ item.state }}{% if item.failure %}<small>{{ item.failure.stage }}: {{ item.failure.code }}</small>{% endif %}</td>

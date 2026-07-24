@@ -90,8 +90,13 @@
 
 {% if report %}
 <section class="panel">
-  <h2>Latest report</h2>
-  <p>Version {{ report.report_version }} · lifecycle snapshot {{ report.status }} · schema {{ report.schema_version }}</p>
+  <div class="panel-heading">
+    <div>
+      <h2>Latest report</h2>
+      <p>Version {{ report.report_version }} · lifecycle snapshot {{ report.status }} · schema {{ report.schema_version }}</p>
+    </div>
+    <a class="button secondary" href="/dashboard/findings/{{ finding.id }}/report.md">Download canonical Markdown</a>
+  </div>
   <pre class="report">{{ safe_report_body }}</pre>
 </section>
 {% else %}

@@ -73,6 +73,8 @@ output { color: var(--muted); display: block; margin-top: .75rem; overflow-wrap:
 .summary-list dd { font-weight: 800; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; min-width: 720px; width: 100%; }
+.agent-timeline-table { min-width: 1320px; }
+.attempt-results-table { min-width: 1540px; }
 th, td { border-bottom: 1px solid var(--line); padding: .75rem .55rem; text-align: left; vertical-align: top; }
 th { color: var(--muted); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
 td small { color: var(--muted); display: block; font-size: .7rem; }

@@ -646,6 +646,38 @@ def finding_detail(request: Request, finding_id: uuid.UUID) -> HTMLResponse:
     )
 
 
+@router.get(
+    "/dashboard/findings/{finding_id}/report.md",
+    response_class=Response,
+    include_in_schema=False,
+)
+def download_finding_report(request: Request, finding_id: uuid.UUID) -> Response:
+    try:
+        with request.app.state.database.session_factory() as session:
+            finding = FindingRepository(session).get(finding_id, include_reports=True)
+            report = max(finding.reports, key=lambda item: item.report_version, default=None)
+            if report is None:
+                raise LookupError(str(finding_id))
+            markdown = report.markdown_body
+            safe_id = "".join(
+                character
+                for character in finding.vulnerability_id
+                if character.isalnum() or character in "-_"
+            )
+            filename = f"{safe_id or f'finding-{finding.id}'}.md"
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="report not found") from exc
+    return Response(
+        content=markdown,
+        media_type="text/markdown",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.post(
     "/dashboard/findings/{finding_id}/lifecycle",
     response_class=RedirectResponse,
