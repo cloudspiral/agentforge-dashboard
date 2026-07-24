@@ -36,6 +36,7 @@ from agentforge.observability import AgentForgeMetrics
 from agentforge.orchestration import controller as controller_module
 from agentforge.orchestration.controller import CampaignController, build_campaign_controller
 from agentforge.orchestration.execution_gate import ValidatedAttackV1
+from agentforge.orchestration.objectives import canonical_hash
 from agentforge.orchestration.worker import CampaignWorker
 from agentforge.persistence import Database
 from agentforge.persistence.models import (
@@ -54,10 +55,11 @@ from agentforge.persistence.models import (
 )
 from agentforge.persistence.repositories import (
     CampaignRepository,
+    RegressionCaseRepository,
     RegressionRunRepository,
 )
 from agentforge.settings import Settings
-from agentforge.target import load_target_profile
+from agentforge.target import LOCAL_UNKNOWN_TARGET_VERSION, load_target_profile
 from agentforge.target.version import DiscoveredTargetVersion
 
 TEST_DATABASE_URL = os.getenv("AGENTFORGE_TEST_DATABASE_URL")
@@ -1252,6 +1254,17 @@ async def test_saved_regression_requires_two_judge_blocked_changed_version_repla
     )
     regression = _campaign(database, campaign_type="regression", max_attempts=10)
     with database.session_factory() as session:
+        active_cases = RegressionCaseRepository(session).active()
+        placeholder = RegressionRunRepository(session).create(
+            target_version=LOCAL_UNKNOWN_TARGET_VERSION,
+            trigger="legacy_fixture",
+            cohort_hash=canonical_hash(
+                [(str(item.id), item.case_version) for item in active_cases]
+            ),
+            commit=False,
+        )
+        placeholder.status = "completed"
+        placeholder.completed_at = utc_now()
         run = RegressionRunRepository(session).create(
             target_version="pending-discovery",
             trigger="integration_fixture",
@@ -1281,6 +1294,7 @@ async def test_saved_regression_requires_two_judge_blocked_changed_version_repla
         )
         assert result.outcome == "secure_pass", result.judge_result
         assert stored_run.target_version == "synthetic-build-v2"
+        assert stored_run.previous_target_version is None
         assert [item["verdict"] for item in result.judge_result["replay_verdicts"]] == [
             "attack_blocked",
             "attack_blocked",

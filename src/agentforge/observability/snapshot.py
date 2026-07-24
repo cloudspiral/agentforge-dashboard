@@ -35,6 +35,7 @@ from agentforge.persistence.models import (
     RegressionResult,
     RegressionRun,
 )
+from agentforge.target import target_version_is_resolved
 
 
 class ObservabilityModel(BaseModel):
@@ -421,13 +422,15 @@ class PlatformObservabilityService:
         ]
 
     def resilience_transitions(self) -> list[ResilienceTransitionV2]:
-        runs = list(
-            self.session.scalars(
+        runs = [
+            run
+            for run in self.session.scalars(
                 select(RegressionRun)
                 .where(RegressionRun.status == "completed")
                 .order_by(RegressionRun.created_at, RegressionRun.id)
             )
-        )
+            if target_version_is_resolved(run.target_version)
+        ]
         results_by_run: dict[Any, dict[Any, str]] = defaultdict(dict)
         for run_id, case_id, outcome in self.session.execute(
             select(
@@ -439,7 +442,10 @@ class PlatformObservabilityService:
             results_by_run[run_id][case_id] = outcome
         transitions: list[ResilienceTransitionV2] = []
         for current in runs:
-            if not current.previous_target_version:
+            if (
+                not target_version_is_resolved(current.previous_target_version)
+                or current.previous_target_version == current.target_version
+            ):
                 continue
             previous = next(
                 (

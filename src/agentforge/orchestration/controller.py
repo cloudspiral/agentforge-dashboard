@@ -122,7 +122,11 @@ from agentforge.target import LoadedTargetProfile
 from agentforge.target.auth import credentials_from_settings
 from agentforge.target.fixtures import load_approved_fixture_authorizations
 from agentforge.target.profile import ResolvedTargetAlias
-from agentforge.target.version import DiscoveredTargetVersion, discover_target_version
+from agentforge.target.version import (
+    UNRESOLVED_TARGET_VERSIONS,
+    DiscoveredTargetVersion,
+    discover_target_version,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _HEX_SHA = re.compile(r"^[0-9a-fA-F]{7,64}$")
@@ -2714,6 +2718,7 @@ class CampaignController:
                 .where(RegressionRun.id != run.id)
                 .where(RegressionRun.status == "completed")
                 .where(RegressionRun.target_version != campaign.target_version)
+                .where(RegressionRun.target_version.not_in(UNRESOLVED_TARGET_VERSIONS))
                 .where(RegressionRun.cohort_hash == cohort_hash)
                 .order_by(RegressionRun.completed_at.desc(), RegressionRun.id.desc())
                 .limit(1)
