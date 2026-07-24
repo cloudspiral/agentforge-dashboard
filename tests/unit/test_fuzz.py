@@ -36,23 +36,52 @@ def _fuzz_proposal() -> ProposedAttackV1:
     operation = next(
         action for action in base.ordered_actions if action.action_type == "send_chat_message"
     )
-    plan = FuzzPlanV2(
-        base_sequence=base.ordered_actions,
-        mutation_point_action_id=operation.action_id,
-        operator_ids=[FuzzMutationOperatorV2.APPEND_FRAGMENT],
-        corpus_ids=["text.long_bounded"],
-        rng_seed=17,
-        max_variants=1,
-    )
+    plan = {
+        "schema_version": "v2",
+        "mutation_point_action_id": operation.action_id,
+        "operator_ids": [FuzzMutationOperatorV2.APPEND_FRAGMENT],
+        "corpus_ids": ["text.long_bounded"],
+        "rng_seed": 17,
+        "max_variants": 1,
+    }
     return ProposedAttackV1.model_validate_json(
         json.dumps(
             {
                 **base.model_dump(mode="json"),
                 "technique": "fuzzing",
-                "fuzz_plan": plan.model_dump(mode="json"),
+                "fuzz_plan": plan,
             }
         )
     )
+
+
+def test_fuzz_proposal_hydrates_one_authoritative_base_sequence() -> None:
+    proposal = _fuzz_proposal()
+
+    assert proposal.fuzz_plan is not None
+    assert proposal.fuzz_plan.base_sequence == proposal.ordered_actions
+    assert len(proposal.fuzz_plan.base_sequence) >= 5
+
+
+def test_standalone_fuzz_plan_still_requires_a_replayable_base_sequence() -> None:
+    with pytest.raises(ValueError, match="at least 5"):
+        FuzzPlanV2(
+            mutation_point_action_id="a3",
+            operator_ids=[FuzzMutationOperatorV2.APPEND_FRAGMENT],
+            corpus_ids=["text.long_bounded"],
+            rng_seed=17,
+            max_variants=1,
+        )
+
+
+def test_fuzz_proposal_rejects_an_explicit_mismatched_base_sequence() -> None:
+    proposal = _fuzz_proposal()
+    payload = proposal.model_dump(mode="json")
+    assert isinstance(payload["fuzz_plan"], dict)
+    payload["fuzz_plan"]["base_sequence"] = payload["ordered_actions"][:-1]
+
+    with pytest.raises(ValueError, match="base_sequence must equal ordered_actions"):
+        ProposedAttackV1.model_validate_json(json.dumps(payload))
 
 
 def test_fuzz_expansion_and_confirmed_variant_minimization_are_reproducible() -> None:

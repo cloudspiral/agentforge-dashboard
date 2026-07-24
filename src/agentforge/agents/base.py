@@ -572,7 +572,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                         ):
                             raise
                         await self._sleeper(self._retry_delay(sdk_attempts))
-        except ModelRefusalError:
+        except ModelRefusalError as exc:
             return self._failure(
                 code=AgentErrorCodeV1.AGENT_REFUSAL,
                 message="The provider declined the authorized structured-output request.",
@@ -586,8 +586,10 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "provider": "openai"},
+                accounting_source=exc,
+                compact_input=prepared.compact_json,
             )
-        except ModelBehaviorError:
+        except ModelBehaviorError as exc:
             return self._failure(
                 code=AgentErrorCodeV1.INVALID_CONTRACT,
                 message="The model response did not satisfy the declared output contract.",
@@ -601,8 +603,10 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "reason": "model_behavior"},
+                accounting_source=exc,
+                compact_input=prepared.compact_json,
             )
-        except MaxTurnsExceeded:
+        except MaxTurnsExceeded as exc:
             return self._failure(
                 code=self._timeout_code(),
                 message="The agent reached its configured turn limit.",
@@ -616,8 +620,10 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "reason": "max_turns"},
+                accounting_source=exc,
+                compact_input=prepared.compact_json,
             )
-        except APITimeoutError:
+        except APITimeoutError as exc:
             return self._failure(
                 code=self._timeout_code(),
                 message="The OpenAI request exceeded its provider timeout.",
@@ -631,6 +637,8 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "provider": "openai"},
+                accounting_source=exc,
+                compact_input=prepared.compact_json,
             )
         except APIStatusError as exc:
             code, message, retryable = _status_error(exc.status_code)
@@ -647,8 +655,10 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "provider": "openai"},
+                accounting_source=exc,
+                compact_input=prepared.compact_json,
             )
-        except APIConnectionError:
+        except APIConnectionError as exc:
             return self._failure(
                 code=AgentErrorCodeV1.UNEXPECTED_INTERNAL_ERROR,
                 message="The OpenAI provider could not be reached.",
@@ -662,6 +672,8 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "provider": "openai"},
+                accounting_source=exc,
+                compact_input=prepared.compact_json,
             )
         except Exception as exc:
             # No exception text crosses the boundary: provider/HTTP messages can
@@ -685,6 +697,8 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                     "provider": "openai",
                     "exception_type": type(exc).__name__,
                 },
+                accounting_source=exc,
+                compact_input=prepared.compact_json,
             )
 
         try:
@@ -703,6 +717,8 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
                 details={"agent_role": self.role, "reason": "output_validation"},
+                accounting_source=result,
+                compact_input=prepared.compact_json,
             )
 
         usage = _extract_usage(result)
@@ -803,6 +819,33 @@ class BaseAgentAdapter[OutputT: BaseModel]:
             else AgentErrorCodeV1.AGENT_TIMEOUT
         )
 
+    def _failure_usage(
+        self,
+        *,
+        accounting_source: Any,
+        compact_input: str | None,
+        sdk_attempts: int,
+    ) -> tuple[AgentUsage, str]:
+        """Recover provider usage or reserve a conservative billed estimate."""
+
+        run_data = getattr(accounting_source, "run_data", None)
+        usage = _extract_usage(run_data if run_data is not None else accounting_source)
+        if _usage_has_provider_measurement(usage):
+            return usage, "provider_reported"
+
+        attempts = max(1, sdk_attempts)
+        # One token per JSON character deliberately over-estimates normal
+        # tokenization. Each attempted provider call is also charged the full
+        # configured output ceiling when the provider omitted usage metadata.
+        estimated = AgentUsage(
+            tokens=TokenUsageV1(
+                input_tokens=len(compact_input or "") * attempts,
+                output_tokens=self.max_output_tokens * self.max_turns * attempts,
+                calls=attempts,
+            )
+        )
+        return estimated, "provider_usage_unavailable_conservative_estimate"
+
     def _failure(
         self,
         *,
@@ -818,6 +861,8 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         sdk_attempts: int,
         details: dict[str, Any],
         langfuse_trace_id: str | None = None,
+        accounting_source: Any = None,
+        compact_input: str | None = None,
     ) -> AgentInvocationResult[OutputT]:
         safe_campaign_id = campaign_id if _SAFE_IDENTIFIER.fullmatch(campaign_id) else None
         safe_attempt_id = attempt_id if _SAFE_IDENTIFIER.fullmatch(attempt_id) else None
@@ -827,6 +872,18 @@ class BaseAgentAdapter[OutputT: BaseModel]:
             if _SAFE_IDENTIFIER.fullmatch(candidate_correlation_id)
             else str(uuid4())
         )
+        usage = AgentUsage.zero()
+        estimated_cost_usd = 0.0
+        safe_details = dict(details)
+        if sdk_attempts > 0:
+            usage, cost_basis = self._failure_usage(
+                accounting_source=accounting_source,
+                compact_input=compact_input,
+                sdk_attempts=sdk_attempts,
+            )
+            estimated_cost_usd = self.pricing.estimate_cost(model, usage)
+            safe_details["cost_basis"] = cost_basis
+
         error = AgentErrorV1(
             schema_version=SCHEMA_VERSION_V1,
             code=code,
@@ -836,7 +893,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
             correlation_id=safe_correlation_id,
             campaign_id=safe_campaign_id,
             attempt_id=safe_attempt_id,
-            sanitized_details=details,
+            sanitized_details=safe_details,
         )
         return AgentInvocationResult(
             role=self.role,
@@ -844,8 +901,8 @@ class BaseAgentAdapter[OutputT: BaseModel]:
             prompt_version=self.prompt.version,
             prompt_sha256=self.prompt.sha256,
             payload_sha256=payload_sha256,
-            usage=AgentUsage.zero(),
-            estimated_cost_usd=0.0,
+            usage=usage,
+            estimated_cost_usd=estimated_cost_usd,
             latency_ms=_elapsed_ms(started_at),
             sdk_attempts=sdk_attempts,
             langfuse_trace_id=langfuse_trace_id,
@@ -916,6 +973,19 @@ def _extract_usage(result: Any) -> AgentUsage:
         ),
         cache_write_input_tokens=cache_write_tokens,
         reasoning_output_tokens=reasoning_tokens,
+    )
+
+
+def _usage_has_provider_measurement(usage: AgentUsage) -> bool:
+    return any(
+        (
+            usage.tokens.input_tokens,
+            usage.tokens.output_tokens,
+            usage.tokens.cached_input_tokens,
+            usage.tokens.calls,
+            usage.cache_write_input_tokens,
+            usage.reasoning_output_tokens,
+        )
     )
 
 

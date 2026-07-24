@@ -473,7 +473,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Model-selected strategy whose concrete variants are expanded deterministically.",
+  "description": "Model-selected strategy whose concrete variants are expanded deterministically.\n\n``base_sequence`` is optional in the model-facing nested payload so the\nAttack Generator does not have to duplicate ``ProposedAttackV1.ordered_actions``.\nThe enclosing proposal validator copies and revalidates that sequence before\nthe contract can cross the controller boundary or be persisted.",
   "properties": {
     "base_sequence": {
       "items": {
@@ -571,7 +571,6 @@
     }
   },
   "required": [
-    "base_sequence",
     "mutation_point_action_id",
     "operator_ids",
     "corpus_ids",

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, JsonValue, field_validator, model_validator
 
@@ -49,10 +50,20 @@ class FuzzMutationOperatorV2(StrEnum):
 
 
 class FuzzPlanV2(ContractModel):
-    """Model-selected strategy whose concrete variants are expanded deterministically."""
+    """Model-selected strategy whose concrete variants are expanded deterministically.
+
+    ``base_sequence`` is optional in the model-facing nested payload so the
+    Attack Generator does not have to duplicate ``ProposedAttackV1.ordered_actions``.
+    The enclosing proposal validator copies and revalidates that sequence before
+    the contract can cross the controller boundary or be persisted.
+    """
 
     schema_version: Literal["v2"] = "v2"
-    base_sequence: list[AttackActionV1] = Field(min_length=5, max_length=30)
+    base_sequence: list[AttackActionV1] = Field(
+        default_factory=list,
+        min_length=5,
+        max_length=30,
+    )
     mutation_point_action_id: Identifier
     operator_ids: list[FuzzMutationOperatorV2] = Field(min_length=1, max_length=6)
     corpus_ids: list[Identifier] = Field(min_length=1, max_length=12)
@@ -62,7 +73,7 @@ class FuzzPlanV2(ContractModel):
     @model_validator(mode="after")
     def mutation_point_is_in_base_sequence(self) -> FuzzPlanV2:
         action_ids = [action.action_id for action in self.base_sequence]
-        if self.mutation_point_action_id not in action_ids:
+        if action_ids and self.mutation_point_action_id not in action_ids:
             raise ValueError("fuzz mutation point must reference an action in base_sequence")
         if len(action_ids) != len(set(action_ids)):
             raise ValueError("fuzz base-sequence action IDs must be unique")
@@ -324,6 +335,40 @@ class ProposedAttackV1(ContractModel):
     estimated_turns: int = Field(ge=1, le=20)
     estimated_cost_class: EstimatedCostClassV1
     fuzz_plan: FuzzPlanV2 | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def hydrate_omitted_fuzz_base_sequence(cls, value: Any) -> Any:
+        """Copy the one authoritative action list into an omitted fuzz base.
+
+        The Attack Generator still chooses every action and the mutation point.
+        This normalization removes only a redundant serialization requirement;
+        the normal field validators then parse and validate the copied sequence.
+        """
+
+        if not isinstance(value, Mapping):
+            return value
+        technique = value.get("technique")
+        if technique not in {AttackTechniqueV2.FUZZING, AttackTechniqueV2.FUZZING.value}:
+            return value
+
+        raw_plan = value.get("fuzz_plan")
+        if isinstance(raw_plan, FuzzPlanV2):
+            plan = raw_plan.model_dump(mode="python")
+        elif isinstance(raw_plan, Mapping):
+            plan = dict(raw_plan)
+        else:
+            return value
+        if plan.get("base_sequence"):
+            return value
+
+        ordered_actions = value.get("ordered_actions")
+        if not isinstance(ordered_actions, list):
+            return value
+        plan["base_sequence"] = ordered_actions
+        normalized = dict(value)
+        normalized["fuzz_plan"] = plan
+        return normalized
 
     @field_validator("ordered_actions")
     @classmethod
