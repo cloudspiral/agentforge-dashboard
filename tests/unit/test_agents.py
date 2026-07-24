@@ -121,10 +121,11 @@ def _status_error(
     status_code: int,
     *,
     headers: dict[str, str] | None = None,
+    body: dict[str, Any] | None = None,
 ) -> APIStatusError:
     request = httpx.Request("POST", "https://api.openai.invalid/v1/responses")
     response = httpx.Response(status_code, request=request, headers=headers)
-    return APIStatusError("sanitized by adapter", response=response, body={})
+    return APIStatusError("sanitized by adapter", response=response, body=body or {})
 
 
 def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
@@ -170,7 +171,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             JudgeVerdictV1,
             "gpt-5.6-terra",
             1000,
-            "judge-v3-2026-07-24",
+            "judge-v4-2026-07-24",
             True,
         ),
         (
@@ -440,6 +441,144 @@ async def test_rate_limit_retry_after_is_honored_with_a_hard_ceiling() -> None:
     assert outcome.succeeded is True
     assert outcome.sdk_attempts == 2
     assert delays == [30.0]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_wait_uses_only_exhausted_reset_dimensions() -> None:
+    output = _output(OrchestratorDecisionV2)
+    runner = FakeRunner(
+        _status_error(
+            429,
+            headers={
+                "x-ratelimit-remaining-requests": "0",
+                "x-ratelimit-reset-requests": "1s",
+                "x-ratelimit-remaining-tokens": "10000",
+                "x-ratelimit-reset-tokens": "6m",
+            },
+        ),
+        _usage_result(output),
+    )
+    delays: list[float] = []
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+
+    adapter = OrchestratorAgent(
+        **_agent_options(
+            runner,
+            sleeper=record_delay,
+            jitter=lambda: 0.0,
+            max_retries=1,
+        )
+    )
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.succeeded is True
+    assert delays == [10.0]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_reset_headers_are_honored_and_safely_persisted() -> None:
+    failure = _status_error(
+        429,
+        headers={
+            "x-request-id": "req_safe-123",
+            "x-ratelimit-limit-project-tokens": "60000",
+            "x-ratelimit-remaining-project-tokens": "0",
+            "x-ratelimit-reset-project-tokens": "1m30s",
+            "x-private-provider-header": "must-not-persist",
+        },
+        body={
+            "error": {
+                "type": "tokens",
+                "code": "rate_limit_exceeded",
+                "message": "private provider text must not persist",
+            }
+        },
+    )
+    runner = FakeRunner(failure, failure, failure)
+    delays: list[float] = []
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+
+    adapter = OrchestratorAgent(
+        **_agent_options(
+            runner,
+            sleeper=record_delay,
+            jitter=lambda: 0.0,
+            max_retries=2,
+        )
+    )
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.error is not None
+    assert outcome.error.code == AgentErrorCodeV1.RATE_LIMITED
+    assert outcome.error.retryable is True
+    assert delays == [30.0, 30.0]
+    assert outcome.error.sanitized_details == {
+        "agent_role": "orchestrator",
+        "provider": "openai",
+        "retry_delays_seconds": [30.0, 30.0],
+        "provider_status_code": 429,
+        "provider_error_code": "rate_limit_exceeded",
+        "provider_error_type": "tokens",
+        "provider_request_id": "req_safe-123",
+        "provider_limit_project_tokens": 60000,
+        "provider_remaining_project_tokens": 0,
+        "provider_reset_project_tokens_seconds": 90.0,
+        "cost_basis": "provider_usage_unavailable_conservative_estimate",
+    }
+    assert "private" not in json.dumps(outcome.error.sanitized_details)
+
+
+@pytest.mark.asyncio
+async def test_insufficient_quota_is_not_retried() -> None:
+    failure = _status_error(
+        429,
+        body={
+            "error": {
+                "type": "insufficient_quota",
+                "code": "insufficient_quota",
+                "message": "private billing details",
+            }
+        },
+    )
+    runner = FakeRunner(failure)
+    delays: list[float] = []
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+
+    adapter = OrchestratorAgent(
+        **_agent_options(
+            runner,
+            sleeper=record_delay,
+            max_retries=2,
+        )
+    )
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.error is not None
+    assert outcome.error.code == AgentErrorCodeV1.RATE_LIMITED
+    assert outcome.error.retryable is False
+    assert outcome.error.message == ("The OpenAI project or organization has insufficient quota.")
+    assert outcome.sdk_attempts == 1
+    assert delays == []
+    assert outcome.error.sanitized_details["provider_error_code"] == "insufficient_quota"
+    assert "private billing" not in json.dumps(outcome.error.model_dump(mode="json"))
 
 
 @pytest.mark.parametrize(

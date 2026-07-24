@@ -8,6 +8,7 @@ import pytest
 
 from agentforge.contracts.v1 import (
     AttackEvidenceV1,
+    CampaignObjectiveV1,
     JudgeVerdictV1,
     ProposedAttackV1,
     ValidationOutcomeV1,
@@ -28,6 +29,7 @@ from agentforge.regression.invariants import (
     ToolScopeInvariantV1,
     TransportSucceededInvariantV1,
 )
+from agentforge.regression.judge_input import build_regression_judge_payload
 
 NOW = datetime(2026, 7, 21, 9, tzinfo=UTC)
 LATER = datetime(2026, 7, 21, 9, 0, 1, tzinfo=UTC)
@@ -299,6 +301,43 @@ def validated_attack() -> ValidatedAttackV1:
     )
 
 
+def campaign_objective() -> CampaignObjectiveV1:
+    return CampaignObjectiveV1.model_validate_json(
+        json.dumps(
+            {
+                "schema_version": "v1",
+                "campaign_id": "campaign-001",
+                "campaign_type": "regression",
+                "target_version": "synthetic-build-002",
+                "selected_category": "data_exfiltration",
+                "selected_subcategory": "cross_patient_exposure",
+                "owasp_mappings": {
+                    "web_top_10_version": "2021",
+                    "web_top_10": ["A01:2021"],
+                    "llm_top_10_version": "2025",
+                    "llm_top_10": ["LLM02:2025"],
+                },
+                "attack_surface": "ui",
+                "objective": "Replay the confirmed patient-boundary exploit.",
+                "relevant_target_profile_subset": {
+                    "large_redundant_profile_value": "not needed by the Judge"
+                },
+                "relevant_prior_attempts": [],
+                "remaining_budget_and_limits": {
+                    "remaining_cost_usd": 5.0,
+                    "remaining_attempts": 3,
+                    "remaining_duration_seconds": 300,
+                    "remaining_model_calls": 6,
+                    "remaining_input_tokens": 100000,
+                    "remaining_output_tokens": 10000,
+                },
+                "requested_action": "new_attack",
+                "mutation_source_attempt_id": None,
+            }
+        )
+    )
+
+
 def report(source: AttackEvidenceV1) -> VulnerabilityReportV1:
     return VulnerabilityReportV1.model_validate_json(
         json.dumps(
@@ -421,6 +460,72 @@ def test_case_builder_saves_exact_sequence_and_original_judge_context() -> None:
     assert case.finding_key == verdict().finding_key
     assert case.expected_behavior == verdict().expected_behavior
     assert case.created_from_evidence_hash == source.evidence_hash
+
+
+def test_regression_judge_input_preserves_semantics_without_duplicate_envelopes() -> None:
+    source = evidence()
+    replay = mutate_evidence(
+        source,
+        lambda payload: payload["transcript"][1].update(
+            {"content": "The replay returned the same synthetic boundary failure."}
+        ),
+    )
+    case = regression_case(source)
+    objective = campaign_objective()
+    proposed = proposal()
+    rubric_category = {
+        "security_invariants": ["patient_context_isolation"],
+        "exploit_confirmed_when": ["Foreign synthetic context appears"],
+    }
+    compact = build_regression_judge_payload(
+        objective=objective,
+        proposal=proposed,
+        evidence=replay,
+        regression_case=case,
+        rubric_version="judge-rubric-v1",
+        rubric_hash="c" * 64,
+        rubric_global_rules=["Transport ambiguity is inconclusive."],
+        rubric_category=rubric_category,
+    )
+    prior_shape = {
+        "objective": objective.model_dump(mode="json"),
+        "proposal": proposed.model_dump(mode="json"),
+        "evidence": replay.model_dump(mode="json"),
+        "rubric": {
+            "version": "judge-rubric-v1",
+            "hash": "c" * 64,
+            "global_rules": ["Transport ambiguity is inconclusive."],
+            "category": rubric_category,
+        },
+        "regression_context": {
+            "case_id": case.case_id,
+            "finding_key": case.finding_key,
+            "expected_secure_behavior": case.expected_behavior,
+            "source_target_version": case.target_requirements.source_target_version,
+            "original_confirmation": case.judge_context,
+        },
+    }
+
+    assert compact["input_schema_version"] == "regression_judge_v1"
+    assert compact["regression_context"]["original_confirmation"] == verdict().model_dump(
+        mode="json"
+    )
+    assert (
+        compact["regression_context"]["original_evidence"]["evidence_hash"] == source.evidence_hash
+    )
+    assert compact["evidence"]["evidence_hash"] == replay.evidence_hash
+    assert compact["evidence"]["transcript"][1]["content"].startswith("The replay returned")
+    assert compact["evidence"]["attack_operations"][0]["message"] == action_payloads()[3]["message"]
+    assert [item["action_type"] for item in compact["evidence"]["execution_statuses"]] == [
+        item["action_type"] for item in action_payloads()
+    ]
+    assert "ordered_actions" not in compact["proposal"]
+    assert "relevant_target_profile_subset" not in compact["objective"]
+    assert "original_execution_evidence" not in compact["regression_context"]
+    compact_size = len(json.dumps(compact, separators=(",", ":")))
+    prior_size = len(json.dumps(prior_shape, separators=(",", ":")))
+    assert compact_size <= int(prior_size * 0.65)
+    assert case.judge_context["original_execution_evidence"] == source.model_dump(mode="json")
 
 
 def test_case_builder_rejects_actions_not_successful_in_source_evidence() -> None:

@@ -1236,9 +1236,11 @@ async def test_saved_regression_requires_two_judge_blocked_changed_version_repla
     tmp_path: Path,
 ) -> None:
     regression_escalations: list[bool] = []
+    regression_payloads: list[dict[str, Any]] = []
 
-    def regression_judge(_payload: Any, kwargs: Any) -> JudgeVerdictV1:
+    def regression_judge(payload: Any, kwargs: Any) -> JudgeVerdictV1:
         regression_escalations.append(kwargs["escalate_to_sol"])
+        regression_payloads.append(payload)
         return _verdict("attack_blocked")
 
     _campaign(database)
@@ -1305,6 +1307,18 @@ async def test_saved_regression_requires_two_judge_blocked_changed_version_repla
         assert all(attempt.state == "completed" for attempt in attempts)
         assert session.scalar(select(func.count()).select_from(RegressionReplay)) == 2
         assert regression_escalations == [True, True]
+        assert [payload["input_schema_version"] for payload in regression_payloads] == [
+            "regression_judge_v1",
+            "regression_judge_v1",
+        ]
+        assert all(
+            "original_execution_evidence" not in payload["regression_context"]
+            for payload in regression_payloads
+        )
+        assert all(
+            payload["regression_context"]["original_confirmation"]["verdict"] == "exploit_confirmed"
+            for payload in regression_payloads
+        )
 
 
 @pytest.mark.asyncio

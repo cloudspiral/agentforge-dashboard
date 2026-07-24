@@ -41,12 +41,17 @@ __all__ = [
     "ToolScopeInvariantV1",
     "TransportSucceededInvariantV1",
     "build_regression_case",
+    "build_regression_judge_payload",
     "evaluate_regression",
     "aggregate_regression_replays",
 ]
 
 
 def __getattr__(name: str):
+    if name == "build_regression_judge_payload":
+        from .judge_input import build_regression_judge_payload
+
+        return build_regression_judge_payload
     if name in {
         "RegressionAggregateResultV2",
         "RegressionOutcomeV1",

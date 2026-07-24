@@ -56,12 +56,26 @@ DEFAULT_MAX_RATE_LIMIT_BACKOFF_SECONDS = 30.0
 
 _FRONT_MATTER_BOUNDARY = "---"
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_PROVIDER_DURATION_COMPONENT = re.compile(r"(?P<value>\d+(?:\.\d+)?)(?P<unit>ms|s|m|h)")
 _SENSITIVE_INPUT_KEY = re.compile(
     r"(?:authorization|cookie|password|passwd|secret|api[_-]?key|credential|"
     r"(?:access|auth|bearer|csrf|refresh|session)[_-]?token)",
     re.IGNORECASE,
 )
 _DEFAULT_TELEMETRY = object()
+_RATE_LIMIT_INTEGER_HEADERS = {
+    "x-ratelimit-limit-requests": "provider_limit_requests",
+    "x-ratelimit-remaining-requests": "provider_remaining_requests",
+    "x-ratelimit-limit-tokens": "provider_limit_tokens",
+    "x-ratelimit-remaining-tokens": "provider_remaining_tokens",
+    "x-ratelimit-limit-project-tokens": "provider_limit_project_tokens",
+    "x-ratelimit-remaining-project-tokens": "provider_remaining_project_tokens",
+}
+_RATE_LIMIT_RESET_HEADERS = {
+    "x-ratelimit-reset-requests": "provider_reset_requests_seconds",
+    "x-ratelimit-reset-tokens": "provider_reset_tokens_seconds",
+    "x-ratelimit-reset-project-tokens": "provider_reset_project_tokens_seconds",
+}
 
 
 class RunnerLike(Protocol):
@@ -582,17 +596,14 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                         )
                         break
                     except APIStatusError as exc:
-                        if (
-                            not _is_retryable_status(exc.status_code)
-                            or sdk_attempts > self._max_retries
-                        ):
+                        if not _is_retryable_api_error(exc) or sdk_attempts > self._max_retries:
                             raise
                         delay = self._retry_delay(sdk_attempts)
                         if exc.status_code == 429:
                             delay = max(
                                 delay,
                                 self._rate_limit_retry_delay(sdk_attempts),
-                                _numeric_retry_after_seconds(
+                                _provider_requested_delay_seconds(
                                     exc,
                                     ceiling=self._max_rate_limit_backoff_seconds,
                                 ),
@@ -672,7 +683,12 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 compact_input=prepared.compact_json,
             )
         except APIStatusError as exc:
-            code, message, retryable = _status_error(exc.status_code)
+            provider_details = _safe_provider_error_details(exc)
+            code, message, retryable = _status_error(
+                exc.status_code,
+                provider_error_code=provider_details.get("provider_error_code"),
+                provider_error_type=provider_details.get("provider_error_type"),
+            )
             return self._failure(
                 code=code,
                 message=message,
@@ -689,6 +705,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                     "agent_role": self.role,
                     "provider": "openai",
                     "retry_delays_seconds": provider_retry_delays,
+                    **provider_details,
                 },
                 accounting_source=exc,
                 compact_input=prepared.compact_json,
@@ -1036,30 +1053,138 @@ def _non_negative_int(value: Any) -> int:
     return max(0, value)
 
 
-def _is_retryable_status(status_code: int) -> bool:
-    return status_code == 429 or 500 <= status_code <= 599
-
-
-def _numeric_retry_after_seconds(exc: APIStatusError, *, ceiling: float) -> float:
-    """Return a bounded numeric Retry-After delay without retaining headers."""
-
+def _provider_headers(exc: APIStatusError) -> Mapping[str, str]:
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
     if headers is None:
-        return 0.0
-    raw_value = headers.get("retry-after")
-    if raw_value is None:
-        return 0.0
+        return {}
+    return headers
+
+
+def _provider_error_mapping(exc: APIStatusError) -> Mapping[str, Any]:
+    body = getattr(exc, "body", None)
+    if not isinstance(body, Mapping):
+        return {}
+    nested = body.get("error")
+    return nested if isinstance(nested, Mapping) else body
+
+
+def _safe_provider_identifier(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if _SAFE_IDENTIFIER.fullmatch(normalized) else None
+
+
+def _parse_provider_duration_seconds(raw_value: Any) -> float | None:
+    """Parse documented reset durations without retaining a raw provider header."""
+
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip().lower()
+    if not normalized or len(normalized) > 64:
+        return None
     try:
-        parsed = float(raw_value)
+        parsed = float(normalized)
     except (TypeError, ValueError):
-        return 0.0
-    if not 0 <= parsed < float("inf"):
-        return 0.0
-    return min(ceiling, parsed)
+        parsed = -1.0
+    if 0 <= parsed < float("inf"):
+        return min(86_400.0, parsed)
+
+    position = 0
+    total = 0.0
+    multipliers = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3_600.0}
+    for match in _PROVIDER_DURATION_COMPONENT.finditer(normalized):
+        if match.start() != position:
+            return None
+        total += float(match.group("value")) * multipliers[match.group("unit")]
+        position = match.end()
+    if position != len(normalized) or total < 0:
+        return None
+    return min(86_400.0, total)
 
 
-def _status_error(status_code: int) -> tuple[AgentErrorCodeV1, str, bool]:
+def _safe_provider_error_details(exc: APIStatusError) -> dict[str, Any]:
+    """Retain only bounded diagnostics needed to distinguish safe retry strategies."""
+
+    details: dict[str, Any] = {"provider_status_code": int(exc.status_code)}
+    error = _provider_error_mapping(exc)
+    for source_key, detail_key in (
+        ("code", "provider_error_code"),
+        ("type", "provider_error_type"),
+    ):
+        identifier = _safe_provider_identifier(error.get(source_key))
+        if identifier is not None:
+            details[detail_key] = identifier
+
+    headers = _provider_headers(exc)
+    request_id = _safe_provider_identifier(headers.get("x-request-id"))
+    if request_id is not None:
+        details["provider_request_id"] = request_id
+
+    for header_name, detail_key in _RATE_LIMIT_INTEGER_HEADERS.items():
+        raw_value = headers.get(header_name)
+        if not isinstance(raw_value, str) or not raw_value.strip().isdigit():
+            continue
+        details[detail_key] = min(int(raw_value.strip()), 10**12)
+
+    for header_name, detail_key in _RATE_LIMIT_RESET_HEADERS.items():
+        seconds = _parse_provider_duration_seconds(headers.get(header_name))
+        if seconds is not None:
+            details[detail_key] = seconds
+    retry_after = _parse_provider_duration_seconds(headers.get("retry-after"))
+    if retry_after is not None:
+        details["provider_retry_after_seconds"] = retry_after
+    return details
+
+
+def _provider_requested_delay_seconds(exc: APIStatusError, *, ceiling: float) -> float:
+    """Honor the longest exhausted provider window, bounded by controller policy."""
+
+    details = _safe_provider_error_details(exc)
+    requested: list[float] = []
+    if "provider_retry_after_seconds" in details:
+        requested.append(float(details["provider_retry_after_seconds"]))
+    reset_pairs = (
+        ("provider_remaining_requests", "provider_reset_requests_seconds"),
+        ("provider_remaining_tokens", "provider_reset_tokens_seconds"),
+        ("provider_remaining_project_tokens", "provider_reset_project_tokens_seconds"),
+    )
+    exhausted_resets = [
+        float(details[reset_key])
+        for remaining_key, reset_key in reset_pairs
+        if details.get(remaining_key) == 0 and reset_key in details
+    ]
+    requested.extend(exhausted_resets)
+    if not requested:
+        requested.extend(
+            float(details[reset_key])
+            for _remaining_key, reset_key in reset_pairs
+            if reset_key in details
+        )
+    return min(ceiling, max(requested, default=0.0))
+
+
+def _provider_reports_insufficient_quota(exc: APIStatusError) -> bool:
+    error = _provider_error_mapping(exc)
+    return any(
+        isinstance(value, str) and value.strip().lower() == "insufficient_quota"
+        for value in (error.get("code"), error.get("type"))
+    )
+
+
+def _is_retryable_api_error(exc: APIStatusError) -> bool:
+    if exc.status_code == 429:
+        return not _provider_reports_insufficient_quota(exc)
+    return 500 <= exc.status_code <= 599
+
+
+def _status_error(
+    status_code: int,
+    *,
+    provider_error_code: Any = None,
+    provider_error_type: Any = None,
+) -> tuple[AgentErrorCodeV1, str, bool]:
     if status_code in {401, 403}:
         return (
             AgentErrorCodeV1.AUTHENTICATION_FAILED,
@@ -1067,6 +1192,12 @@ def _status_error(status_code: int) -> tuple[AgentErrorCodeV1, str, bool]:
             False,
         )
     if status_code == 429:
+        if "insufficient_quota" in {provider_error_code, provider_error_type}:
+            return (
+                AgentErrorCodeV1.RATE_LIMITED,
+                "The OpenAI project or organization has insufficient quota.",
+                False,
+            )
         return (
             AgentErrorCodeV1.RATE_LIMITED,
             "The OpenAI provider remained rate limited after bounded retries.",
