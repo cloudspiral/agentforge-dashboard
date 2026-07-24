@@ -26,6 +26,7 @@ from agentforge.persistence.models import (
     Finding,
     FindingLifecycleEvent,
     JudgeVerdict,
+    RegressionRun,
     VulnerabilityReport,
 )
 from agentforge.persistence.repositories import (
@@ -75,6 +76,11 @@ def client(database: Database, tmp_path: Path) -> TestClient:
         worker_enabled=False,
         artifacts_dir=tmp_path / "artifacts",
         reports_dir=tmp_path / "reports",
+        target_version="local-fixture",
+        default_campaign_max_cost_usd=8,
+        global_max_cost_usd=20,
+        default_campaign_max_attempts=30,
+        default_campaign_max_duration_seconds=21_600,
     )
     application.state.metrics = AgentForgeMetrics(CollectorRegistry())
     application.state.repository_root = PROJECT_ROOT
@@ -438,6 +444,29 @@ def test_pagination_parameters_are_bounded(client: TestClient) -> None:
     assert client.get("/dashboard/campaigns?limit=201").status_code == 422
     assert client.get("/dashboard/findings?offset=-1").status_code == 422
     assert client.get("/dashboard/regression-runs?limit=0").status_code == 422
+
+
+def test_deployed_regression_launch_uses_truthful_pending_version_until_discovery(
+    database: Database,
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/dashboard/regression-runs",
+        data={
+            "csrf_token": "unit-dashboard-csrf",
+            "target_alias": "deployed",
+            "confirm_authorized": "yes",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with database.session_factory() as session:
+        run = session.scalar(select(RegressionRun))
+        campaign = session.get(Campaign, run.campaign_id)
+        assert run.target_version == "pending-discovery"
+        assert campaign.target_version == "pending-discovery"
+        assert campaign.target_alias == "deployed"
 
 
 def test_seed_buttons_are_yaml_derived_and_redirect_to_campaign(client: TestClient) -> None:

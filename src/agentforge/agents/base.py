@@ -51,6 +51,7 @@ DEFAULT_MAX_INPUT_CHARACTERS = 32_000
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_BASE_BACKOFF_SECONDS = 0.25
 DEFAULT_MAX_BACKOFF_SECONDS = 2.0
+DEFAULT_MAX_RATE_LIMIT_BACKOFF_SECONDS = 30.0
 
 _FRONT_MATTER_BOUNDARY = "---"
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -334,6 +335,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         max_retries: int = DEFAULT_MAX_RETRIES,
         base_backoff_seconds: float = DEFAULT_BASE_BACKOFF_SECONDS,
         max_backoff_seconds: float = DEFAULT_MAX_BACKOFF_SECONDS,
+        max_rate_limit_backoff_seconds: float = DEFAULT_MAX_RATE_LIMIT_BACKOFF_SECONDS,
         max_input_characters: int = DEFAULT_MAX_INPUT_CHARACTERS,
         strict_json_schema: bool = True,
     ) -> None:
@@ -345,6 +347,8 @@ class BaseAgentAdapter[OutputT: BaseModel]:
             raise ValueError("max_retries must be between zero and five")
         if base_backoff_seconds < 0 or max_backoff_seconds < base_backoff_seconds:
             raise ValueError("retry backoff bounds are invalid")
+        if max_rate_limit_backoff_seconds < max_backoff_seconds:
+            raise ValueError("rate-limit backoff must cover the ordinary backoff ceiling")
         if max_input_characters < 1:
             raise ValueError("max_input_characters must be positive")
 
@@ -380,6 +384,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         self._max_retries = max_retries
         self._base_backoff_seconds = base_backoff_seconds
         self._max_backoff_seconds = max_backoff_seconds
+        self._max_rate_limit_backoff_seconds = max_rate_limit_backoff_seconds
         self._max_input_characters = max_input_characters
         self._model_provider = self._create_model_provider()
 
@@ -529,6 +534,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
 
         result: Any | None = None
         sdk_attempts = 0
+        provider_retry_delays: list[float] = []
         langfuse_trace_id: str | None = None
         try:
             with ExitStack() as stack:
@@ -571,7 +577,17 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                             or sdk_attempts > self._max_retries
                         ):
                             raise
-                        await self._sleeper(self._retry_delay(sdk_attempts))
+                        delay = self._retry_delay(sdk_attempts)
+                        if exc.status_code == 429:
+                            delay = max(
+                                delay,
+                                _numeric_retry_after_seconds(
+                                    exc,
+                                    ceiling=self._max_rate_limit_backoff_seconds,
+                                ),
+                            )
+                        provider_retry_delays.append(delay)
+                        await self._sleeper(delay)
         except ModelRefusalError as exc:
             return self._failure(
                 code=AgentErrorCodeV1.AGENT_REFUSAL,
@@ -636,7 +652,11 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 payload_sha256=prepared.sha256,
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
-                details={"agent_role": self.role, "provider": "openai"},
+                details={
+                    "agent_role": self.role,
+                    "provider": "openai",
+                    "retry_delays_seconds": provider_retry_delays,
+                },
                 accounting_source=exc,
                 compact_input=prepared.compact_json,
             )
@@ -654,7 +674,11 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                 payload_sha256=prepared.sha256,
                 sdk_attempts=sdk_attempts,
                 langfuse_trace_id=langfuse_trace_id,
-                details={"agent_role": self.role, "provider": "openai"},
+                details={
+                    "agent_role": self.role,
+                    "provider": "openai",
+                    "retry_delays_seconds": provider_retry_delays,
+                },
                 accounting_source=exc,
                 compact_input=prepared.compact_json,
             )
@@ -997,6 +1021,25 @@ def _non_negative_int(value: Any) -> int:
 
 def _is_retryable_status(status_code: int) -> bool:
     return status_code == 429 or 500 <= status_code <= 599
+
+
+def _numeric_retry_after_seconds(exc: APIStatusError, *, ceiling: float) -> float:
+    """Return a bounded numeric Retry-After delay without retaining headers."""
+
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return 0.0
+    raw_value = headers.get("retry-after")
+    if raw_value is None:
+        return 0.0
+    try:
+        parsed = float(raw_value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not 0 <= parsed < float("inf"):
+        return 0.0
+    return min(ceiling, parsed)
 
 
 def _status_error(status_code: int) -> tuple[AgentErrorCodeV1, str, bool]:
