@@ -2701,6 +2701,12 @@ class CampaignController:
                     message="regression campaign has no associated run",
                     retryable=False,
                 )
+            # Manual deployed runs are queued before asynchronous target-version
+            # discovery, so their initial run record carries a transparent
+            # pending placeholder. Keep the run and its campaign synchronized
+            # to the exact controller-discovered version before any cohort
+            # comparison, replay, event, or dashboard result is produced.
+            run.target_version = campaign.target_version
             rows = RegressionCaseRepository(session).active()
             cohort_hash = canonical_hash([(str(item.id), item.case_version) for item in rows])
             previous = session.scalar(

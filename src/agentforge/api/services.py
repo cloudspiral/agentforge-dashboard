@@ -86,7 +86,11 @@ class ApplicationService:
         )
 
     def create_regression_run(self, request: RegressionRunCreateRequest) -> RegressionRun:
-        target_version = request.target_version or self.settings.target_version
+        target_version = request.target_version or (
+            "pending-discovery"
+            if request.target_alias == "deployed"
+            else self.settings.target_version
+        )
         active_cases = (
             self.session.scalar(
                 select(func.count(RegressionCase.id)).where(RegressionCase.active.is_(True))

@@ -117,9 +117,13 @@ def _output(output_type: type[Any]) -> Any:
     return output_type.model_construct(schema_version="v1")
 
 
-def _status_error(status_code: int) -> APIStatusError:
+def _status_error(
+    status_code: int,
+    *,
+    headers: dict[str, str] | None = None,
+) -> APIStatusError:
     request = httpx.Request("POST", "https://api.openai.invalid/v1/responses")
-    response = httpx.Response(status_code, request=request)
+    response = httpx.Response(status_code, request=request, headers=headers)
     return APIStatusError("sanitized by adapter", response=response, body={})
 
 
@@ -371,6 +375,38 @@ async def test_only_429_and_5xx_are_retried_with_bounded_backoff() -> None:
     assert outcome.sdk_attempts == 3
     assert len(runner.calls) == 3
     assert delays == [0.25, 0.5]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_retry_after_is_honored_with_a_hard_ceiling() -> None:
+    output = _output(OrchestratorDecisionV2)
+    runner = FakeRunner(
+        _status_error(429, headers={"Retry-After": "120"}),
+        _usage_result(output),
+    )
+    delays: list[float] = []
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+
+    adapter = OrchestratorAgent(
+        **_agent_options(
+            runner,
+            sleeper=record_delay,
+            jitter=lambda: 0.0,
+            max_retries=1,
+        )
+    )
+
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.succeeded is True
+    assert outcome.sdk_attempts == 2
+    assert delays == [30.0]
 
 
 @pytest.mark.parametrize(
