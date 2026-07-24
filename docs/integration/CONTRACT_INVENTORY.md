@@ -9,7 +9,7 @@
 | `attack-evidence.schema.json` | Runner | Deterministic evaluator, Judge, persistence | Evidence only |
 | `judge-verdict.schema.json` | Judge/reconciliation | Controller, finding workflow | No state-change authority by itself |
 | `documentation-request.schema.json` | Controller | Documentation Agent | Frozen report input only |
-| `vulnerability-report.schema.json` | Documentation Agent | Validator, persistence, renderer | Draft only; no publication authority |
+| `vulnerability-report.schema.json` | Documentation Agent | Validator, persistence, renderer | Canonical internal report; no publication authority |
 | `agent-error.schema.json` | Any model adapter | Controller/audit store | Typed failure; never coerced to success |
 
 Internal v1 contracts additionally define action discriminators, evidence items, token usage, OWASP mappings, budgets, report sections, errors, and validation outcomes. Strict Pydantic models forbid unknown fields and constrain lengths, enums, IDs, and action-specific fields.

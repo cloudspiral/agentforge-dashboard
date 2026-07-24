@@ -1,31 +1,28 @@
 # Final readiness
 
-Production evidence was captured 2026-07-22. Simplified-pipeline branch verification
-was performed locally on 2026-07-23. `VERIFIED LOCALLY` does not mean deployed.
+V2 architecture verification was performed locally on 2026-07-24. Historical
+production evidence was captured on 2026-07-22. `VERIFIED LOCALLY` does not mean
+deployed, and historical evidence is not presented as a current V2 run.
 
 | Area | Status | Evidence / boundary |
 | --- | --- | --- |
-| Simplified controller | `VERIFIED LOCALLY` | Unit/contract tests and isolated PostgreSQL integration cover agent-only discovery, retries, rejection, runner/Judge failure, all verdicts, mutation parent rules, immediate Finding/report/regression, and continued discovery |
-| No discovery fallbacks | `VERIFIED LOCALLY` | Invalid Orchestrator or Attack Generator output ends visibly after bounded same-agent retries; no YAML/objective/sequence/Judge fallback exists |
-| Judge-only security outcome | `VERIFIED LOCALLY` | Raw runner evidence is passed directly; no deterministic assertion, evaluator, reconciliation, upgrade, or downgrade is in discovery |
-| Attempt model | `VERIFIED LOCALLY` | Lifecycle state is `pending/running/completed/failed/cancelled`; structured operational failure is separate from Judge verdict |
-| Single-attempt finding | `VERIFIED LOCALLY` | One confirmed attempt creates exactly one new Finding, Documentation Agent report, and regression case; identical confirmed attempts create separate Findings |
-| Mutation model | `VERIFIED LOCALLY` | Only a `partial_signal` parent is eligible; only parent ID is stored and generation is derived |
-| Migration | `VERIFIED LOCALLY` | `a812e4c97f30 (head)` backfills lifecycle states and removes retired persistence fields against an isolated `_test` PostgreSQL database |
-| Dashboard launcher | `VERIFIED LOCALLY` | CSRF, idempotency, taxonomy validation, inline errors, deployed confirmation, redirects, and bearer-token absence are tested |
-| Fixed YAML harness | `VERIFIED LOCALLY` | Explicit-only; deterministic assertions stay outside Judge input and cannot create discovery Findings or change verdicts |
-| PostgreSQL-anchored evidence | `VERIFIED LOCALLY` | Complete bounded evidence commits before artifact export and Judge invocation; canonical hash/5 MiB limits, atomic writes, verified downloads, failure injection, reconciliation, and safe regeneration are covered |
-| Exact transcripts and reports | `VERIFIED LOCALLY` | Dashboard renders all transcript roles from PostgreSQL; Documentation output is controller-anchored to source turns; structured report and Markdown body commit before atomic generated export |
-| Historical deployed evidence | `VERIFIED` | Four current sanitized exports across three categories remain bound to their exact case bytes and target build |
-| Confirmed deployed vulnerability | `VERIFIED` | `AF-TM-001`: irrelevant selected-patient `get_vitals` invocation; medium severity/high exploitability |
-| Documentation Agent live proof | `VERIFIED LOCALLY AGAINST DEPLOYED TARGET` | Prompt-injection attempt `40004cce-…` produced Finding `AF-5860F03C4E00`, Documentation Agent report `ed0d115e-…`, and regression case `969e3b3a-…` immediately; discovery continued |
-| Live simplified-loop coverage | `VERIFIED` | 24 executed attempts: 16 blocked, 5 inconclusive, 2 partial signal, 1 confirmed; state-corruption demonstrated two generations of agent-generated mutation and identity testing demonstrated Orchestrator stop |
-| Three confirmed exploit reports | `UNMET` | Two confirmed reports: historical AF-TM-001 and new Documentation Agent AF-5860F03C4E00; A06 records are exposure/triage only |
-| OWASP A06 | `EXPOSURE, NOT EXPLOITABILITY` | Affected installed Composer versions were verified; the Co-Pilot bridge uses native cURL and advisory prerequisites were not exercised |
-| OWASP A09 | `PARTIAL` | Correlation mechanism exists in source, but attributable runtime security-log evidence was unavailable |
-| Feature branch deployment | `NO` | Branch is intentionally not merged or deployed; Clinical Co-Pilot and infrastructure are untouched |
-| Docker build | `VERIFIED LOCALLY` | Commit `98cfc6f` built as non-root ARM64 image `sha256:cd20c3f07575a1d8d7b9f01e7a8cf9faa18cada06a17e1a09e629f10ceaed136`; an ephemeral container launched packaged Chromium 149 and imported AgentForge successfully |
-| Browser dashboard smoke | `VERIFIED LOCALLY` | Source service returned ready; Chrome rendered the exact user/assistant transcript and historical “durable evidence unavailable” state, rendered launcher defaults/CSRF/idempotency with no bearer/platform credential field, and emitted no console warnings or errors |
+| Neutral Orchestrator authority | `VERIFIED LOCALLY` | The Orchestrator receives all 17 subcategories in stable neutral order with raw coverage, capability, finding, partial-signal, prior-family, and remaining-limit facts. Tests prove no deterministic ranking/shortlist remains. |
+| UI/API/document surfaces | `VERIFIED LOCALLY` | The gate and runners cover UI, authenticated same-origin API, direct sidecar API, staged document, and true multi-surface hybrid sequences. Secrets, CSRF, numeric patient context, and endpoint URLs remain controller-owned. |
+| Fuzzing | `VERIFIED LOCALLY` | A versioned corpus plus `FuzzPlanV2` yields at most six deterministic variants. Confirmed variants may schedule at most three strictly smaller replays; only an independently confirmed smaller payload versions the regression case. |
+| Judge authority | `VERIFIED LOCALLY` | Raw evidence goes to the Judge for ordinary, seed, fuzz, API, and regression attempts. New confirmed verdicts require a semantic finding key; deterministic code only validates and conservatively projects it. |
+| Unified finding promotion | `VERIFIED LOCALLY` | Seed, scenario, fuzz, API, and minimization confirmations share semantic deduplication. Rediscovery appends evidence rather than creating a duplicate report. |
+| Finding lifecycle and reports | `VERIFIED LOCALLY` | CSRF-protected dashboard actions implement pending review, open, in progress, false positive, and resolved with actor/reason/evidence audit. PostgreSQL Markdown is canonical and lifecycle/regression updates create deterministic versions. |
+| Regression harness V2 | `VERIFIED LOCALLY` | Exact cases retain original confirmation and evidence. Separate replay rows enforce two consistent blocked changed-version replays for secure pass, same-version uncertainty, version/correlation errors, reopening, and matched-cohort transition flags. |
+| Shared observability | `VERIFIED LOCALLY` | One typed PostgreSQL service feeds dashboard/API and Orchestrator facts. It exposes taxonomy/surface coverage, separated lanes, lifecycle, matched resilience, cost dimensions/projections, and ordered agent/controller/runner events. |
+| Cost controls and analysis | `VERIFIED LOCALLY` | A $20 global ceiling, 30-attempt/6-hour defaults, and max($3, 125% projected regression cost) discovery reserve are enforced. The reproducible analysis generator uses durable AgentRun/attempt/regression data plus versioned non-model assumptions. |
+| Migration | `VERIFIED LOCALLY` | `d94e7b3a21c8 (head)` upgraded the isolated `_test` PostgreSQL database and `alembic check` reported no schema drift. |
+| Automated tests | `VERIFIED LOCALLY` | 199 unit/contract/offline tests passed; 24 isolated PostgreSQL integration tests passed; the only skipped integration test is the explicitly opt-in live browser smoke. Ruff format/lint, contracts, the nine-seed/four-control catalog, current result hashes, fake load, Compose, and Alembic drift checks also passed. |
+| Container | `VERIFIED LOCALLY` | Production Docker image `agentforge:final-submission-gate` built successfully on 2026-07-24 with packaged Chromium (manifest list `sha256:036abf3e87d3e33677b4554381d6436de63538a325f2afa89ae0f8e5a2e1ddbe`). The recreated local service passed `/readyz` and rendered the seed, taxonomy, surface, cost, timeline, campaign, and regression views without browser console errors. |
+| Current nine-seed deployed run | `NOT YET RUN` | Architecture-first sequencing: all current YAML hashes are run only after this V2 build is deployed. |
+| V2 live discovery and API/fuzz coverage | `NOT YET RUN` | Begins after deployment within the authorized 60 target-execution, six-hour, and $20 model-cost limits. |
+| Full production regression suite | `NOT YET RUN` | Will be launched from the deployed dashboard after current Findings and cases are reconciled. |
+| Three distinct confirmed reports | `UNMET PENDING LIVE RUNS` | Existing evidence contains two genuine Findings. A third is sought but will not be fabricated or duplicated. |
+| Production deployment/browser demo | `NOT YET RUN` | GitLab MR, mirror SHA, Railway health/readiness, and authenticated browser evidence are still pending. |
 
 ## Validation commands
 
@@ -44,5 +41,5 @@ docker build -t agentforge-final-multi-agent-hardening:latest .
 ```
 
 PostgreSQL integration and migration tests must use a database whose name ends in
-`_test`. Browser smoke should use the feature-branch service and must not submit an
-attack or modify the Clinical Co-Pilot merely to verify dashboard rendering.
+`_test`. Production browser verification uses only the explicitly authorized
+synthetic Clinical Co-Pilot target and the controller-owned execution boundaries.

@@ -2,7 +2,7 @@ schema_version: "1.0"
 currency: USD
 unit: per_1m_tokens
 source: https://developers.openai.com/api/docs/pricing
-verified_at: "2026-07-21"
+verified_at: "2026-07-24"
 models:
   gpt-5.6-sol:
     input: 5.00
@@ -23,4 +23,3 @@ policy:
   reserve_maximum_output_before_call: true
   unknown_model_behavior: reject_live_call
   refresh_required_after_days: 30
-

@@ -1,5 +1,5 @@
 schema_version: "1.0"
-profile_version: "clinical-copilot-2026-07-21"
+profile_version: "clinical-copilot-2026-07-24-api-surface-v2"
 name: openemr-clinical-copilot
 authorized_scope: synthetic-only
 runtime_version_source:
@@ -81,13 +81,23 @@ upload:
 allowed_endpoints:
   - {method: GET, surface: status, path: /health}
   - {method: GET, surface: status, path: /ready}
+  - {method: GET, surface: agent_service, path: /metrics}
+  - {method: GET, surface: agent_service, path: /openapi.json}
+  - {method: POST, surface: agent_service, path: /agent/chat}
+  - {method: POST, surface: agent_service, path: /agent/document-ingestions/extract}
+  - {method: POST, surface: agent_service, path: /agent/document-ingestions/validate-confirmation}
+  - {method: POST, surface: agent_service, path: /agent/evidence/retrieve}
+  - {method: POST, surface: agent_service, path: /agent/document-ingestions/outcome}
   - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/proxy.php}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/source.php}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/evidence_region.php}
   - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/ingestion_stage.php}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/ingestion_status.php}
   - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/ingestion_reject.php}
-prohibited_endpoints:
-  - /agent/chat
-  - /interface/patient_file/clinical_copilot/ingestion_confirm.php
-  - /metrics
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/ingestion_confirm.php}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/staged_document.php}
+  - {method: POST, surface: ui, path: /interface/patient_file/clinical_copilot/staged_evidence_region.php}
+prohibited_endpoints: []
 known_read_only_tools:
   - get_patient_profile
   - get_appointments
@@ -135,4 +145,3 @@ safety:
   no_shell_actions: true
   no_persistent_browser_state: true
   redirects_must_remain_same_origin: true
-

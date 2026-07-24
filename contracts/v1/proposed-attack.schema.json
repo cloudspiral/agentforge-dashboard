@@ -8,6 +8,14 @@
       "title": "ApprovedHttpMethodV1",
       "type": "string"
     },
+    "AttackTechniqueV2": {
+      "enum": [
+        "scenario",
+        "fuzzing"
+      ],
+      "title": "AttackTechniqueV2",
+      "type": "string"
+    },
     "AuthenticateActionV1": {
       "additionalProperties": false,
       "properties": {
@@ -137,6 +145,141 @@
       "title": "EvidenceKindV1",
       "type": "string"
     },
+    "ExecutionSurfaceV2": {
+      "description": "Controller-owned execution surfaces available to planning agents.",
+      "enum": [
+        "openemr_ui",
+        "openemr_same_origin_api",
+        "agent_service_api",
+        "staged_document",
+        "hybrid"
+      ],
+      "title": "ExecutionSurfaceV2",
+      "type": "string"
+    },
+    "FuzzMutationOperatorV2": {
+      "enum": [
+        "append_fragment",
+        "prepend_fragment",
+        "replace_value",
+        "split_multi_turn",
+        "remove_field",
+        "add_extra_field",
+        "change_json_type",
+        "correlation_mismatch"
+      ],
+      "title": "FuzzMutationOperatorV2",
+      "type": "string"
+    },
+    "FuzzPlanV2": {
+      "additionalProperties": false,
+      "description": "Model-selected strategy whose concrete variants are expanded deterministically.",
+      "properties": {
+        "base_sequence": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "authenticate": "#/$defs/AuthenticateActionV1",
+                "collect_evidence": "#/$defs/CollectEvidenceActionV1",
+                "invoke_approved_api_request": "#/$defs/InvokeApprovedApiRequestActionV1",
+                "reset_session": "#/$defs/ResetSessionActionV1",
+                "select_synthetic_patient": "#/$defs/SelectSyntheticPatientActionV1",
+                "send_chat_message": "#/$defs/SendChatMessageActionV1",
+                "upload_approved_fixture": "#/$defs/UploadApprovedFixtureActionV1",
+                "wait_for_response": "#/$defs/WaitForResponseActionV1"
+              },
+              "propertyName": "action_type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ResetSessionActionV1"
+              },
+              {
+                "$ref": "#/$defs/AuthenticateActionV1"
+              },
+              {
+                "$ref": "#/$defs/SelectSyntheticPatientActionV1"
+              },
+              {
+                "$ref": "#/$defs/SendChatMessageActionV1"
+              },
+              {
+                "$ref": "#/$defs/UploadApprovedFixtureActionV1"
+              },
+              {
+                "$ref": "#/$defs/InvokeApprovedApiRequestActionV1"
+              },
+              {
+                "$ref": "#/$defs/WaitForResponseActionV1"
+              },
+              {
+                "$ref": "#/$defs/CollectEvidenceActionV1"
+              }
+            ]
+          },
+          "maxItems": 30,
+          "minItems": 5,
+          "title": "Base Sequence",
+          "type": "array"
+        },
+        "corpus_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Corpus Ids",
+          "type": "array"
+        },
+        "max_variants": {
+          "default": 6,
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Max Variants",
+          "type": "integer"
+        },
+        "mutation_point_action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Mutation Point Action Id",
+          "type": "string"
+        },
+        "operator_ids": {
+          "items": {
+            "$ref": "#/$defs/FuzzMutationOperatorV2"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Operator Ids",
+          "type": "array"
+        },
+        "rng_seed": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Rng Seed",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "v2",
+          "default": "v2",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_sequence",
+        "mutation_point_action_id",
+        "operator_ids",
+        "corpus_ids",
+        "rng_seed"
+      ],
+      "title": "FuzzPlanV2",
+      "type": "object"
+    },
     "InvokeApprovedApiRequestActionV1": {
       "additionalProperties": false,
       "properties": {
@@ -158,6 +301,28 @@
           },
           "title": "Body",
           "type": "object"
+        },
+        "correlation_mode": {
+          "default": "valid",
+          "enum": [
+            "valid",
+            "missing",
+            "invalid",
+            "mismatch"
+          ],
+          "title": "Correlation Mode",
+          "type": "string"
+        },
+        "credential_mode": {
+          "default": "endpoint_default",
+          "enum": [
+            "endpoint_default",
+            "missing",
+            "invalid",
+            "valid"
+          ],
+          "title": "Credential Mode",
+          "type": "string"
         },
         "description": {
           "maxLength": 512,
@@ -483,6 +648,10 @@
       "title": "Estimated Turns",
       "type": "integer"
     },
+    "execution_surface": {
+      "$ref": "#/$defs/ExecutionSurfaceV2",
+      "default": "openemr_ui"
+    },
     "expected_exploit_signals": {
       "items": {
         "maxLength": 512,
@@ -504,6 +673,17 @@
       "minItems": 1,
       "title": "Expected Safe Behavior",
       "type": "array"
+    },
+    "fuzz_plan": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FuzzPlanV2"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "novelty_rationale": {
       "maxLength": 512,
@@ -620,6 +800,10 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
       "title": "Subcategory",
       "type": "string"
+    },
+    "technique": {
+      "$ref": "#/$defs/AttackTechniqueV2",
+      "default": "scenario"
     }
   },
   "required": [

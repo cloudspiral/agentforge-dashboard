@@ -4,6 +4,7 @@ import hmac
 import uuid
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import Response
@@ -33,12 +34,22 @@ from agentforge.api.schemas import (
     TargetDeploymentHookRequest,
 )
 from agentforge.api.services import ApplicationService
+from agentforge.evaluation import load_seed_cases
 from agentforge.evidence import (
     EvidenceArtifactError,
     EvidenceArtifactMissing,
     EvidenceArtifactStore,
 )
-from agentforge.persistence.models import AgentRun, AttackAttempt, Campaign, Finding, RegressionRun
+from agentforge.observability import PlatformObservabilityService
+from agentforge.orchestration.objectives import surface_capability_facts
+from agentforge.persistence.models import (
+    AgentRun,
+    AttackAttempt,
+    Campaign,
+    Finding,
+    RegressionResult,
+    RegressionRun,
+)
 from agentforge.persistence.repositories import (
     AgentRunRepository,
     CampaignNotFound,
@@ -48,6 +59,7 @@ from agentforge.persistence.repositories import (
     RegressionRunRepository,
     ReportRepository,
 )
+from agentforge.reports import create_report_lifecycle_version, export_stored_report
 
 router = APIRouter(prefix="/api/v1")
 ERROR_RESPONSES = {
@@ -535,12 +547,67 @@ def get_finding(finding_id: uuid.UUID, session: Session = Depends(get_session)) 
 def update_finding_status(
     finding_id: uuid.UUID,
     body: FindingStatusUpdate,
+    request: Request,
     session: Session = Depends(get_session),
 ) -> FindingResponse:
     try:
-        return _finding(FindingRepository(session).set_status(finding_id, body.status))
+        evidence = (
+            session.get(RegressionResult, body.regression_result_id)
+            if body.regression_result_id is not None
+            else None
+        )
+        if body.regression_result_id is not None and evidence is None:
+            raise ValueError("regression result evidence was not found")
+        finding = FindingRepository(session).transition(
+            finding_id,
+            action=body.action,
+            actor="api:platform-token",
+            reason=body.reason,
+            evidence_reference=(
+                str(body.regression_result_id) if body.regression_result_id is not None else None
+            ),
+            secure_evidence_on_changed_version=bool(
+                evidence is not None
+                and evidence.outcome == "secure_pass"
+                and evidence.changed_target_version
+            ),
+            manual_override=body.manual_override,
+        )
+        root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+        version = create_report_lifecycle_version(
+            session,
+            finding=finding,
+            template_path=root / "config" / "report-template.md",
+            event_details={
+                "action": body.action,
+                "actor": "api:platform-token",
+                "reason": body.reason,
+                "evidence_reference": (
+                    str(body.regression_result_id)
+                    if body.regression_result_id is not None
+                    else None
+                ),
+                "manual_override": body.manual_override,
+            },
+        )
+        session.commit()
+        if version is not None:
+            configured = Path(request.app.state.settings.reports_dir)
+            reports_dir = configured if configured.is_absolute() else root / configured
+            version.markdown_path = str(
+                export_stored_report(
+                    version,
+                    vulnerability_id=finding.vulnerability_id,
+                    reports_dir=reports_dir,
+                )
+            )
+            session.commit()
+        session.refresh(finding)
+        return _finding(finding)
     except LookupError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "finding_not_found", "finding not found") from exc
+    except ValueError as exc:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, "invalid_lifecycle_action", str(exc)) from exc
 
 
 @router.get(
@@ -589,8 +656,36 @@ def export_report(
     response_model=CoverageResponse,
     dependencies=[Depends(require_api_read_token)],
 )
-def get_coverage(service: ApplicationService = Depends(get_service)) -> CoverageResponse:
-    return CoverageResponse(rows=service.coverage())
+def get_coverage(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> CoverageResponse:
+    root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+    rows = PlatformObservabilityService(
+        session,
+        taxonomy=request.app.state.taxonomy,
+        seed_cases=load_seed_cases(root / "evals" / "seed-cases"),
+    ).coverage_rows()
+    return CoverageResponse(rows=[item.model_dump(mode="json") for item in rows])
+
+
+@router.get(
+    "/observability",
+    response_model=dict[str, Any],
+    dependencies=[Depends(require_api_read_token)],
+)
+def get_observability(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+    snapshot = PlatformObservabilityService(
+        session,
+        taxonomy=request.app.state.taxonomy,
+        seed_cases=load_seed_cases(root / "evals" / "seed-cases"),
+        surface_capabilities=surface_capability_facts(request.app.state.target_profile.profile),
+    ).snapshot()
+    return snapshot.model_dump(mode="json")
 
 
 @router.get(

@@ -12,7 +12,7 @@ from .base import BaseAgentAdapter
 
 
 class DocumentationAgent(BaseAgentAdapter[VulnerabilityReportV1]):
-    """Create a structured draft report without publishing or target access."""
+    """Create the canonical initial report without target or lifecycle authority."""
 
     def __init__(
         self,

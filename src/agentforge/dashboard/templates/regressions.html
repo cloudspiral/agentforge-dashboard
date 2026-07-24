@@ -2,6 +2,26 @@
 {% block title %}Regressions · AgentForge{% endblock %}
 {% block content %}
 <section class="page-heading"><p class="eyebrow">Versioned invariant replay</p><h1>Regression runs</h1><p>{{ total }} total run{{ '' if total == 1 else 's' }}.</p></section>
+<section class="panel">
+  <div class="panel-heading"><div><p class="eyebrow">Manual full suite</p><h2>Replay every active confirmed exploit</h2><p>Each case is executed and judged independently. A secure pass requires two consistent blocked replays on a changed target version.</p></div></div>
+  <form method="post" action="/dashboard/regression-runs">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="target_alias" value="deployed">
+    <label><input type="checkbox" name="confirm_authorized" value="yes" required> The deployed target is authorized and synthetic-only.</label>
+    <button type="submit">Run full deployed regression suite</button>
+  </form>
+</section>
+<section class="panel">
+  <h2>Active regression cases</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Case</th><th>Finding</th><th>Taxonomy</th><th>Source version</th><th>Provenance</th><th>Replays</th></tr></thead>
+    <tbody>{% for item in cases %}<tr>
+      <td><a href="/dashboard/regression-cases/{{ item.id }}">{{ item.case_id }}</a><small>v{{ item.case_version }}</small></td>
+      <td class="mono">{{ item.finding_id }}</td><td>{{ item.category }} / {{ item.subcategory }}</td>
+      <td class="mono">{{ item.source_target_version }}</td><td>{{ item.source_provenance | replace('_', ' ') }}</td><td>{{ item.required_replays }}</td>
+    </tr>{% else %}<tr><td colspan="6">No active cases. A distinct Judge-confirmed exploit creates one automatically.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
 <section class="panel"><div class="table-wrap"><table>
   <thead><tr><th>Status</th><th>Run</th><th>Target version</th><th>Trigger</th><th>Pass</th><th>Reproduced</th><th>Inconclusive/error</th><th>Duration</th><th>Cost</th></tr></thead>
   <tbody>{% for item in runs %}<tr>
@@ -11,7 +31,7 @@
     <td>{{ item.trigger }}</td>
     <td>{{ item.passed_cases }}</td>
     <td>{{ item.reproduced_cases }}</td>
-    <td>{{ item.inconclusive_cases + item.error_cases }}</td>
+    <td>{{ item.inconclusive_cases + item.error_cases }}<small>{{ item.improved_cases }} improved / {{ item.regressed_cases }} regressed{% if item.cross_category_regression %} · cross-category regression{% endif %}</small></td>
     <td>{% if item.started_at and item.completed_at %}{{ '%.1f' | format((item.completed_at - item.started_at).total_seconds()) }}s{% else %}—{% endif %}</td>
     <td>${{ item.estimated_cost_usd }}</td>
   </tr>{% else %}<tr><td colspan="9">No regression runs yet.</td></tr>{% endfor %}</tbody>

@@ -1,7 +1,100 @@
 {% extends "base.html" %}
 {% block title %}{{ finding.vulnerability_id }} · AgentForge{% endblock %}
 {% block content %}
-<section class="page-heading"><p class="eyebrow">{{ finding.vulnerability_id }}</p><h1>{{ finding.title }}</h1><p><span class="severity severity-{{ finding.severity }}">{{ finding.severity }}</span> · {{ finding.status }}</p><p>{{ finding.category }} / {{ finding.subcategory }} · first seen {{ finding.first_seen_target_version }} · last seen {{ finding.last_seen_target_version }}</p></section>
-<section class="panel prose"><h2>Description</h2><p>{{ finding.description }}</p><h2>Clinical impact</h2><p>{{ finding.clinical_impact }}</p><h2>Observed</h2><p>{{ finding.observed_behavior }}</p><h2>Expected</h2><p>{{ finding.expected_behavior }}</p></section>
-{% if report %}<section class="panel"><h2>Latest report</h2><p>Version {{ report.report_version }} · {{ report.status }} · schema {{ report.schema_version }}</p><pre class="report">{{ safe_report_body }}</pre></section>{% else %}<section class="panel"><p>No validated report has been generated.</p></section>{% endif %}
+<section class="page-heading">
+  <p class="eyebrow">{{ finding.vulnerability_id }}</p>
+  <h1>{{ finding.title }}</h1>
+  <p><span class="severity severity-{{ finding.severity }}">{{ finding.severity }}</span> · <span class="badge badge-{{ finding.status }}">{{ finding.status | replace('_', ' ') }}</span></p>
+  <p>{{ finding.category }} / {{ finding.subcategory }} · first seen {{ finding.first_seen_target_version }} · last seen {{ finding.last_seen_target_version }}</p>
+  <p>Provenance: {{ finding.provenance | replace('_', ' ') }} · {{ finding.rediscovery_count }} rediscover{{ 'y' if finding.rediscovery_count == 1 else 'ies' }}</p>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><p class="eyebrow">Human lifecycle</p><h2>Review and remediation state</h2></div></div>
+  <p><strong>Confirmed by the Judge</strong> means the evidence is ready for human review. It does not mean a fix has been validated.</p>
+  {% if finding.status == 'pending_review' %}
+  <div class="two-column">
+    <form method="post" action="/dashboard/findings/{{ finding.id }}/lifecycle">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="confirm">
+      <button type="submit">Confirm real issue</button>
+    </form>
+    <form method="post" action="/dashboard/findings/{{ finding.id }}/lifecycle">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="dismiss">
+      <label>False-positive reason <input name="reason" required maxlength="2000"></label>
+      <button type="submit" class="secondary">Dismiss as false positive</button>
+    </form>
+  </div>
+  {% elif finding.status == 'open' %}
+  <div class="two-column">
+    <form method="post" action="/dashboard/findings/{{ finding.id }}/lifecycle">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="begin_work">
+      <button type="submit">Begin work</button>
+    </form>
+    <form method="post" action="/dashboard/findings/{{ finding.id }}/lifecycle">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="dismiss">
+      <label>False-positive reason <input name="reason" required maxlength="2000"></label>
+      <button type="submit" class="secondary">Dismiss as false positive</button>
+    </form>
+  </div>
+  {% endif %}
+  {% if finding.status in ['open', 'in_progress'] %}
+  <form method="post" action="/dashboard/findings/{{ finding.id }}/lifecycle">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="resolve">
+    <h3>Resolve</h3>
+    <label>Changed-version secure regression evidence
+      <select name="regression_result_id">
+        <option value="">No regression result selected</option>
+        {% for result in secure_results %}<option value="{{ result.id }}">{{ result.created_at }} · {{ result.id }}</option>{% endfor %}
+      </select>
+    </label>
+    <label><input type="checkbox" name="manual_override" value="yes"> Manual resolution override</label>
+    <label>Override reason <input name="reason" maxlength="2000" placeholder="Required only for a manual override"></label>
+    <button type="submit">Mark resolved</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="panel prose">
+  <h2>Description</h2><p>{{ finding.description }}</p>
+  <h2>Clinical impact</h2><p>{{ finding.clinical_impact }}</p>
+  <h2>Observed</h2><p>{{ finding.observed_behavior }}</p>
+  <h2>Expected</h2><p>{{ finding.expected_behavior }}</p>
+</section>
+
+<section class="panel">
+  <h2>Immutable lifecycle audit</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Transition</th><th>Reason/evidence</th></tr></thead>
+    <tbody>{% for event in lifecycle_events %}<tr>
+      <td>{{ event.created_at }}</td><td>{{ event.actor }}</td><td>{{ event.action | replace('_', ' ') }}</td>
+      <td>{{ event.from_status or 'new' }} → {{ event.to_status }}</td>
+      <td>{{ event.reason or '—' }}{% if event.evidence_reference %}<small class="mono">{{ event.evidence_reference }}</small>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="5">No lifecycle events are stored.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel">
+  <h2>Confirmed observations</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Target version</th><th>Provenance</th><th>Evidence hash</th></tr></thead>
+    <tbody>{% for item in observations %}<tr>
+      <td>{{ item.created_at }}</td><td class="mono">{{ item.target_version }}</td><td>{{ item.provenance | replace('_', ' ') }}</td><td class="mono">{{ item.evidence_hash }}</td>
+    </tr>{% else %}<tr><td colspan="4">No confirmation observations are stored.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+{% if report %}
+<section class="panel">
+  <h2>Latest report</h2>
+  <p>Version {{ report.report_version }} · lifecycle snapshot {{ report.status }} · schema {{ report.schema_version }}</p>
+  <pre class="report">{{ safe_report_body }}</pre>
+</section>
+{% else %}
+<section class="panel"><p>No validated report has been generated.</p></section>
+{% endif %}
 {% endblock %}

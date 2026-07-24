@@ -66,7 +66,10 @@ def render_vulnerability_report(report: VulnerabilityReportV1, template_path: Pa
             ),
             "exact_transcript": _transcript(report),
             "current_fix_validation_results": _bullets(
-                [result.summary for result in report.current_fix_validation_results]
+                [
+                    (f"`{result.target_version}` — {result.outcome.value}: {result.summary}")
+                    for result in report.current_fix_validation_results
+                ]
             ),
         }
     )

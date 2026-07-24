@@ -87,8 +87,9 @@ then commits the structured report and rendered Markdown body before exporting a
 file. Failure preserves the Finding, evidence, and any committed report, records an
 operational campaign failure, and does not fabricate a replacement report.
 
-Reports remain private drafts. Only a human may authorize target changes, deploy a
-fix, disclose an issue, publish evidence, or broaden the testing scope.
+Canonical reports remain private. Only a human may authorize target changes,
+deploy a fix, disclose an issue, publish evidence, or broaden the testing scope;
+external disclosure is not a second finding-status workflow.
 
 ## Credentials and external services
 

@@ -28,7 +28,7 @@ from agentforge.agents import (
 from agentforge.contracts.v1 import (
     AgentErrorCodeV1,
     JudgeVerdictV1,
-    OrchestratorDecisionV1,
+    OrchestratorDecisionV2,
     ProposedAttackV1,
     VulnerabilityReportV1,
 )
@@ -147,10 +147,10 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
     [
         (
             OrchestratorAgent,
-            OrchestratorDecisionV1,
+            OrchestratorDecisionV2,
             "gpt-5.6-terra",
             900,
-            "orchestrator-v3-2026-07-23",
+            "orchestrator-v4-2026-07-24",
             False,
         ),
         (
@@ -158,7 +158,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             ProposedAttackV1,
             "gpt-5.6-terra",
             1200,
-            "attack-generator-v3-2026-07-23",
+            "attack-generator-v4-2026-07-24",
             False,
         ),
         (
@@ -166,7 +166,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             JudgeVerdictV1,
             "gpt-5.6-terra",
             1000,
-            "judge-v2-2026-07-23",
+            "judge-v3-2026-07-24",
             True,
         ),
         (
@@ -174,7 +174,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             VulnerabilityReportV1,
             "gpt-5.6-luna",
             1800,
-            "documentation-v3-2026-07-23",
+            "documentation-v4-2026-07-24",
             False,
         ),
     ],
@@ -341,7 +341,7 @@ async def test_credentialless_run_returns_typed_failure_without_calling_runner()
 
 @pytest.mark.asyncio
 async def test_only_429_and_5xx_are_retried_with_bounded_backoff() -> None:
-    output = _output(OrchestratorDecisionV1)
+    output = _output(OrchestratorDecisionV2)
     runner = FakeRunner(
         _status_error(429),
         _status_error(503),
@@ -465,7 +465,7 @@ async def test_judge_uses_terra_unless_controller_explicitly_selects_sol() -> No
 
 @pytest.mark.asyncio
 async def test_langfuse_and_sdk_trace_scopes_receive_hashes_not_payloads() -> None:
-    output = _output(OrchestratorDecisionV1)
+    output = _output(OrchestratorDecisionV2)
     runner = FakeRunner(_usage_result(output))
     telemetry = FakeTelemetry()
     traces: list[dict[str, Any]] = []
@@ -507,6 +507,26 @@ def test_pricing_catalog_rejects_unknown_models() -> None:
 
     with pytest.raises(ValueError, match="no verified pricing"):
         catalog.price_for("unpriced-model")
+
+
+def test_adapter_exposes_conservative_pre_call_budget_reservation() -> None:
+    adapter = OrchestratorAgent(
+        **_agent_options(
+            FakeRunner(),
+            settings=_settings(),
+        )
+    )
+
+    reservation = adapter.maximum_invocation_cost_usd
+
+    assert reservation > 0
+    assert reservation == adapter.pricing.maximum_invocation_cost(
+        adapter.model,
+        max_input_characters=32_000,
+        max_output_tokens=900,
+        max_turns=1,
+        provider_attempts=3,
+    )
 
 
 @pytest.mark.asyncio

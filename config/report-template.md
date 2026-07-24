@@ -56,6 +56,10 @@
 The exact confirmed sequence is saved as a versioned regression case after this
 report is persisted.
 
-## Human approval
+## Human review lifecycle
 
-This report remains a draft until a human reviewer validates the evidence and approves publication. A generated report is not proof of a vulnerability.
+The status above is the canonical vulnerability lifecycle state. `pending_review`
+means the Judge confirmed evidence that still requires a human decision; `open` and
+`in_progress` track remediation; `resolved` requires changed-version secure
+regression evidence or a labeled reasoned override; `false_positive` records a
+human dismissal. Report publication is not a separate workflow.

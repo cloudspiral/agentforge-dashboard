@@ -7,6 +7,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 from agentforge.security.allowlist import TargetRejected, require_fixture_path
 from agentforge.target.profile import TargetProfileV1
 
@@ -33,6 +36,53 @@ class ApprovedFixtureAuthorization:
     size_bytes: int
     pages: int
     sha256: str
+
+
+class ApprovedFixtureCatalogEntryV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    fixture_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    repository_relative_path: str = Field(min_length=1, max_length=512)
+    document_type: str = Field(min_length=1, max_length=100)
+    media_type: str = Field(min_length=3, max_length=100)
+    size_bytes: int = Field(gt=0, le=10_485_760)
+    pages: int = Field(gt=0, le=100)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class ApprovedFixtureCatalogV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str
+    catalog_version: str = Field(min_length=1, max_length=128)
+    fixtures: list[ApprovedFixtureCatalogEntryV1] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def fixture_ids_are_unique(self) -> ApprovedFixtureCatalogV1:
+        identifiers = [item.fixture_id for item in self.fixtures]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("approved fixture IDs must be unique")
+        return self
+
+
+def load_approved_fixture_authorizations(
+    path: Path,
+) -> tuple[str, dict[str, ApprovedFixtureAuthorization]]:
+    catalog = ApprovedFixtureCatalogV1.model_validate(
+        yaml.safe_load(path.read_text(encoding="utf-8"))
+    )
+    return catalog.catalog_version, {
+        item.fixture_id: ApprovedFixtureAuthorization(
+            fixture_id=item.fixture_id,
+            repository_relative_path=item.repository_relative_path,
+            document_type=item.document_type,
+            media_type=item.media_type,
+            size_bytes=item.size_bytes,
+            pages=item.pages,
+            sha256=item.sha256,
+        )
+        for item in catalog.fixtures
+    }
 
 
 def resolve_approved_fixture(
@@ -122,5 +172,8 @@ def resolve_approved_fixture(
 __all__ = [
     "ApprovedFixture",
     "ApprovedFixtureAuthorization",
+    "ApprovedFixtureCatalogEntryV1",
+    "ApprovedFixtureCatalogV1",
+    "load_approved_fixture_authorizations",
     "resolve_approved_fixture",
 ]

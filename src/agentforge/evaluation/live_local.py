@@ -22,6 +22,8 @@ from agentforge.contracts.v1 import (
     AttackEvidenceV1,
     CampaignObjectiveV1,
     DeterministicAssertionResultV1,
+    ExecutionSurfaceV2,
+    JudgeVerdictKindV1,
     JudgeVerdictV1,
     TranscriptRoleV1,
 )
@@ -78,6 +80,7 @@ from agentforge.persistence.models import (
     JudgeVerdict,
     TargetVersion,
 )
+from agentforge.runners import CompositeAttackRunner
 from agentforge.runners.base import AttackRunner, TargetExecutionContext
 from agentforge.runners.playwright_runner import (
     PlaywrightAttackRunner,
@@ -439,6 +442,7 @@ def _persist_agent_runs(
                 status="succeeded" if result.succeeded else "failed",
                 input_tokens=result.usage.tokens.input_tokens,
                 output_tokens=result.usage.tokens.output_tokens,
+                sdk_attempts=result.sdk_attempts,
                 estimated_cost_usd=Decimal(str(result.estimated_cost_usd)),
                 latency_ms=round(result.latency_ms),
                 langfuse_trace_id=result.langfuse_trace_id,
@@ -523,6 +527,7 @@ def _persist_initial(
     started_at: AwareDatetime,
     proposal: Any,
     objective: Any,
+    case_sha256: str,
     target_alias: LiveTargetAlias,
     run_mode: LiveRunMode,
 ) -> None:
@@ -572,6 +577,13 @@ def _persist_initial(
                 parent_attempt_id=None,
                 proposal_source="fixed_yaml_case",
                 objective_source="fixed_yaml_case",
+                provenance=(
+                    "curated_discovery_replay" if case.id == "AF-PI-002" else "human_authored_seed"
+                ),
+                execution_surface=proposal.execution_surface.value,
+                technique=proposal.technique.value,
+                seed_case_hash=case_sha256,
+                exact_payload_hash=proposal_sequence_hash(proposal),
                 sequence_hash=proposal_sequence_hash(proposal),
                 category=case.category,
                 subcategory=case.subcategory,
@@ -610,6 +622,7 @@ def _persist_evidence(
         attempt.evidence_hash = evidence.evidence_hash
         attempt.latency_ms = round(evidence.total_latency_ms)
         attempt.langfuse_trace_id = evidence.langfuse_trace_id
+        attempt.target_executed = True
         attempt.state = "running"
         session.commit()
     evidence_store.export(prepared)
@@ -699,6 +712,7 @@ def _persist_verdict(
                 severity=verdict.severity.value,
                 exploitability=verdict.exploitability.value,
                 confidence=verdict.confidence,
+                finding_key=verdict.finding_key,
                 violated_invariants=verdict.violated_security_invariants,
                 observed_behavior=verdict.observed_behavior,
                 expected_behavior=verdict.expected_behavior,
@@ -888,6 +902,11 @@ async def run_live_local_case(
         remaining_cost_usd=Decimal(str(settings.default_campaign_max_cost_usd)),
         remaining_attempts=1,
         remaining_duration_seconds=settings.default_campaign_max_duration_seconds,
+        execution_surface=(
+            ExecutionSurfaceV2.OPENEMR_SAME_ORIGIN_API
+            if case.surface == "api"
+            else ExecutionSurfaceV2.OPENEMR_UI
+        ),
     )
     proposal = proposal_from_seed(
         case,
@@ -914,6 +933,8 @@ async def run_live_local_case(
         upload_stage_endpoint_id="document_stage",
         upload_reject_endpoint_id="document_reject",
         approved_fixtures={},
+        max_persistent_writes=0,
+        retained_synthetic_artifact_allowed=False,
         limits=GateLimitsV1(
             max_actions=30,
             max_turns=20,
@@ -947,6 +968,7 @@ async def run_live_local_case(
         started_at=started_at,
         proposal=proposal,
         objective=objective,
+        case_sha256=hashlib.sha256(case_bytes).hexdigest(),
         target_alias=live_target_alias,
         run_mode=run_mode,
     )
@@ -974,15 +996,28 @@ async def run_live_local_case(
         repository_root=repository,
         artifacts_dir=artifacts,
         credentials=credentials,
+        agent_shared_secret=settings.target_agent_shared_secret,
+        test_user_id=settings.target_test_user_id,
+        test_auth_username=settings.target_test_username,
+        synthetic_patient_ids={
+            alias: value
+            for alias, value in {
+                "patient_a": settings.target_test_patient_a_id,
+                "patient_b": settings.target_test_patient_b_id,
+            }.items()
+            if value
+        },
         request_timeout_seconds=max_case_timeout,
         max_upload_bytes=settings.max_upload_bytes,
     )
-    configured_runner = runner or PlaywrightAttackRunner(
-        headless=True if target_alias == "deployed" else not headed,
-        browser_mode=(
-            "chromium" if target_alias == "deployed" else settings.agentforge_browser_channel
-        ),
-        ignore_https_errors=ignore_https_errors,
+    configured_runner = runner or CompositeAttackRunner(
+        playwright_runner=PlaywrightAttackRunner(
+            headless=True if target_alias == "deployed" else not headed,
+            browser_mode=(
+                "chromium" if target_alias == "deployed" else settings.agentforge_browser_channel
+            ),
+            ignore_https_errors=ignore_https_errors,
+        )
     )
     configured_judge = judge
     if configured_judge is None:
@@ -1072,7 +1107,10 @@ async def run_live_local_case(
     assert evidence is not None and deterministic is not None
     sent, responses = _message_capture(evidence)
     expected_messages = [
-        action.message for action in case.actions if action.type == "send_chat_message"
+        (action.message if action.type == "send_chat_message" else str(action.body.get("message")))
+        for action in case.actions
+        if action.type in {"send_chat_message", "invoke_approved_api_request"}
+        and (action.type == "send_chat_message" or isinstance(action.body.get("message"), str))
     ]
     if (
         deterministic.transport_status != TransportStatusV1.COMPLETE
@@ -1195,6 +1233,48 @@ async def run_live_local_case(
         rubric_hash=rubric_hash,
         rubric_version=configured_rubric.rubric_version,
     )
+    if verdict.verdict == JudgeVerdictKindV1.EXPLOIT_CONFIRMED:
+        try:
+            from agentforge.agents import DocumentationAgent
+            from agentforge.orchestration.controller import CampaignController
+
+            documentation_options: dict[str, Any] = {"settings": settings}
+            if telemetry is not None:
+                documentation_options["telemetry"] = telemetry
+            promotion = CampaignController(
+                database=database,
+                settings=settings,
+                loaded_profile=loaded_profile,
+                taxonomy=taxonomy,
+                rubric=configured_rubric,
+                orchestrator=None,
+                attack_generator=None,
+                judge=configured_judge,
+                documentation=DocumentationAgent(**documentation_options),
+                runner=configured_runner,
+                telemetry=telemetry,
+                repository_root=repository,
+                evidence_store=configured_evidence_store,
+            )
+            with database.session_factory() as session:
+                campaign = session.get(Campaign, campaign_id)
+                attempt = session.get(AttackAttempt, attempt_id)
+                if campaign is None or attempt is None:
+                    raise LookupError("confirmed seed persistence records are missing")
+                promotion_failure = await promotion.promote_confirmed_finding(
+                    session=session,
+                    campaign=campaign,
+                    attempt=attempt,
+                    objective=objective,
+                    proposal=proposal,
+                    validated=validated,
+                    evidence=evidence,
+                    verdict=verdict,
+                )
+                if promotion_failure is not None:
+                    warnings.append("Confirmed seed finding promotion did not complete.")
+        except Exception:
+            warnings.append("Confirmed seed finding promotion did not complete.")
     return _export_result(
         _build_result(
             status="completed",

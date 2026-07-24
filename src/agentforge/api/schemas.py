@@ -175,7 +175,10 @@ class FindingPage(ApiModel):
 
 
 class FindingStatusUpdate(ApiModel):
-    status: Literal["open", "in_progress", "resolved", "reopened", "false_positive"]
+    action: Literal["confirm", "begin_work", "dismiss", "resolve"]
+    reason: str | None = Field(default=None, max_length=2_000)
+    regression_result_id: uuid.UUID | None = None
+    manual_override: bool = False
 
 
 class ReportResponse(ApiModel):

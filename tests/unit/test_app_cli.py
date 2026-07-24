@@ -648,5 +648,5 @@ def test_cli_db_and_contract_export_entrypoints(
     )
     assert exported.exit_code == 0, exported.output
     payload = json.loads(exported.stdout)
-    assert payload["count"] == 8
-    assert len(list(output_dir.glob("*.json"))) == 8
+    assert payload["count"] == 13
+    assert len(list(output_dir.glob("*.json"))) == 13

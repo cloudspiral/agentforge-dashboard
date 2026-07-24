@@ -1,11 +1,9 @@
-"""Deterministic selection between status HTTP and browser runners."""
+"""Deterministic selection between direct-service and session-bound runners."""
 
 from __future__ import annotations
 
 from agentforge.contracts.v1.actions import (
-    AuthenticateActionV1,
     InvokeApprovedApiRequestActionV1,
-    SelectSyntheticPatientActionV1,
     SendChatMessageActionV1,
     UploadApprovedFixtureActionV1,
 )
@@ -25,7 +23,7 @@ from .playwright_runner import PlaywrightAttackRunner
 
 
 class CompositeAttackRunner:
-    """Choose one runner before execution so a proposal cannot cross surfaces mid-run."""
+    """Choose a compatible runner without making any security judgment."""
 
     def __init__(
         self,
@@ -42,12 +40,10 @@ class CompositeAttackRunner:
         context: TargetExecutionContext,
     ) -> AttackEvidenceV1:
         proposal = require_validated_attack(attack, context)
-        ui_actions = any(
+        ui_operations = any(
             isinstance(
                 action,
                 (
-                    AuthenticateActionV1,
-                    SelectSyntheticPatientActionV1,
                     SendChatMessageActionV1,
                     UploadApprovedFixtureActionV1,
                 ),
@@ -59,9 +55,19 @@ class CompositeAttackRunner:
             for action in proposal.ordered_actions
             if isinstance(action, InvokeApprovedApiRequestActionV1)
         ]
-        if ui_actions and api_actions:
+        bindings = {binding.endpoint_id: binding for binding in attack.authorized_endpoint_bindings}
+        api_surfaces = {
+            bindings[action.endpoint_id].surface
+            for action in api_actions
+            if action.endpoint_id in bindings
+        }
+        if ui_operations and api_surfaces.intersection({"status", "agent_service"}):
             return self._rejected_mixed_surface(proposal, context)
         if api_actions:
+            if api_surfaces == {"ui"}:
+                return await self.playwright_runner.execute(attack, context)
+            if "ui" in api_surfaces:
+                return self._rejected_mixed_surface(proposal, context)
             return await self.http_runner.execute(attack, context)
         return await self.playwright_runner.execute(attack, context)
 

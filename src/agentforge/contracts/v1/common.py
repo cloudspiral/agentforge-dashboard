@@ -90,11 +90,13 @@ class ExploitabilityV1(StrEnum):
 
 
 class FindingStatusV1(StrEnum):
+    PENDING_REVIEW = "pending_review"
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
-    REOPENED = "reopened"
     FALSE_POSITIVE = "false_positive"
+    # Read compatibility only. New transitions reopen directly to open or pending_review.
+    REOPENED = "reopened"
 
 
 class OwaspMappingsV1(ContractModel):

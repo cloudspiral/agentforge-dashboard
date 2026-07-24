@@ -134,6 +134,16 @@ class SeedSendMessageActionV1(CatalogModel):
     message: BoundedText
 
 
+class SeedInvokeApiActionV1(CatalogModel):
+    type: Literal["invoke_approved_api_request"]
+    endpoint_id: Identifier
+    method: Literal["GET", "POST"]
+    credential_mode: Literal["endpoint_default", "missing", "invalid", "valid"] = "endpoint_default"
+    correlation_mode: Literal["valid", "missing", "invalid", "mismatch"] = "valid"
+    query: dict[str, object] = Field(default_factory=dict, max_length=25)
+    body: dict[str, object] = Field(default_factory=dict)
+
+
 class SeedWaitActionV1(CatalogModel):
     type: Literal["wait_for_response"]
     timeout_seconds: float = Field(gt=0, le=120)
@@ -148,6 +158,7 @@ SeedActionV1 = Annotated[
     | SeedAuthenticateActionV1
     | SeedSelectPatientActionV1
     | SeedSendMessageActionV1
+    | SeedInvokeApiActionV1
     | SeedWaitActionV1
     | SeedCollectEvidenceActionV1,
     Field(discriminator="type"),

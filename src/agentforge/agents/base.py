@@ -192,6 +192,27 @@ class PricingCatalog:
         ) / million
         return round(total, 12)
 
+    def maximum_invocation_cost(
+        self,
+        model: str,
+        *,
+        max_input_characters: int,
+        max_output_tokens: int,
+        max_turns: int,
+        provider_attempts: int,
+    ) -> float:
+        """Return a deliberately conservative pre-call budget reservation."""
+
+        price = self.price_for(model)
+        # JSON is capped in Unicode characters. Four input tokens per character
+        # deliberately over-reserves even pathological escaped or encoded text.
+        input_token_ceiling = max_input_characters * 4
+        output_token_ceiling = max_output_tokens * max_turns
+        per_provider_attempt = (
+            input_token_ceiling * price.input + output_token_ceiling * price.output
+        ) / 1_000_000
+        return round(per_provider_attempt * provider_attempts, 12)
+
 
 @dataclass(frozen=True, slots=True)
 class AgentUsage:
@@ -361,6 +382,18 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         self._max_backoff_seconds = max_backoff_seconds
         self._max_input_characters = max_input_characters
         self._model_provider = self._create_model_provider()
+
+    @property
+    def maximum_invocation_cost_usd(self) -> float:
+        """Worst-case configured cost reserved before a live provider call."""
+
+        return self.pricing.maximum_invocation_cost(
+            self.model,
+            max_input_characters=self._max_input_characters,
+            max_output_tokens=self.max_output_tokens,
+            max_turns=self.max_turns,
+            provider_attempts=self._max_retries + 1,
+        )
 
     async def run(
         self,

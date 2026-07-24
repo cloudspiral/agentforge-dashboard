@@ -50,6 +50,21 @@
     "exploitability": {
       "$ref": "#/$defs/ExploitabilityV1"
     },
+    "finding_key": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finding Key"
+    },
     "observed_behavior": {
       "maxLength": 512,
       "minLength": 1,

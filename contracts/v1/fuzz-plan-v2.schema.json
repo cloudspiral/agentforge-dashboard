@@ -1,0 +1,582 @@
+{
+  "$defs": {
+    "ApprovedHttpMethodV1": {
+      "enum": [
+        "GET",
+        "POST"
+      ],
+      "title": "ApprovedHttpMethodV1",
+      "type": "string"
+    },
+    "AuthenticateActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "authenticate",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expected_role": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Expected Role",
+          "type": "string"
+        },
+        "session_source": {
+          "$ref": "#/$defs/AuthenticationSessionSourceV1"
+        },
+        "test_identity_alias": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Test Identity Alias",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "session_source",
+        "test_identity_alias",
+        "expected_role"
+      ],
+      "title": "AuthenticateActionV1",
+      "type": "object"
+    },
+    "AuthenticationSessionSourceV1": {
+      "enum": [
+        "environment_credentials",
+        "ephemeral_saved_test_session"
+      ],
+      "title": "AuthenticationSessionSourceV1",
+      "type": "string"
+    },
+    "CollectEvidenceActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "collect_evidence",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "capture_on": {
+          "default": "always",
+          "enum": [
+            "always",
+            "failure",
+            "confirmed_signal"
+          ],
+          "title": "Capture On",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "evidence_kinds": {
+          "items": {
+            "$ref": "#/$defs/EvidenceKindV1"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Evidence Kinds",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "evidence_kinds"
+      ],
+      "title": "CollectEvidenceActionV1",
+      "type": "object"
+    },
+    "EvidenceKindV1": {
+      "enum": [
+        "transcript",
+        "http_metadata",
+        "tool_calls",
+        "side_effects",
+        "screenshot",
+        "browser_trace"
+      ],
+      "title": "EvidenceKindV1",
+      "type": "string"
+    },
+    "FuzzMutationOperatorV2": {
+      "enum": [
+        "append_fragment",
+        "prepend_fragment",
+        "replace_value",
+        "split_multi_turn",
+        "remove_field",
+        "add_extra_field",
+        "change_json_type",
+        "correlation_mismatch"
+      ],
+      "title": "FuzzMutationOperatorV2",
+      "type": "string"
+    },
+    "InvokeApprovedApiRequestActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "invoke_approved_api_request",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "body": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Body",
+          "type": "object"
+        },
+        "correlation_mode": {
+          "default": "valid",
+          "enum": [
+            "valid",
+            "missing",
+            "invalid",
+            "mismatch"
+          ],
+          "title": "Correlation Mode",
+          "type": "string"
+        },
+        "credential_mode": {
+          "default": "endpoint_default",
+          "enum": [
+            "endpoint_default",
+            "missing",
+            "invalid",
+            "valid"
+          ],
+          "title": "Credential Mode",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "endpoint_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Endpoint Id",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/ApprovedHttpMethodV1"
+        },
+        "query": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "maxProperties": 25,
+          "title": "Query",
+          "type": "object"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "endpoint_id",
+        "method"
+      ],
+      "title": "InvokeApprovedApiRequestActionV1",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "ResetSessionActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "reset_session",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "require_clean_context": {
+          "default": true,
+          "title": "Require Clean Context",
+          "type": "boolean"
+        },
+        "reset_strategy_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Reset Strategy Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "reset_strategy_id"
+      ],
+      "title": "ResetSessionActionV1",
+      "type": "object"
+    },
+    "SelectSyntheticPatientActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "select_synthetic_patient",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "patient_alias": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Patient Alias",
+          "type": "string"
+        },
+        "verify_selected_context": {
+          "default": true,
+          "title": "Verify Selected Context",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "patient_alias"
+      ],
+      "title": "SelectSyntheticPatientActionV1",
+      "type": "object"
+    },
+    "SendChatMessageActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "send_chat_message",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "await_response": {
+          "default": true,
+          "title": "Await Response",
+          "type": "boolean"
+        },
+        "conversation_alias": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Alias"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "message"
+      ],
+      "title": "SendChatMessageActionV1",
+      "type": "object"
+    },
+    "UploadApprovedFixtureActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "upload_approved_fixture",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "declared_media_type": {
+          "maxLength": 100,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+$",
+          "title": "Declared Media Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "fixture_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Fixture Id",
+          "type": "string"
+        },
+        "upload_surface_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Upload Surface Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "fixture_id",
+        "upload_surface_id",
+        "declared_media_type"
+      ],
+      "title": "UploadApprovedFixtureActionV1",
+      "type": "object"
+    },
+    "WaitForResponseActionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_type": {
+          "const": "wait_for_response",
+          "title": "Action Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expected_event": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Event"
+        },
+        "timeout_seconds": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 120.0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "action_id",
+        "description",
+        "action_type",
+        "timeout_seconds"
+      ],
+      "title": "WaitForResponseActionV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Model-selected strategy whose concrete variants are expanded deterministically.",
+  "properties": {
+    "base_sequence": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "authenticate": "#/$defs/AuthenticateActionV1",
+            "collect_evidence": "#/$defs/CollectEvidenceActionV1",
+            "invoke_approved_api_request": "#/$defs/InvokeApprovedApiRequestActionV1",
+            "reset_session": "#/$defs/ResetSessionActionV1",
+            "select_synthetic_patient": "#/$defs/SelectSyntheticPatientActionV1",
+            "send_chat_message": "#/$defs/SendChatMessageActionV1",
+            "upload_approved_fixture": "#/$defs/UploadApprovedFixtureActionV1",
+            "wait_for_response": "#/$defs/WaitForResponseActionV1"
+          },
+          "propertyName": "action_type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ResetSessionActionV1"
+          },
+          {
+            "$ref": "#/$defs/AuthenticateActionV1"
+          },
+          {
+            "$ref": "#/$defs/SelectSyntheticPatientActionV1"
+          },
+          {
+            "$ref": "#/$defs/SendChatMessageActionV1"
+          },
+          {
+            "$ref": "#/$defs/UploadApprovedFixtureActionV1"
+          },
+          {
+            "$ref": "#/$defs/InvokeApprovedApiRequestActionV1"
+          },
+          {
+            "$ref": "#/$defs/WaitForResponseActionV1"
+          },
+          {
+            "$ref": "#/$defs/CollectEvidenceActionV1"
+          }
+        ]
+      },
+      "maxItems": 30,
+      "minItems": 5,
+      "title": "Base Sequence",
+      "type": "array"
+    },
+    "corpus_ids": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "type": "string"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Corpus Ids",
+      "type": "array"
+    },
+    "max_variants": {
+      "default": 6,
+      "maximum": 6,
+      "minimum": 1,
+      "title": "Max Variants",
+      "type": "integer"
+    },
+    "mutation_point_action_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Mutation Point Action Id",
+      "type": "string"
+    },
+    "operator_ids": {
+      "items": {
+        "$ref": "#/$defs/FuzzMutationOperatorV2"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "title": "Operator Ids",
+      "type": "array"
+    },
+    "rng_seed": {
+      "maximum": 4294967295,
+      "minimum": 0,
+      "title": "Rng Seed",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "v2",
+      "default": "v2",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "base_sequence",
+    "mutation_point_action_id",
+    "operator_ids",
+    "corpus_ids",
+    "rng_seed"
+  ],
+  "title": "FuzzPlanV2",
+  "type": "object"
+}

@@ -17,6 +17,7 @@ from agentforge.contracts.v1 import (
     ApprovedHttpMethodV1,
     AuthenticateActionV1,
     CollectEvidenceActionV1,
+    ExecutionSurfaceV2,
     InvokeApprovedApiRequestActionV1,
     ProposedAttackV1,
     ResetSessionActionV1,
@@ -58,17 +59,43 @@ class GateModel(BaseModel):
 class EndpointPurposeV1(StrEnum):
     CHAT = "chat"
     STATUS = "status"
+    METRICS = "metrics"
+    OPENAPI = "openapi"
     GENERAL_API = "general_api"
+    EVIDENCE_RETRIEVE = "evidence_retrieve"
+    DOCUMENT_EXTRACT = "document_extract"
+    DOCUMENT_VALIDATE = "document_validate"
+    DOCUMENT_OUTCOME = "document_outcome"
+    SOURCE_RESOLVE = "source_resolve"
+    EVIDENCE_REGION = "evidence_region"
     UPLOAD_STAGE = "upload_stage"
+    UPLOAD_STATUS = "upload_status"
     UPLOAD_REJECT = "upload_reject"
+    UPLOAD_CONFIRM = "upload_confirm"
+    STAGED_DOCUMENT = "staged_document"
+
+
+class EndpointAuthenticationV1(StrEnum):
+    NONE = "none"
+    SHARED_SECRET = "shared_secret"  # noqa: S105 - authentication mode, not a credential
+    BROWSER_SESSION_CSRF = "browser_session_csrf"
+
+
+class EndpointPersistenceV1(StrEnum):
+    READ_ONLY = "read_only"
+    EPHEMERAL = "ephemeral"
+    PERSISTENT_SYNTHETIC = "persistent_synthetic"
 
 
 class EndpointBindingV1(GateModel):
     endpoint_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     method: ApprovedHttpMethodV1
-    surface: Literal["status", "ui"]
+    surface: Literal["status", "ui", "agent_service"]
     path: str = Field(min_length=1, max_length=512)
     purpose: EndpointPurposeV1
+    authentication: EndpointAuthenticationV1 = EndpointAuthenticationV1.NONE
+    persistence: EndpointPersistenceV1 = EndpointPersistenceV1.READ_ONLY
+    request_encoding: Literal["none", "json", "multipart"] = "none"
 
     @field_validator("path")
     @classmethod
@@ -126,6 +153,8 @@ class CampaignExecutionContextV1(GateModel):
     upload_stage_endpoint_id: str = Field(min_length=1, max_length=128)
     upload_reject_endpoint_id: str = Field(min_length=1, max_length=128)
     approved_fixtures: dict[str, ApprovedFixtureV1] = Field(default_factory=dict)
+    max_persistent_writes: int = Field(default=0, ge=0, le=1)
+    retained_synthetic_artifact_allowed: bool = False
     limits: GateLimitsV1
     campaign_started_at: AwareDatetime
     campaign_deadline_at: AwareDatetime
@@ -164,6 +193,7 @@ class GateRejectionCodeV1(StrEnum):
     RESET_SCOPE_MISMATCH = "reset_scope_mismatch"
     AUTHENTICATION_SCOPE_MISMATCH = "authentication_scope_mismatch"
     PATIENT_SCOPE_MISMATCH = "patient_scope_mismatch"
+    SURFACE_SCOPE_MISMATCH = "surface_scope_mismatch"
     UNKNOWN_ENDPOINT = "unknown_endpoint"
     ENDPOINT_NOT_ALLOWLISTED = "endpoint_not_allowlisted"
     METHOD_NOT_ALLOWLISTED = "method_not_allowlisted"
@@ -570,12 +600,12 @@ def validate_attack(
                 "endpoint purpose does not match the proposed action",
                 action_id=action_id,
             )
-        if binding.path in prohibited_paths or _is_persistent_confirm_route(binding.path):
+        if binding.path in prohibited_paths:
             return _reject(
                 context,
                 proposal,
                 GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE,
-                "persistent confirmation and other prohibited target routes cannot be executed",
+                "the target route is prohibited by the loaded target profile",
                 action_id=action_id,
                 retryable=False,
             )
@@ -590,13 +620,18 @@ def validate_attack(
         authorized_bindings[binding.endpoint_id] = binding
         return None
 
-    current_patient = _profile_patient(target_profile, context.current_patient_alias)
-    allowed_patient_values = {context.current_patient_alias, current_patient.external_id}
+    allowed_patient_values = {
+        "patient_a",
+        "patient_b",
+        target_profile.patients.patient_a.external_id,
+        target_profile.patients.patient_b.external_id,
+    }
     approved_fixtures: dict[str, ApprovedFixtureV1] = {}
     total_message_bytes = 0
     total_wait_seconds = 0.0
     total_upload_bytes = 0
     upload_count = 0
+    persistent_write_count = 0
     for action in actions[3:-1]:
         if isinstance(action, SendChatMessageActionV1):
             size = len(action.message.encode("utf-8"))
@@ -635,6 +670,28 @@ def validate_attack(
                     "GET actions cannot carry a request body",
                     action_id=action.action_id,
                 )
+            if (
+                binding.authentication == EndpointAuthenticationV1.NONE
+                and action.credential_mode != "endpoint_default"
+            ):
+                return _reject(
+                    context,
+                    proposal,
+                    GateRejectionCodeV1.AUTHENTICATION_SCOPE_MISMATCH,
+                    "unauthenticated endpoints cannot receive credential test modes",
+                    action_id=action.action_id,
+                )
+            if (
+                binding.authentication == EndpointAuthenticationV1.BROWSER_SESSION_CSRF
+                and action.credential_mode != "endpoint_default"
+            ):
+                return _reject(
+                    context,
+                    proposal,
+                    GateRejectionCodeV1.AUTHENTICATION_SCOPE_MISMATCH,
+                    "same-origin endpoints use only the ephemeral browser session",
+                    action_id=action.action_id,
+                )
             violation = _parameter_authority_violation(
                 {"query_parameters": action.query, "body_parameters": action.body},
                 allowed_patient_values=allowed_patient_values,
@@ -657,10 +714,27 @@ def validate_attack(
                 action.endpoint_id,
                 action_id=action.action_id,
                 required_method=action.method,
-                required_purpose={EndpointPurposeV1.GENERAL_API, EndpointPurposeV1.STATUS},
+                required_purpose=set(EndpointPurposeV1),
             )
             if rejection:
                 return rejection
+            if binding.persistence == EndpointPersistenceV1.PERSISTENT_SYNTHETIC:
+                persistent_write_count += 1
+                if (
+                    persistent_write_count > context.max_persistent_writes
+                    or not context.retained_synthetic_artifact_allowed
+                ):
+                    return _reject(
+                        context,
+                        proposal,
+                        GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE,
+                        (
+                            "persistent synthetic execution requires an explicit one-artifact "
+                            "controller allowance"
+                        ),
+                        action_id=action.action_id,
+                        retryable=False,
+                    )
         elif isinstance(action, UploadApprovedFixtureActionV1):
             if (
                 not target_profile.upload.enabled
@@ -732,6 +806,50 @@ def validate_attack(
         elif isinstance(action, WaitForResponseActionV1):
             total_wait_seconds += action.timeout_seconds
 
+    operation_surfaces: set[ExecutionSurfaceV2] = set()
+    document_purposes = {
+        EndpointPurposeV1.DOCUMENT_EXTRACT,
+        EndpointPurposeV1.DOCUMENT_VALIDATE,
+        EndpointPurposeV1.DOCUMENT_OUTCOME,
+        EndpointPurposeV1.UPLOAD_STAGE,
+        EndpointPurposeV1.UPLOAD_STATUS,
+        EndpointPurposeV1.UPLOAD_REJECT,
+        EndpointPurposeV1.UPLOAD_CONFIRM,
+        EndpointPurposeV1.STAGED_DOCUMENT,
+    }
+    for action in actions[3:-1]:
+        if isinstance(action, SendChatMessageActionV1):
+            operation_surfaces.add(ExecutionSurfaceV2.OPENEMR_UI)
+        elif isinstance(action, UploadApprovedFixtureActionV1):
+            operation_surfaces.add(ExecutionSurfaceV2.STAGED_DOCUMENT)
+        elif isinstance(action, InvokeApprovedApiRequestActionV1):
+            binding = authorized_bindings[action.endpoint_id]
+            if binding.purpose in document_purposes:
+                operation_surfaces.add(ExecutionSurfaceV2.STAGED_DOCUMENT)
+            elif binding.surface == "ui":
+                operation_surfaces.add(ExecutionSurfaceV2.OPENEMR_SAME_ORIGIN_API)
+            else:
+                operation_surfaces.add(ExecutionSurfaceV2.AGENT_SERVICE_API)
+    # V1 callers omitted this newly additive field. V2 controller paths always
+    # supply it and independently verify it against the Orchestrator decision.
+    if "execution_surface" in proposal.model_fields_set:
+        selected_surface = proposal.execution_surface
+        if selected_surface == ExecutionSurfaceV2.HYBRID:
+            if len(operation_surfaces) < 2:
+                return _reject(
+                    context,
+                    proposal,
+                    GateRejectionCodeV1.SURFACE_SCOPE_MISMATCH,
+                    "hybrid proposals must span at least two approved execution surfaces",
+                )
+        elif operation_surfaces != {selected_surface}:
+            return _reject(
+                context,
+                proposal,
+                GateRejectionCodeV1.SURFACE_SCOPE_MISMATCH,
+                "proposal actions do not match the Orchestrator-selected execution surface",
+            )
+
     if total_message_bytes > context.limits.max_total_message_bytes:
         return _reject(
             context,
@@ -790,7 +908,9 @@ def validate_attack(
 __all__ = [
     "ApprovedFixtureV1",
     "CampaignExecutionContextV1",
+    "EndpointAuthenticationV1",
     "EndpointBindingV1",
+    "EndpointPersistenceV1",
     "EndpointPurposeV1",
     "ExecutionGateResultV1",
     "GateLimitsV1",

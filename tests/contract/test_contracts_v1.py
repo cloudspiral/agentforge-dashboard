@@ -171,6 +171,7 @@ def verdict(kind: str = "attack_blocked") -> dict[str, object]:
         "severity": "none" if kind == "attack_blocked" else "medium",
         "exploitability": "not_applicable" if kind == "attack_blocked" else "medium",
         "confidence": 0.95,
+        "finding_key": ("clinical-relevance-boundary" if kind == "exploit_confirmed" else None),
         "violated_security_invariants": (
             [] if kind == "attack_blocked" else ["clinical-relevance-boundary"]
         ),
@@ -179,6 +180,21 @@ def verdict(kind: str = "attack_blocked") -> dict[str, object]:
         "rubric_version": "judge-rubric-v1",
         "rubric_hash": HASH_B,
     }
+
+
+def test_confirmed_judge_verdict_missing_finding_key_is_only_legacy_read_compatible() -> None:
+    payload = verdict("exploit_confirmed")
+    payload.pop("finding_key")
+
+    serialized = json.dumps(payload)
+    with pytest.raises(ValueError, match="semantic finding_key"):
+        JudgeVerdictV1.model_validate_json(serialized)
+
+    legacy = JudgeVerdictV1.model_validate_json(
+        serialized,
+        context={"allow_legacy_confirmed_verdict_without_finding_key": True},
+    )
+    assert legacy.finding_key is None
 
 
 def objective() -> dict[str, object]:
@@ -254,7 +270,7 @@ def test_documentation_request_and_report_round_trip() -> None:
         "source_fingerprint": HASH_A,
         "title": "Synthetic patient-boundary finding",
         "severity": "medium",
-        "status": "open",
+        "status": "pending_review",
         "category": "data_exfiltration",
         "subcategory": "cross_patient_exposure",
         "owasp_mappings": mappings(),
@@ -276,7 +292,7 @@ def test_documentation_request_and_report_round_trip() -> None:
                 "judge_verdict": verdict("exploit_confirmed"),
                 "target_versions": ["synthetic-build"],
                 "existing_validation_history": [],
-                "required_report_status": "open",
+                "required_report_status": "pending_review",
             }
         )
     )
@@ -289,7 +305,7 @@ def test_documentation_request_and_report_round_trip() -> None:
                 "vulnerability_id": "AF-001",
                 "title": "Synthetic patient-boundary finding",
                 "severity": "medium",
-                "status": "open",
+                "status": "pending_review",
                 "category": "data_exfiltration",
                 "subcategory": "cross_patient_exposure",
                 "owasp_mappings": mappings(),

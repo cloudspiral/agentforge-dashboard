@@ -66,6 +66,37 @@ class RegressionCaseV1(RegressionModel):
     created_at: AwareDatetime
 
 
+class RegressionCaseV2(RegressionModel):
+    schema_version: Literal["v2"] = "v2"
+    case_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+    finding_id: str = Field(min_length=1, max_length=128)
+    vulnerability_id: str = Field(min_length=1, max_length=128)
+    finding_key: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+    source_provenance: str = Field(min_length=1, max_length=40)
+    required_replays: Literal[2] = 2
+    case_version: int = Field(ge=1)
+    active: bool = True
+    category: str = Field(min_length=1, max_length=128)
+    subcategory: str = Field(min_length=1, max_length=128)
+    owasp_mappings: OwaspMappingsV1
+    setup: RegressionSetupV1
+    exact_ordered_sequence: list[AttackActionV1] = Field(min_length=6, max_length=30)
+    judge_context: dict[str, Any]
+    expected_behavior: str = Field(min_length=1, max_length=20_000)
+    target_requirements: RegressionTargetRequirementsV1
+    created_from_evidence_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    sequence_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    created_at: AwareDatetime
+
+
+AnyRegressionCase = RegressionCaseV1 | RegressionCaseV2
+
+
 def _hash(value: object) -> str:
     canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
@@ -133,9 +164,12 @@ def build_regression_case(
     validated_attack: ValidatedAttackV1,
     case_version: int,
     created_at: AwareDatetime,
-) -> RegressionCaseV1:
+    source_provenance: str,
+) -> RegressionCaseV2:
     """Freeze the exact successful attack and the Judge context that confirmed it."""
 
+    if not judge_verdict.finding_key:
+        raise ValueError("confirmed exploits require a semantic finding key")
     actions = report.minimal_reproducible_attack_sequence
     _validate_minimal_sequence(actions)
     if (
@@ -176,10 +210,12 @@ def build_regression_case(
     case_id = f"REG-{report.vulnerability_id}-v{case_version}"
     if len(case_id) > 128:
         case_id = f"REG-{report.vulnerability_id[:80]}-{fingerprint[:12]}-v{case_version}"
-    return RegressionCaseV1(
+    return RegressionCaseV2(
         case_id=case_id,
         finding_id=finding_id,
         vulnerability_id=report.vulnerability_id,
+        finding_key=judge_verdict.finding_key,
+        source_provenance=source_provenance,
         case_version=case_version,
         category=report.category,
         subcategory=report.subcategory,
@@ -194,7 +230,12 @@ def build_regression_case(
             ),
         ),
         exact_ordered_sequence=actions,
-        judge_context=judge_verdict.model_dump(mode="json"),
+        judge_context={
+            "finding_key": judge_verdict.finding_key,
+            "violated_security_invariants": judge_verdict.violated_security_invariants,
+            "original_judge_verdict": judge_verdict.model_dump(mode="json"),
+            "original_execution_evidence": source_evidence.model_dump(mode="json"),
+        },
         expected_behavior=judge_verdict.expected_behavior,
         target_requirements=RegressionTargetRequirementsV1(
             target_profile_version=validated_attack.target_profile_version,
@@ -208,7 +249,9 @@ def build_regression_case(
 
 
 __all__ = [
+    "AnyRegressionCase",
     "RegressionCaseV1",
+    "RegressionCaseV2",
     "RegressionSetupV1",
     "RegressionTargetRequirementsV1",
     "build_regression_case",

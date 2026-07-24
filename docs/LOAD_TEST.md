@@ -21,7 +21,7 @@ Run 100 deterministic fake-platform operations through the real API, queue, work
 - 10 campaign creations with distinct idempotency keys.
 - 70 fake evaluated attempts across all six taxonomy categories.
 - 10 gate rejections (wrong host, prohibited route, wrong patient, excessive bounds).
-- 5 deterministic confirmed findings plus draft reports.
+- 5 deterministic confirmed findings plus canonical initial reports.
 - 5 regression replays covering secure pass, reproduced, inconclusive, and error.
 - Concurrent read traffic for overview, campaign detail, findings, coverage, and agent-run audit.
 

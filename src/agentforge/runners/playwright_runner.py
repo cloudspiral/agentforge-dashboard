@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, suppress
@@ -52,10 +53,16 @@ from agentforge.contracts.v1.errors import AgentErrorCodeV1
 from agentforge.contracts.v1.evidence import (
     ActionExecutionStatusV1,
     AttackEvidenceV1,
+    SanitizedHttpExchangeV1,
+    SideEffectV1,
     TargetVisibleToolCallV1,
     TranscriptRoleV1,
 )
-from agentforge.orchestration.execution_gate import ValidatedAttackV1
+from agentforge.orchestration.execution_gate import (
+    EndpointBindingV1,
+    EndpointPersistenceV1,
+    ValidatedAttackV1,
+)
 from agentforge.security.allowlist import TargetRejected, require_allowed_url
 from agentforge.settings import Settings
 from agentforge.target.auth import TargetAuthenticationError, credentials_from_settings
@@ -75,6 +82,7 @@ from .base import (
     RunnerFailure,
     TargetExecutionContext,
     require_validated_attack,
+    synthetic_artifact_reference,
 )
 
 BrowserLaunchMode = Literal["auto", "chromium", "chrome"]
@@ -97,6 +105,18 @@ class BrowserChatResult:
 @dataclass(frozen=True, slots=True)
 class BrowserUploadResult:
     review_text: str
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserApiResult:
+    status_code: int
+    content_type: str
+    response_size_bytes: int
+    response_truncated: bool
+    elapsed_ms: float
+    response_text: str | None
+    target_visible_tool_calls: tuple[TargetVisibleToolCallV1, ...] = ()
+    synthetic_artifact_reference: str | None = None
 
 
 class UISmokeStep(StrEnum):
@@ -397,6 +417,13 @@ class BrowserSession(Protocol):
         fixture: ApprovedFixture,
         timeout_seconds: float,
     ) -> BrowserUploadResult: ...
+
+    async def invoke_same_origin_api(
+        self,
+        action: InvokeApprovedApiRequestActionV1,
+        binding: EndpointBindingV1,
+        timeout_seconds: float,
+    ) -> BrowserApiResult: ...
 
     async def capture_screenshot(self, path: Path) -> None: ...
 
@@ -947,6 +974,118 @@ class _LivePlaywrightSession(AbstractAsyncContextManager["_LivePlaywrightSession
             await review.wait_for(state="hidden", timeout=timeout_ms)
         await self._bind_and_validate_card(first_binding=False)
         return BrowserUploadResult(review_text or "Upload staged and rejected without persistence.")
+
+    async def invoke_same_origin_api(
+        self,
+        action: InvokeApprovedApiRequestActionV1,
+        binding: EndpointBindingV1,
+        timeout_seconds: float,
+    ) -> BrowserApiResult:
+        if self._selected is None or self._bound_csrf is None:
+            raise RunnerActionRejected("same-origin API execution requires a bound patient card")
+        if binding.surface != "ui" or action.credential_mode != "endpoint_default":
+            raise RunnerActionRejected("same-origin API action has an invalid session binding")
+        if binding.request_encoding == "multipart":
+            raise RunnerActionRejected(
+                "multipart same-origin APIs require an approved fixture action"
+            )
+        await self._bind_and_validate_card(first_binding=False)
+        expected = resolve_endpoint(
+            profile=self.execution.profile,
+            target_alias=self.execution.target_alias,
+            endpoint_id=action.endpoint_id,
+            requested_method=action.method.value,
+        )
+        if not same_origin(expected.url, self.execution.target_alias.base_url):
+            raise RunnerActionRejected("same-origin API endpoint left the OpenEMR origin")
+        body = dict(action.body)
+        trusted_keys = {"expected_patient_id", "csrf_token", "correlation_id"}
+        if trusted_keys.intersection(body):
+            raise RunnerActionRejected(
+                "same-origin API action attempted to supply controller-owned bindings"
+            )
+        body["expected_patient_id"] = self._selected.numeric_pid
+        body["csrf_token"] = self._bound_csrf
+
+        body_correlation = str(uuid4())
+        if action.correlation_mode == "valid":
+            header_correlation = body_correlation
+        elif action.correlation_mode == "missing":
+            header_correlation = None
+        elif action.correlation_mode == "invalid":
+            header_correlation = "agentforge-invalid-correlation"
+        elif action.correlation_mode == "mismatch":
+            header_correlation = str(uuid4())
+        else:  # pragma: no cover - closed contract literal
+            raise RunnerActionRejected("same-origin correlation mode is unsupported")
+        if action.endpoint_id != "copilot_chat_proxy":
+            body["correlation_id"] = body_correlation
+        headers = {"Content-Type": "application/json"}
+        if header_correlation is not None:
+            headers["X-Correlation-ID"] = header_correlation
+        timeout_ms = min(timeout_seconds, self.execution.request_timeout_seconds) * 1_000
+        started = monotonic()
+        try:
+            response = await self.browser_context.request.fetch(
+                expected.url,
+                method=action.method.value,
+                params=action.query,
+                data=json.dumps(body),
+                headers=headers,
+                timeout=timeout_ms,
+                fail_on_status_code=False,
+            )
+            raw = await response.body()
+        except PlaywrightError as exc:
+            raise RunnerFailure(
+                AgentErrorCodeV1.TARGET_UNREACHABLE,
+                "approved same-origin API request did not complete",
+                retryable=True,
+            ) from exc
+        truncated = len(raw) > self.execution.max_response_bytes
+        raw = raw[: self.execution.max_response_bytes]
+        content_type = response.headers.get("content-type", "unknown")[:100]
+        response_text: str | None = None
+        target_visible_tool_calls: tuple[TargetVisibleToolCallV1, ...] = ()
+        artifact_reference: str | None = None
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict):
+            if (
+                binding.persistence == EndpointPersistenceV1.PERSISTENT_SYNTHETIC
+                and response.status < 300
+            ):
+                artifact_reference = synthetic_artifact_reference(payload)
+            if action.endpoint_id == "copilot_chat_proxy" and response.status < 400:
+                blocks = payload.get("blocks")
+                if isinstance(blocks, list):
+                    text_parts = [
+                        block["text"]
+                        for block in blocks
+                        if isinstance(block, dict) and isinstance(block.get("text"), str)
+                    ]
+                    response_text = "\n\n".join(text_parts)[:20_000] or None
+                target_visible_tool_calls = _extract_target_visible_tool_calls(
+                    payload,
+                    patient_alias=self._selected.patient_alias,
+                    turn_number=1,
+                )
+            else:
+                detail = payload.get("error", payload.get("detail"))
+                if isinstance(detail, str):
+                    response_text = detail[:20_000]
+        return BrowserApiResult(
+            status_code=response.status,
+            content_type=content_type,
+            response_size_bytes=len(raw),
+            response_truncated=truncated,
+            elapsed_ms=max(0.0, (monotonic() - started) * 1_000),
+            response_text=response_text,
+            target_visible_tool_calls=target_visible_tool_calls,
+            synthetic_artifact_reference=artifact_reference,
+        )
 
     async def capture_screenshot(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1530,6 +1669,9 @@ class PlaywrightAttackRunner:
     ) -> AttackEvidenceV1:
         self._cleanup_warnings.clear()
         proposal = require_validated_attack(attack, context)
+        authorized_bindings = {
+            binding.endpoint_id: binding for binding in attack.authorized_endpoint_bindings
+        }
         recorder = EvidenceRecorder(context)
         trace_requested = any(
             isinstance(action, CollectEvidenceActionV1)
@@ -1556,6 +1698,7 @@ class PlaywrightAttackRunner:
                             context=context,
                             recorder=recorder,
                             session=session,
+                            authorized_bindings=authorized_bindings,
                             trace_stopped=trace_stopped,
                             response_timeout_seconds=response_timeout_seconds,
                         )
@@ -1643,6 +1786,7 @@ class PlaywrightAttackRunner:
         context: TargetExecutionContext,
         recorder: EvidenceRecorder,
         session: BrowserSession,
+        authorized_bindings: dict[str, EndpointBindingV1],
         trace_stopped: bool,
         response_timeout_seconds: float,
     ) -> tuple[str, bool]:
@@ -1692,8 +1836,66 @@ class PlaywrightAttackRunner:
             )
             return "approved fixture staged then rejected without persistence", trace_stopped
         if isinstance(action, InvokeApprovedApiRequestActionV1):
-            raise RunnerActionRejected(
-                "browser runner does not accept direct API actions; use the status HTTP runner"
+            authorized = authorized_bindings.get(action.endpoint_id)
+            if authorized is None:
+                raise RunnerActionRejected("same-origin API binding is missing")
+            if isinstance(action.body.get("message"), str):
+                recorder.add_transcript(TranscriptRoleV1.USER, str(action.body["message"]))
+            result = await session.invoke_same_origin_api(
+                action,
+                authorized,
+                response_timeout_seconds,
+            )
+            recorder.add_http(
+                SanitizedHttpExchangeV1(
+                    exchange_id=f"http-{sequence_index}",
+                    method=action.method,
+                    endpoint_id=action.endpoint_id,
+                    surface=authorized.surface,
+                    request_auth_mode="browser_session",
+                    correlation_mode=action.correlation_mode,
+                    response_status=result.status_code,
+                    response_content_type=result.content_type,
+                    response_size_bytes=result.response_size_bytes,
+                    response_truncated=result.response_truncated,
+                    elapsed_ms=result.elapsed_ms,
+                    error_summary=None,
+                )
+            )
+            if result.response_text:
+                recorder.add_transcript(
+                    (
+                        TranscriptRoleV1.ASSISTANT
+                        if action.endpoint_id == "copilot_chat_proxy" and result.status_code < 400
+                        else TranscriptRoleV1.SYSTEM
+                    ),
+                    result.response_text,
+                )
+            for call in result.target_visible_tool_calls:
+                recorder.add_target_visible_tool_call(call)
+            if (
+                authorized.persistence == EndpointPersistenceV1.PERSISTENT_SYNTHETIC
+                and 200 <= result.status_code < 300
+            ):
+                recorder.add_side_effect(
+                    SideEffectV1(
+                        effect_id=f"persistent-{sequence_index}",
+                        effect_type="retained_synthetic_artifact",
+                        description=(
+                            "One explicitly approved synthetic artifact was retained by "
+                            "the same-origin target endpoint"
+                            + (
+                                f" as {result.synthetic_artifact_reference}."
+                                if result.synthetic_artifact_reference is not None
+                                else " without a returned artifact identifier."
+                            )
+                        ),
+                        observed=True,
+                    )
+                )
+            return (
+                f"same-origin endpoint returned HTTP {result.status_code}",
+                trace_stopped,
             )
         if isinstance(action, WaitForResponseActionV1):
             return "preceding UI action had already awaited its bounded response", trace_stopped

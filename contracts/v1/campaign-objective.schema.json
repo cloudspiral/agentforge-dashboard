@@ -10,12 +10,32 @@
       "title": "AttackSurfaceV1",
       "type": "string"
     },
+    "AttackTechniqueV2": {
+      "enum": [
+        "scenario",
+        "fuzzing"
+      ],
+      "title": "AttackTechniqueV2",
+      "type": "string"
+    },
     "CampaignTypeV1": {
       "enum": [
         "discovery",
         "regression"
       ],
       "title": "CampaignTypeV1",
+      "type": "string"
+    },
+    "ExecutionSurfaceV2": {
+      "description": "Controller-owned execution surfaces available to planning agents.",
+      "enum": [
+        "openemr_ui",
+        "openemr_same_origin_api",
+        "agent_service_api",
+        "staged_document",
+        "hybrid"
+      ],
+      "title": "ExecutionSurfaceV2",
       "type": "string"
     },
     "JsonValue": {},
@@ -228,6 +248,10 @@
     "campaign_type": {
       "$ref": "#/$defs/CampaignTypeV1"
     },
+    "execution_surface": {
+      "$ref": "#/$defs/ExecutionSurfaceV2",
+      "default": "openemr_ui"
+    },
     "mutation_source_attempt_id": {
       "anyOf": [
         {
@@ -298,6 +322,10 @@
       "minLength": 1,
       "title": "Target Version",
       "type": "string"
+    },
+    "technique": {
+      "$ref": "#/$defs/AttackTechniqueV2",
+      "default": "scenario"
     }
   },
   "required": [

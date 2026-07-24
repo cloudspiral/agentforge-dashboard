@@ -9,6 +9,7 @@ from agentforge.contracts.v1 import (
     ActionTypeV1,
     ApprovedHttpMethodV1,
     AttackSurfaceV1,
+    AttackTechniqueV2,
     AuthenticateActionV1,
     AuthenticationSessionSourceV1,
     CampaignObjectiveV1,
@@ -16,7 +17,9 @@ from agentforge.contracts.v1 import (
     CollectEvidenceActionV1,
     EstimatedCostClassV1,
     EvidenceKindV1,
-    OrchestratorDecisionV1,
+    ExecutionSurfaceV2,
+    InvokeApprovedApiRequestActionV1,
+    OrchestratorDecisionV2,
     OwaspMappingsV1,
     PriorAttemptSummaryV1,
     ProposedAttackV1,
@@ -27,10 +30,16 @@ from agentforge.contracts.v1 import (
     SelectSyntheticPatientActionV1,
     SendChatMessageActionV1,
     SeverityV1,
+    SurfaceCapabilityFactV2,
     WaitForResponseActionV1,
 )
 from agentforge.evaluation import SeedCaseV1, TaxonomyV1
-from agentforge.orchestration.execution_gate import EndpointBindingV1, EndpointPurposeV1
+from agentforge.orchestration.execution_gate import (
+    EndpointAuthenticationV1,
+    EndpointBindingV1,
+    EndpointPersistenceV1,
+    EndpointPurposeV1,
+)
 from agentforge.regression.invariants import (
     CurrentPatientUnchangedInvariantV1,
     ExecutionBoundsInvariantV1,
@@ -55,33 +64,6 @@ def owasp_mappings(category) -> OwaspMappingsV1:  # type: ignore[no-untyped-def]
     )
 
 
-def deterministic_shortlist(
-    taxonomy: TaxonomyV1,
-    *,
-    category_scope: str | None,
-    subcategory_scope: str | None,
-    coverage_counts: dict[tuple[str, str], int],
-) -> list[tuple[str, str]]:
-    priority = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-    candidates: list[tuple[int, int, str, str]] = []
-    for category in taxonomy.categories:
-        if category_scope and category.id != category_scope:
-            continue
-        for subcategory in category.subcategories:
-            if subcategory_scope and subcategory.id != subcategory_scope:
-                continue
-            candidates.append(
-                (
-                    -priority[category.coverage_priority],
-                    coverage_counts.get((category.id, subcategory.id), 0),
-                    category.id,
-                    subcategory.id,
-                )
-            )
-    candidates.sort()
-    return [(category, subcategory) for _, _, category, subcategory in candidates]
-
-
 def build_objective(
     *,
     campaign_id: str,
@@ -97,6 +79,8 @@ def build_objective(
     requested_action: RequestedActionV1 = RequestedActionV1.NEW_ATTACK,
     mutation_source_attempt_id: str | None = None,
     objective_text: str | None = None,
+    execution_surface: ExecutionSurfaceV2 = ExecutionSurfaceV2.OPENEMR_UI,
+    technique: AttackTechniqueV2 = AttackTechniqueV2.SCENARIO,
 ) -> CampaignObjectiveV1:
     category = next(item for item in taxonomy.categories if item.id == category_id)
     subcategory = next(item for item in category.subcategories if item.id == subcategory_id)
@@ -108,7 +92,17 @@ def build_objective(
         selected_category=category_id,
         selected_subcategory=subcategory_id,
         owasp_mappings=owasp_mappings(category),
-        attack_surface=AttackSurfaceV1.UI,
+        attack_surface=(
+            AttackSurfaceV1.UI
+            if execution_surface == ExecutionSurfaceV2.OPENEMR_UI
+            else AttackSurfaceV1.UPLOAD
+            if execution_surface == ExecutionSurfaceV2.STAGED_DOCUMENT
+            else AttackSurfaceV1.HYBRID
+            if execution_surface == ExecutionSurfaceV2.HYBRID
+            else AttackSurfaceV1.API
+        ),
+        execution_surface=execution_surface,
+        technique=technique,
         objective=objective_text
         or (
             f"Evaluate {subcategory.description} while preserving the current synthetic "
@@ -117,7 +111,7 @@ def build_objective(
         relevant_target_profile_subset={
             "authorized_scope": "synthetic-only",
             "patient_alias": "patient_a",
-            "runner_surface": "authenticated_openemr_ui",
+            "runner_surface": execution_surface.value,
             "persistent_upload_confirmation": False,
         },
         relevant_prior_attempts=relevant_prior_attempts or [],
@@ -134,14 +128,18 @@ def build_objective(
     )
 
 
-def validate_objective_choice(
-    decision: OrchestratorDecisionV1,
+def validate_objective_choice_v2(
+    decision: OrchestratorDecisionV2,
     *,
-    campaign_id: str,
-    target_version: str,
-    shortlist: list[tuple[str, str]],
+    allowed_pairs: set[tuple[str, str]],
+    allowed_surfaces: set[ExecutionSurfaceV2],
+    allowed_techniques: set[AttackTechniqueV2],
     allowed_mutation_source_ids: set[str] | None = None,
 ) -> bool:
+    """Validate authority and contract membership without ranking the decision."""
+
+    if decision.requested_action == RequestedActionV1.STOP:
+        return True
     mutation_sources = allowed_mutation_source_ids or set()
     action_is_allowed = (
         decision.requested_action == RequestedActionV1.NEW_ATTACK
@@ -151,24 +149,13 @@ def validate_objective_choice(
         and decision.mutation_source_attempt_id in mutation_sources
     )
     return bool(
-        decision.requested_action != RequestedActionV1.STOP
-        and (decision.selected_category, decision.selected_subcategory) in shortlist
+        decision.selected_category is not None
+        and decision.selected_subcategory is not None
+        and (decision.selected_category, decision.selected_subcategory) in allowed_pairs
+        and decision.selected_surface in allowed_surfaces
+        and decision.selected_technique in allowed_techniques
         and action_is_allowed
     )
-
-
-def choose_seed_case(
-    cases: list[SeedCaseV1],
-    *,
-    category: str,
-    subcategory: str,
-    attempt_index: int,
-) -> SeedCaseV1 | None:
-    exact = [
-        case for case in cases if case.category == category and case.subcategory == subcategory
-    ]
-    pool = exact or [case for case in cases if case.category == category]
-    return pool[attempt_index % len(pool)] if pool else None
 
 
 def proposal_from_seed(
@@ -214,6 +201,17 @@ def proposal_from_seed(
                 conversation_alias=f"campaign-{campaign_id[:12]}",
                 await_response=True,
             )
+        elif seed_action.type == "invoke_approved_api_request":
+            action = InvokeApprovedApiRequestActionV1(
+                **common,
+                action_type=ActionTypeV1.INVOKE_APPROVED_API_REQUEST,
+                endpoint_id=seed_action.endpoint_id,
+                method=ApprovedHttpMethodV1(seed_action.method),
+                credential_mode=seed_action.credential_mode,
+                correlation_mode=seed_action.correlation_mode,
+                query=seed_action.query,
+                body=seed_action.body,
+            )
         elif seed_action.type == "wait_for_response":
             action = WaitForResponseActionV1(
                 **common,
@@ -256,6 +254,12 @@ def proposal_from_seed(
         proposal_id=f"proposal-{uuid.uuid4().hex}",
         category=case.category,
         subcategory=case.subcategory,
+        execution_surface=(
+            ExecutionSurfaceV2.OPENEMR_SAME_ORIGIN_API
+            if case.surface == "api"
+            else ExecutionSurfaceV2.OPENEMR_UI
+        ),
+        technique=AttackTechniqueV2.SCENARIO,
         attack_family_id=case.id,
         novelty_rationale="Explicit approved fixed-case sequence for bounded synthetic QA.",
         prerequisites=[
@@ -279,35 +283,196 @@ def proposal_from_seed(
 
 
 def endpoint_bindings(profile: TargetProfileV1) -> dict[str, EndpointBindingV1]:
-    purpose_by_path = {
-        "/health": EndpointPurposeV1.STATUS,
-        "/ready": EndpointPurposeV1.STATUS,
-        "/interface/patient_file/clinical_copilot/proxy.php": EndpointPurposeV1.CHAT,
+    metadata_by_path = {
+        "/health": (
+            "status_health",
+            EndpointPurposeV1.STATUS,
+            EndpointAuthenticationV1.NONE,
+            EndpointPersistenceV1.READ_ONLY,
+            "none",
+        ),
+        "/ready": (
+            "status_ready",
+            EndpointPurposeV1.STATUS,
+            EndpointAuthenticationV1.NONE,
+            EndpointPersistenceV1.READ_ONLY,
+            "none",
+        ),
+        "/metrics": (
+            "agent_metrics",
+            EndpointPurposeV1.METRICS,
+            EndpointAuthenticationV1.NONE,
+            EndpointPersistenceV1.READ_ONLY,
+            "none",
+        ),
+        "/openapi.json": (
+            "agent_openapi",
+            EndpointPurposeV1.OPENAPI,
+            EndpointAuthenticationV1.NONE,
+            EndpointPersistenceV1.READ_ONLY,
+            "none",
+        ),
+        "/agent/chat": (
+            "agent_chat",
+            EndpointPurposeV1.CHAT,
+            EndpointAuthenticationV1.SHARED_SECRET,
+            EndpointPersistenceV1.EPHEMERAL,
+            "json",
+        ),
+        "/agent/document-ingestions/extract": (
+            "agent_document_extract",
+            EndpointPurposeV1.DOCUMENT_EXTRACT,
+            EndpointAuthenticationV1.SHARED_SECRET,
+            EndpointPersistenceV1.EPHEMERAL,
+            "multipart",
+        ),
+        "/agent/document-ingestions/validate-confirmation": (
+            "agent_document_validate_confirmation",
+            EndpointPurposeV1.DOCUMENT_VALIDATE,
+            EndpointAuthenticationV1.SHARED_SECRET,
+            EndpointPersistenceV1.READ_ONLY,
+            "json",
+        ),
+        "/agent/evidence/retrieve": (
+            "agent_evidence_retrieve",
+            EndpointPurposeV1.EVIDENCE_RETRIEVE,
+            EndpointAuthenticationV1.SHARED_SECRET,
+            EndpointPersistenceV1.READ_ONLY,
+            "json",
+        ),
+        "/agent/document-ingestions/outcome": (
+            "agent_document_outcome",
+            EndpointPurposeV1.DOCUMENT_OUTCOME,
+            EndpointAuthenticationV1.SHARED_SECRET,
+            EndpointPersistenceV1.EPHEMERAL,
+            "json",
+        ),
+        "/interface/patient_file/clinical_copilot/proxy.php": (
+            "copilot_chat_proxy",
+            EndpointPurposeV1.CHAT,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.EPHEMERAL,
+            "json",
+        ),
+        "/interface/patient_file/clinical_copilot/source.php": (
+            "copilot_source",
+            EndpointPurposeV1.SOURCE_RESOLVE,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.READ_ONLY,
+            "json",
+        ),
+        "/interface/patient_file/clinical_copilot/evidence_region.php": (
+            "copilot_evidence_region",
+            EndpointPurposeV1.EVIDENCE_REGION,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.READ_ONLY,
+            "json",
+        ),
         "/interface/patient_file/clinical_copilot/ingestion_stage.php": (
-            EndpointPurposeV1.UPLOAD_STAGE
+            "document_stage",
+            EndpointPurposeV1.UPLOAD_STAGE,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.EPHEMERAL,
+            "multipart",
+        ),
+        "/interface/patient_file/clinical_copilot/ingestion_status.php": (
+            "document_status",
+            EndpointPurposeV1.UPLOAD_STATUS,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.READ_ONLY,
+            "json",
         ),
         "/interface/patient_file/clinical_copilot/ingestion_reject.php": (
-            EndpointPurposeV1.UPLOAD_REJECT
+            "document_reject",
+            EndpointPurposeV1.UPLOAD_REJECT,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.EPHEMERAL,
+            "json",
+        ),
+        "/interface/patient_file/clinical_copilot/ingestion_confirm.php": (
+            "document_confirm",
+            EndpointPurposeV1.UPLOAD_CONFIRM,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.PERSISTENT_SYNTHETIC,
+            "json",
+        ),
+        "/interface/patient_file/clinical_copilot/staged_document.php": (
+            "staged_document",
+            EndpointPurposeV1.STAGED_DOCUMENT,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.READ_ONLY,
+            "json",
+        ),
+        "/interface/patient_file/clinical_copilot/staged_evidence_region.php": (
+            "staged_evidence_region",
+            EndpointPurposeV1.EVIDENCE_REGION,
+            EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+            EndpointPersistenceV1.READ_ONLY,
+            "json",
         ),
     }
-    id_by_path = {
-        "/health": "status_health",
-        "/ready": "status_ready",
-        "/interface/patient_file/clinical_copilot/proxy.php": "copilot_chat_proxy",
-        "/interface/patient_file/clinical_copilot/ingestion_stage.php": "document_stage",
-        "/interface/patient_file/clinical_copilot/ingestion_reject.php": "document_reject",
-    }
-    return {
-        id_by_path[rule.path]: EndpointBindingV1(
-            endpoint_id=id_by_path[rule.path],
+    bindings: dict[str, EndpointBindingV1] = {}
+    for rule in profile.allowed_endpoints:
+        metadata = metadata_by_path.get(rule.path)
+        if metadata is None or rule.method not in {"GET", "POST"}:
+            continue
+        endpoint_id, purpose, authentication, persistence, request_encoding = metadata
+        bindings[endpoint_id] = EndpointBindingV1(
+            endpoint_id=endpoint_id,
             method=ApprovedHttpMethodV1(rule.method),
             surface=rule.surface,
             path=rule.path,
-            purpose=purpose_by_path[rule.path],
+            purpose=purpose,
+            authentication=authentication,
+            persistence=persistence,
+            request_encoding=request_encoding,
         )
-        for rule in profile.allowed_endpoints
-        if rule.path in id_by_path and rule.method in {"GET", "POST"}
+    return bindings
+
+
+def surface_capability_facts(profile: TargetProfileV1) -> list[SurfaceCapabilityFactV2]:
+    """Describe controller-owned execution capabilities without assigning priority."""
+
+    bindings = endpoint_bindings(profile)
+    ui_endpoint_ids = sorted(item.endpoint_id for item in bindings.values() if item.surface == "ui")
+    agent_endpoint_ids = sorted(
+        item.endpoint_id
+        for item in bindings.values()
+        if item.surface in {"agent_service", "status"}
+    )
+    document_endpoint_ids = sorted(
+        item.endpoint_id
+        for item in bindings.values()
+        if "document" in item.endpoint_id
+        or item.endpoint_id
+        in {
+            "document_stage",
+            "document_status",
+            "document_reject",
+            "document_confirm",
+            "staged_evidence_region",
+        }
+    )
+    capability_ids = {
+        ExecutionSurfaceV2.OPENEMR_UI: (
+            ["copilot_chat_proxy"] if "copilot_chat_proxy" in bindings else []
+        ),
+        ExecutionSurfaceV2.OPENEMR_SAME_ORIGIN_API: ui_endpoint_ids,
+        ExecutionSurfaceV2.AGENT_SERVICE_API: agent_endpoint_ids,
+        ExecutionSurfaceV2.STAGED_DOCUMENT: document_endpoint_ids,
+        ExecutionSurfaceV2.HYBRID: sorted(set(ui_endpoint_ids) | {"copilot_chat_proxy"}),
     }
+    return [
+        SurfaceCapabilityFactV2(
+            surface=surface,
+            supported=bool(endpoint_ids),
+            endpoint_ids=endpoint_ids,
+            blocked_reason=(
+                None if endpoint_ids else "No controller-owned endpoint binding is configured."
+            ),
+        )
+        for surface, endpoint_ids in capability_ids.items()
+    ]
 
 
 def build_security_invariants(profile: TargetProfileV1) -> list[SecurityInvariantV1]:

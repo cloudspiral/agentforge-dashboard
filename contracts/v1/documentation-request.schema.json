@@ -600,11 +600,12 @@
     },
     "FindingStatusV1": {
       "enum": [
+        "pending_review",
         "open",
         "in_progress",
         "resolved",
-        "reopened",
-        "false_positive"
+        "false_positive",
+        "reopened"
       ],
       "title": "FindingStatusV1",
       "type": "string"
@@ -692,6 +693,28 @@
           "title": "Body",
           "type": "object"
         },
+        "correlation_mode": {
+          "default": "valid",
+          "enum": [
+            "valid",
+            "missing",
+            "invalid",
+            "mismatch"
+          ],
+          "title": "Correlation Mode",
+          "type": "string"
+        },
+        "credential_mode": {
+          "default": "endpoint_default",
+          "enum": [
+            "endpoint_default",
+            "missing",
+            "invalid",
+            "valid"
+          ],
+          "title": "Credential Mode",
+          "type": "string"
+        },
         "description": {
           "maxLength": 512,
           "minLength": 1,
@@ -755,6 +778,21 @@
         },
         "exploitability": {
           "$ref": "#/$defs/ExploitabilityV1"
+        },
+        "finding_key": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finding Key"
         },
         "observed_behavior": {
           "maxLength": 512,
@@ -905,6 +943,21 @@
     "SanitizedHttpExchangeV1": {
       "additionalProperties": false,
       "properties": {
+        "correlation_mode": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Mode"
+        },
         "elapsed_ms": {
           "minimum": 0.0,
           "title": "Elapsed Ms",
@@ -940,6 +993,21 @@
         },
         "method": {
           "$ref": "#/$defs/ApprovedHttpMethodV1"
+        },
+        "request_auth_mode": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Auth Mode"
         },
         "response_content_type": {
           "anyOf": [
@@ -979,6 +1047,21 @@
           "default": false,
           "title": "Response Truncated",
           "type": "boolean"
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Surface"
         }
       },
       "required": [

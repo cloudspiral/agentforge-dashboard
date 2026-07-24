@@ -13,7 +13,7 @@ portable exports; they do not replace database records.
 | `judge_verdicts` | Verdict, confidence, severity, exploitability, violated invariants, observed/expected behavior, rubric version/hash | Zero or one per executed attempt |
 | `agent_runs` | Role, model, prompt version, input/output metadata, usage, cost, latency, trace ID, typed failure | Persists successful and rejected/invalid role calls |
 | `findings` | One confirmed attempt, attempt/evidence fingerprint, status | Exactly one new Finding per `exploit_confirmed` attempt |
-| `vulnerability_reports` | Documentation Agent structured output, controller-anchored exact transcript, and rendered internal draft | Exactly one per successfully documented Finding |
+| `vulnerability_reports` | Documentation Agent structured output, controller-anchored exact transcript, and rendered canonical report | Exactly one per successfully documented Finding |
 | `regression_cases` | Saved sequence, target requirements, original Judge context, expected secure behavior, taxonomy metadata, source evidence hash | Created mechanically after report persistence |
 | `regression_runs` | New target/evidence/verdict and mapped regression outcome | Many runs per regression case |
 

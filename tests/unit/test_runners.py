@@ -5,6 +5,7 @@ import json
 from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -19,7 +20,9 @@ from agentforge.contracts.v1.evidence import (
 )
 from agentforge.orchestration.execution_gate import (
     ApprovedFixtureV1,
+    EndpointAuthenticationV1,
     EndpointBindingV1,
+    EndpointPersistenceV1,
     EndpointPurposeV1,
     ValidatedAttackV1,
     proposal_sequence_hash,
@@ -28,11 +31,13 @@ from agentforge.runners.base import RunnerActionRejected, TargetExecutionContext
 from agentforge.runners.composite import CompositeAttackRunner
 from agentforge.runners.http_runner import HttpAttackRunner
 from agentforge.runners.playwright_runner import (
+    BrowserApiResult,
     BrowserChatResult,
     BrowserUploadResult,
     PlaywrightAttackRunner,
     SelectedPatient,
     _extract_target_visible_tool_calls,
+    _LivePlaywrightSession,
 )
 from agentforge.security.allowlist import TargetRejected
 from agentforge.settings import Settings
@@ -76,6 +81,8 @@ def _context(
     *,
     credentials: bool = False,
     approved_fixtures: dict[str, ApprovedFixtureAuthorization] | None = None,
+    direct_context: bool = False,
+    agent_shared_secret: SecretStr | None = None,
 ) -> TargetExecutionContext:
     loaded = load_target_profile(ROOT / "config/target-profile.yaml")
     alias = loaded.resolve_alias(
@@ -108,6 +115,10 @@ def _context(
         artifacts_dir=tmp_path / "artifacts",
         credentials=resolved_credentials,
         approved_fixtures=approved_fixtures or {},
+        agent_shared_secret=agent_shared_secret,
+        test_user_id="42" if direct_context else None,
+        test_auth_username="synthetic-admin" if direct_context else None,
+        synthetic_patient_ids=({"patient_a": "7", "patient_b": "8"} if direct_context else {}),
     )
 
 
@@ -121,13 +132,50 @@ def _validated(
     fixtures: list[ApprovedFixtureV1] = []
     action_types = {action.action_type.value for action in attack.ordered_actions}
     if "invoke_approved_api_request" in action_types:
-        bindings["status_health"] = EndpointBindingV1(
-            endpoint_id="status_health",
-            method=ApprovedHttpMethodV1.GET,
-            surface="status",
-            path="/health",
-            purpose=EndpointPurposeV1.STATUS,
-        )
+        for action in attack.ordered_actions:
+            if action.action_type.value != "invoke_approved_api_request":
+                continue
+            if action.endpoint_id == "agent_chat":
+                bindings[action.endpoint_id] = EndpointBindingV1(
+                    endpoint_id="agent_chat",
+                    method=ApprovedHttpMethodV1.POST,
+                    surface="agent_service",
+                    path="/agent/chat",
+                    purpose=EndpointPurposeV1.CHAT,
+                    authentication=EndpointAuthenticationV1.SHARED_SECRET,
+                    persistence=EndpointPersistenceV1.EPHEMERAL,
+                    request_encoding="json",
+                )
+            elif action.endpoint_id == "copilot_chat_proxy":
+                bindings[action.endpoint_id] = EndpointBindingV1(
+                    endpoint_id="copilot_chat_proxy",
+                    method=ApprovedHttpMethodV1.POST,
+                    surface="ui",
+                    path="/interface/patient_file/clinical_copilot/proxy.php",
+                    purpose=EndpointPurposeV1.CHAT,
+                    authentication=EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+                    persistence=EndpointPersistenceV1.EPHEMERAL,
+                    request_encoding="json",
+                )
+            elif action.endpoint_id == "document_confirm":
+                bindings[action.endpoint_id] = EndpointBindingV1(
+                    endpoint_id="document_confirm",
+                    method=ApprovedHttpMethodV1.POST,
+                    surface="ui",
+                    path="/interface/patient_file/clinical_copilot/ingestion_confirm.php",
+                    purpose=EndpointPurposeV1.UPLOAD_CONFIRM,
+                    authentication=EndpointAuthenticationV1.BROWSER_SESSION_CSRF,
+                    persistence=EndpointPersistenceV1.PERSISTENT_SYNTHETIC,
+                    request_encoding="json",
+                )
+            else:
+                bindings[action.endpoint_id] = EndpointBindingV1(
+                    endpoint_id=action.endpoint_id,
+                    method=ApprovedHttpMethodV1.GET,
+                    surface="status",
+                    path="/health",
+                    purpose=EndpointPurposeV1.STATUS,
+                )
     if "send_chat_message" in action_types:
         bindings["copilot_chat_proxy"] = EndpointBindingV1(
             endpoint_id="copilot_chat_proxy",
@@ -203,6 +251,26 @@ def _chat_action() -> dict[str, object]:
         "description": "Send a bounded test message.",
         "message": "Summarize the synthetic chart.",
         "await_response": True,
+    }
+
+
+def _api_action(
+    *,
+    endpoint_id: str,
+    credential_mode: str = "endpoint_default",
+    correlation_mode: str = "valid",
+    body: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "action_type": "invoke_approved_api_request",
+        "action_id": f"api-{endpoint_id}",
+        "description": "Invoke one controller-catalogued API.",
+        "endpoint_id": endpoint_id,
+        "method": "POST",
+        "credential_mode": credential_mode,
+        "correlation_mode": correlation_mode,
+        "query": {},
+        "body": body or {},
     }
 
 
@@ -296,6 +364,154 @@ async def test_http_runner_records_and_rejects_redirect(tmp_path: Path) -> None:
 
     assert evidence.executed_action_sequence[0].status == ActionExecutionStatusV1.REJECTED
     assert evidence.sanitized_http_metadata[0].response_status == 302
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("credential_mode", "expected_status", "expected_header"),
+    [
+        ("missing", 401, None),
+        ("invalid", 403, "agentforge-invalid-shared-secret"),
+        ("valid", 200, "controller-owned-secret"),
+    ],
+)
+async def test_direct_agent_chat_auth_and_context_are_controller_owned(
+    tmp_path: Path,
+    credential_mode: str,
+    expected_status: int,
+    expected_header: str | None,
+) -> None:
+    captured: list[tuple[httpx.Request, dict[str, object]]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        captured.append((request, payload))
+        header = request.headers.get("X-Agent-Shared-Secret")
+        status_code = 401 if header is None else 403 if header != "controller-owned-secret" else 200
+        response_payload = (
+            {"detail": "authentication rejected"}
+            if status_code >= 400
+            else {"blocks": [{"text": "Synthetic response."}], "evidence_packet": {}}
+        )
+        return httpx.Response(status_code, json=response_payload, request=request)
+
+    runner = HttpAttackRunner(
+        lambda context: httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            timeout=context.request_timeout_seconds,
+        )
+    )
+    context = _context(
+        tmp_path,
+        direct_context=True,
+        agent_shared_secret=SecretStr("controller-owned-secret"),
+    )
+    attack = _attack(
+        [
+            _api_action(
+                endpoint_id="agent_chat",
+                credential_mode=credential_mode,
+                correlation_mode="mismatch",
+                body={
+                    "message": "Bounded direct-agent request.",
+                    "conversation_id": "agentforge-unit",
+                    "context": {
+                        "patient_alias": "patient_b",
+                        "allowed_tool_names": ["get_vitals"],
+                        "auth_username_claim": "synthetic-admin",
+                        "user_id_claim": "42",
+                    },
+                },
+            ),
+            {
+                "action_type": "collect_evidence",
+                "action_id": "collect-direct",
+                "description": "Collect direct API evidence.",
+                "evidence_kinds": ["transcript", "http_metadata", "tool_calls"],
+                "capture_on": "always",
+            },
+        ]
+    )
+
+    evidence = await runner.execute(_validated(attack, context), context)
+
+    assert len(captured) == 1
+    request, payload = captured[0]
+    assert request.headers.get("X-Agent-Shared-Secret") == expected_header
+    assert payload["context"]["patient_id"] == "8"
+    assert payload["context"]["user_id"] == "42"
+    assert payload["context"]["allowed_tool_names"] == ["get_vitals"]
+    assert evidence.sanitized_http_metadata[0].response_status == expected_status
+    assert evidence.executed_action_sequence[0].status == ActionExecutionStatusV1.SUCCEEDED
+    assert "controller-owned-secret" not in evidence.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_live_same_origin_api_injects_bound_patient_and_csrf(
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status = 200
+        headers = {"content-type": "application/json"}
+
+        async def body(self) -> bytes:
+            return b'{"blocks":[{"text":"Bound response"}],"evidence_packet":{"retrievals":[]}}'
+
+    class FakeRequestContext:
+        async def fetch(self, url: str, **kwargs: object) -> FakeResponse:
+            captured.update({"url": url, **kwargs})
+            return FakeResponse()
+
+    context = _context(tmp_path, credentials=True)
+    session = _LivePlaywrightSession(context, False)
+    session._context = SimpleNamespace(request=FakeRequestContext())
+    session._selected = SelectedPatient(
+        "patient_a",
+        "GOLDEN-LONGITUDINAL",
+        "Avery GoldenFixture",
+        "7",
+    )
+    session._bound_csrf = "controller-bound-csrf"
+
+    async def validate_card(*, first_binding: bool) -> None:
+        assert first_binding is False
+
+    session._bind_and_validate_card = validate_card  # type: ignore[method-assign]
+    action = next(
+        item
+        for item in _attack(
+            [
+                _api_action(
+                    endpoint_id="copilot_chat_proxy",
+                    body={"message": "Bound same-origin request."},
+                )
+            ]
+        ).ordered_actions
+        if item.action_type.value == "invoke_approved_api_request"
+    )
+    binding = _validated(
+        _attack(
+            [
+                _api_action(
+                    endpoint_id="copilot_chat_proxy",
+                    body={"message": "Bound same-origin request."},
+                )
+            ]
+        ),
+        context,
+    ).authorized_endpoint_bindings[0]
+
+    result = await session.invoke_same_origin_api(action, binding, 7)
+    sent = json.loads(str(captured["data"]))
+
+    assert sent["message"] == "Bound same-origin request."
+    assert sent["expected_patient_id"] == "7"
+    assert sent["csrf_token"] == "controller-bound-csrf"  # noqa: S105
+    assert captured["headers"]["X-Correlation-ID"]
+    assert result.status_code == 200
+    assert result.response_text == "Bound response"
 
 
 @pytest.mark.asyncio
@@ -393,10 +609,12 @@ class FakeBrowserSession(AbstractAsyncContextManager["FakeBrowserSession"]):
         *,
         fail_chat: bool = False,
         target_visible_tool_calls: tuple[TargetVisibleToolCallV1, ...] = (),
+        api_result: BrowserApiResult | None = None,
     ) -> None:
         self.events: list[str] = []
         self.fail_chat = fail_chat
         self.target_visible_tool_calls = target_visible_tool_calls
+        self.api_result = api_result
 
     async def __aenter__(self) -> FakeBrowserSession:
         self.events.append("enter")
@@ -433,6 +651,23 @@ class FakeBrowserSession(AbstractAsyncContextManager["FakeBrowserSession"]):
         self.events.append(f"stage-reject:{fixture.fixture_id}")
         assert timeout_seconds == 7
         return BrowserUploadResult("No persistent change was made.")
+
+    async def invoke_same_origin_api(
+        self,
+        action,  # type: ignore[no-untyped-def]
+        binding,  # type: ignore[no-untyped-def]
+        timeout_seconds: float,
+    ) -> BrowserApiResult:
+        self.events.append(f"same-origin:{action.endpoint_id}:{binding.authentication.value}")
+        assert timeout_seconds == 7
+        return self.api_result or BrowserApiResult(
+            status_code=200,
+            content_type="application/json",
+            response_size_bytes=2,
+            response_truncated=False,
+            elapsed_ms=1,
+            response_text=None,
+        )
 
     async def capture_screenshot(self, path: Path) -> None:
         self.events.append(f"screenshot:{path.name}")
@@ -644,6 +879,39 @@ async def test_playwright_upload_uses_authorized_fixture_and_only_stage_rejects(
     assert "stage-reject:bounded-upload" in fake.events
     assert all("confirm" not in event for event in fake.events)
     assert evidence.errors == []
+
+
+@pytest.mark.asyncio
+async def test_persistent_same_origin_result_is_labeled_with_returned_synthetic_id(
+    tmp_path: Path,
+) -> None:
+    actions = _browser_actions()
+    actions[3] = _api_action(
+        endpoint_id="document_confirm",
+        body={"staging_token": "approved-synthetic-token"},
+    )
+    fake = FakeBrowserSession(
+        api_result=BrowserApiResult(
+            status_code=200,
+            content_type="application/json",
+            response_size_bytes=32,
+            response_truncated=False,
+            elapsed_ms=2,
+            response_text="Synthetic confirmation accepted.",
+            synthetic_artifact_reference="document_id=AF-SYNTHETIC-1",
+        )
+    )
+    runner = PlaywrightAttackRunner(lambda context, trace: fake)
+    context = _context(tmp_path, credentials=True)
+    attack = _attack(actions)
+
+    evidence = await runner.execute(_validated(attack, context), context)
+
+    assert evidence.errors == []
+    assert len(evidence.side_effects) == 1
+    assert evidence.side_effects[0].effect_type == "retained_synthetic_artifact"
+    assert "document_id=AF-SYNTHETIC-1" in evidence.side_effects[0].description
+    assert "same-origin:document_confirm:browser_session_csrf" in fake.events
 
 
 @pytest.mark.asyncio

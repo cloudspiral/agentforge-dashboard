@@ -8,10 +8,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 from uuid import uuid4
 
-from pydantic import JsonValue
+from pydantic import JsonValue, SecretStr
 
 from agentforge.contracts.v1.actions import AttackActionV1
 from agentforge.contracts.v1.campaign import ProposedAttackV1
@@ -22,6 +22,7 @@ from agentforge.contracts.v1.evidence import (
     AttackEvidenceV1,
     ExecutedActionV1,
     SanitizedHttpExchangeV1,
+    SideEffectV1,
     TargetVisibleToolCallV1,
     TranscriptRoleV1,
     TranscriptTurnV1,
@@ -50,6 +51,33 @@ def sanitized_summary(value: str, *, fallback: str = "runner event") -> str:
     return (normalized or fallback)[:512]
 
 
+def synthetic_artifact_reference(payload: Any) -> str | None:
+    """Extract one bounded identifier from a synthetic persistent-write response."""
+
+    if not isinstance(payload, dict):
+        return None
+    for key in (
+        "document_id",
+        "staged_document_id",
+        "ingestion_id",
+        "artifact_id",
+        "uuid",
+        "id",
+    ):
+        value = payload.get(key)
+        if isinstance(value, int):
+            candidate = str(value)
+        elif isinstance(value, str):
+            candidate = value.strip()
+        else:
+            continue
+        if not candidate or len(candidate) > 128:
+            continue
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", candidate):
+            return f"{key}={candidate}"
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class TargetExecutionContext:
     """Resolved, profile-owned execution inputs; actions never supply a target URL."""
@@ -64,6 +92,10 @@ class TargetExecutionContext:
     repository_root: Path
     artifacts_dir: Path
     credentials: TargetCredentials | None = None
+    agent_shared_secret: SecretStr | None = None
+    test_user_id: str | None = None
+    test_auth_username: str | None = None
+    synthetic_patient_ids: Mapping[str, str] = field(default_factory=dict)
     request_timeout_seconds: float = 30.0
     max_response_bytes: int = 1_000_000
     max_upload_bytes: int = 1_048_576
@@ -126,6 +158,17 @@ class TargetExecutionContext:
             ):
                 raise ValueError("approved fixture authorization metadata is invalid")
         object.__setattr__(self, "approved_fixtures", MappingProxyType(fixture_registry))
+        patient_ids = dict(self.synthetic_patient_ids)
+        if any(alias not in {"patient_a", "patient_b"} for alias in patient_ids):
+            raise ValueError("direct-agent patient IDs must use approved synthetic aliases")
+        if any(re.fullmatch(r"[1-9][0-9]{0,31}", value) is None for value in patient_ids.values()):
+            raise ValueError("direct-agent synthetic patient IDs must be numeric identifiers")
+        if (
+            self.test_user_id is not None
+            and re.fullmatch(r"[1-9][0-9]{0,31}", self.test_user_id) is None
+        ):
+            raise ValueError("direct-agent test user ID must be a numeric identifier")
+        object.__setattr__(self, "synthetic_patient_ids", MappingProxyType(patient_ids))
 
         repository = self.repository_root.resolve()
         artifacts = self.artifacts_dir.resolve()
@@ -291,6 +334,7 @@ class EvidenceRecorder:
         self.transcript: list[TranscriptTurnV1] = []
         self.http_metadata: list[SanitizedHttpExchangeV1] = []
         self.target_visible_tool_calls: list[TargetVisibleToolCallV1] = []
+        self.side_effects: list[SideEffectV1] = []
         self.errors: list[AgentErrorV1] = []
 
     def add_action(
@@ -360,6 +404,9 @@ class EvidenceRecorder:
     def add_target_visible_tool_call(self, call: TargetVisibleToolCallV1) -> None:
         self.target_visible_tool_calls.append(call)
 
+    def add_side_effect(self, effect: SideEffectV1) -> None:
+        self.side_effects.append(effect)
+
     def finalize(self) -> AttackEvidenceV1:
         completed_at = utc_now()
         draft = AttackEvidenceV1(
@@ -372,7 +419,7 @@ class EvidenceRecorder:
             transcript=self.transcript,
             sanitized_http_metadata=self.http_metadata,
             target_visible_tool_calls=self.target_visible_tool_calls,
-            side_effects=[],
+            side_effects=self.side_effects,
             started_at=self.started_at,
             completed_at=completed_at,
             total_latency_ms=max(0.0, (completed_at - self.started_at).total_seconds() * 1_000),
@@ -390,4 +437,5 @@ __all__ = [
     "RunnerFailure",
     "TargetExecutionContext",
     "sanitized_summary",
+    "synthetic_artifact_reference",
 ]

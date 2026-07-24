@@ -5,11 +5,14 @@ Co-Pilot with synthetic users and patient data. It supports two intentionally
 separate workflows:
 
 - **Discovery campaigns** use four agents to select, generate, judge, and document
-  attacks. Agents make semantic security decisions; deterministic code handles
-  authorization, execution, persistence, budgets, and typed transport.
+  attacks. The Orchestrator receives neutral durable coverage facts for all 17
+  taxonomy subcategories and chooses the category, surface, technique, objective,
+  and mutation source. Deterministic code handles authorization, execution,
+  persistence, budgets, and typed transport.
 - **Fixed-case evaluations** run an explicitly selected YAML case with deterministic
-  assertions. These are repeatable OWASP checks and regression assets, not fallbacks
-  for discovery and not a source of discovery Findings.
+  assertions. These are repeatable controls, not fallbacks for discovery. Their
+  assertions never determine the security verdict, but a separately Judge-confirmed
+  exploit enters the same finding-promotion path as any other attempt.
 
 > Run AgentForge only against systems you own or are explicitly authorized to test.
 
@@ -33,20 +36,22 @@ flowchart LR
     X --> O
 ```
 
-1. The Orchestrator receives allowed taxonomy choices, target constraints, prior
-   attempts and verdicts, and the remaining campaign limits. It returns
-   `new_attack`, `mutation`, or `stop`.
-2. The Attack Generator creates the exact ordered sequence. A mutation must reference
-   an existing `partial_signal` attempt.
+1. The Orchestrator receives compact PostgreSQL-backed coverage, supported and
+   blocked surfaces, finding state, partial signals, prior families, and remaining
+   limits. It returns `new_attack`, `mutation`, or `stop` plus its semantic rationale.
+2. The Attack Generator creates the exact ordered scenario or a `FuzzPlanV2`.
+   Deterministic fuzz expansion uses a versioned corpus and fixed RNG seed. A mutation
+   must reference an existing `partial_signal` attempt.
 3. The authorization gate checks only executable facts: allowed target, operation,
    payload, duplicate sequence hash, target version, and safety constraints.
 4. The runner executes the validated sequence and directly constructs typed raw
    evidence.
 5. The Judge is the sole authority for `exploit_confirmed`, `partial_signal`,
    `attack_blocked`, or `inconclusive`.
-6. One `exploit_confirmed` verdict immediately creates one Finding, one Documentation
-   Agent report, and one regression case. Discovery then continues until the
-   Orchestrator stops or a configured campaign limit is reached.
+6. Every `exploit_confirmed` verdict carries a semantic finding key. A new semantic
+   exploit creates a pending-review Finding, Documentation Agent report, and exact
+   regression case; rediscovery appends evidence to the existing Finding. Discovery
+   then continues until the Orchestrator stops or a configured limit is reached.
 
 Invalid agent output receives bounded retries from the same agent. Persistent failure
 ends the campaign visibly. There is no deterministic objective, attack, verdict, or
@@ -65,8 +70,11 @@ only in `JudgeVerdict.verdict`; a failed runner therefore has no Judge verdict, 
 partial or error-bearing evidence successfully returned by the runner is judged
 unchanged.
 
-New discovery attempts use only:
+New attempts preserve explicit lane and source provenance, including:
 
+- `human_authored_seed` and `curated_discovery_replay`;
+- `agent_scenario`, `agent_fuzz`, and `agent_fuzz_minimization`;
+- `regression_replay`;
 - proposal provenance `agent_generated` or `agent_generated_mutation`;
 - objective provenance `orchestrator_selected`.
 
@@ -77,10 +85,11 @@ and generation are derived for display.
 ## Fixed-case and OWASP harness
 
 YAML cases under `evals/seed-cases/` are launched explicitly from the CLI or dashboard.
-Their deterministic assertions answer the particular case's fixed expectations. Raw
-runner evidence is also sent directly to the Judge, and fixed assertions neither
-enter the Judge prompt nor override the Judge verdict. Fixed-case results cannot
-create discovery Findings.
+Their deterministic assertions answer only the particular case's fixed expectations.
+Raw runner evidence is sent directly to the Judge, and fixed assertions neither enter
+the Judge prompt nor override its verdict. A Judge-confirmed seed exploit is promoted,
+deduplicated, documented, and converted into a regression case through the same
+service used by agent-generated scenarios, fuzz variants, and API attacks.
 
 Portable result exports live under `evals/results/`; PostgreSQL remains the canonical
 operational record.
@@ -97,18 +106,19 @@ runtime state.
 
 ```text
 .
-├── config/                  # Target, taxonomy, rubric, routing, pricing
+├── config/                  # Target, taxonomy, fuzz, fixtures, routing, pricing
 ├── contracts/v1/           # Published JSON Schema contracts
 ├── evals/
 │   ├── seed-cases/          # Explicit fixed-case and regression assets
 │   └── results/             # Sanitized portable exports
 ├── migrations/              # Alembic migrations
-├── reports/                 # Internal vulnerability-report drafts
+├── reports/                 # Generated canonical vulnerability reports
 ├── src/agentforge/
 │   ├── agents/              # Four structured model roles
 │   ├── api/                 # FastAPI API
 │   ├── dashboard/           # Authenticated Jinja/HTMX dashboard
 │   ├── evaluation/          # Fixed-case harness
+│   ├── observability/       # Shared Orchestrator/dashboard facts and cost model
 │   ├── orchestration/       # Discovery controller and authorization gate
 │   ├── persistence/         # SQLAlchemy models and repositories
 │   ├── regression/          # Saved-sequence replay
@@ -150,11 +160,11 @@ uv run --env-file .env agentforge eval run \
 
 ## Launch a discovery campaign
 
-The authenticated `/dashboard/campaigns` page provides target, taxonomy scope,
-maximum attempts, and maximum cost controls. Advanced controls provide subcategory,
-duration, and priority. Deployed campaigns require an explicit synthetic/authorized
-target confirmation enforced server-side. The form is CSRF-protected and idempotent
-and never embeds the platform bearer token.
+The authenticated `/dashboard/campaigns` page provides target, optional taxonomy
+scope, maximum attempts, and maximum cost controls. Advanced controls provide
+subcategory, duration, and queue priority. Deployed campaigns require an explicit
+synthetic/authorized-target confirmation enforced server-side. The form is
+CSRF-protected and idempotent and never embeds the platform bearer token.
 
 Equivalent CLI:
 
@@ -166,10 +176,12 @@ uv run agentforge campaign create \
   --max-cost-usd 0.25
 ```
 
-The campaign detail page polls durable state and shows lifecycle, the exact ordered
-user/assistant/tool/system transcript, raw evidence,
-Judge verdicts, failure stage, parent/derived generation, provenance, Findings,
-reports, regression results, and the ordered AgentRun timeline. Verified JSON can be
+The dashboard separates seeds, ordinary discovery, fuzz variants, and regression
+replays; shows all taxonomy subcategories and execution surfaces; exposes finding
+lifecycle controls and regression-suite launch; and renders a single ordered
+controller/agent/runner timeline. Campaign details retain the exact ordered
+user/assistant/tool/system transcript, evidence, Judge verdict, failure stage,
+lineage, provenance, rationale, cost, and trace identity. Verified JSON can be
 downloaded from the attempt panel.
 
 Reconcile database records and local exports without modifying either:
@@ -201,16 +213,20 @@ submission artifacts without deploying; see [docs/CI.md](docs/CI.md).
 
 ## Safety and deployment boundary
 
-- Only configured aliases, hosts, synthetic identities, and synthetic patients are
+- Only configured aliases, the two authorized deployed hosts, synthetic identities,
+  synthetic patients, endpoint bindings, and approved document fixtures are
   authorized.
 - A model cannot directly perform network, browser, file, shell, SQL, or publication
   actions.
 - Target credentials never enter model context; browser contexts are ephemeral.
-- Direct target-database access and persistent clinical writes are prohibited.
+- Direct target-database access is prohibited. Persistent API operations are limited
+  to one labeled synthetic artifact when no approved cleanup path exists; staged
+  uploads otherwise use authenticated rejection cleanup.
 - Incomplete execution is not a secure pass.
-- Reports are internal drafts until a human approves disclosure.
-- AgentForge and the Clinical Co-Pilot are separate deployments. This feature branch
-  does not merge, deploy, patch, or reconfigure the target.
+- Findings use one human lifecycle: `pending_review`, `open`, `in_progress`,
+  `resolved`, or `false_positive`. Report publication is not a separate workflow.
+- AgentForge and the Clinical Co-Pilot are separate deployments. Releasing this
+  repository does not patch or reconfigure the target.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md), [THREAT_MODEL.md](THREAT_MODEL.md), and
 [docs/FINAL_READINESS.md](docs/FINAL_READINESS.md) for the detailed design and

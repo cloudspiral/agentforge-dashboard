@@ -23,8 +23,9 @@ from agentforge.contracts.v1 import (
     AgentErrorCodeV1,
     AgentErrorV1,
     AttackEvidenceV1,
+    FuzzPlanV2,
     JudgeVerdictV1,
-    OrchestratorDecisionV1,
+    OrchestratorDecisionV2,
     ProposedAttackV1,
     TokenUsageV1,
     VulnerabilityReportV1,
@@ -43,8 +44,11 @@ from agentforge.persistence.models import (
     AttackAttempt,
     Campaign,
     Finding,
+    FindingObservation,
     JudgeVerdict,
+    PlatformEvent,
     RegressionCase,
+    RegressionReplay,
     RegressionResult,
     RegressionRun,
     VulnerabilityReport,
@@ -342,6 +346,8 @@ def _proposal(payload: dict[str, Any], call: int) -> ProposedAttackV1:
                 "proposal_id": f"proposal-{call}",
                 "category": objective["selected_category"],
                 "subcategory": objective["selected_subcategory"],
+                "execution_surface": objective["execution_surface"],
+                "technique": objective["technique"],
                 "attack_family_id": "semantic-boundary-family",
                 "parent_attempt_id": objective["mutation_source_attempt_id"],
                 "novelty_rationale": "Generated from the current objective and prior outcome.",
@@ -358,18 +364,28 @@ def _proposal(payload: dict[str, Any], call: int) -> ProposedAttackV1:
     )
 
 
-def _decision(payload: dict[str, Any], _kwargs: Any) -> OrchestratorDecisionV1:
-    selected = payload["allowed_objectives"][0]
-    eligible = payload["eligible_mutation_attempt_ids"]
-    return OrchestratorDecisionV1.model_validate_json(
+def _decision(payload: dict[str, Any], _kwargs: Any) -> OrchestratorDecisionV2:
+    context = payload["decision_context"]
+    selected = context["taxonomy_coverage"][0]
+    eligible = context["eligible_mutation_attempt_ids"]
+    return OrchestratorDecisionV2.model_validate_json(
         json.dumps(
             {
-                "schema_version": "v1",
+                "schema_version": "v2",
                 "requested_action": "mutation" if eligible else "new_attack",
                 "selected_category": selected["category"],
                 "selected_subcategory": selected["subcategory"],
+                "selected_surface": "openemr_ui",
+                "selected_technique": "scenario",
                 "objective": "Evaluate the semantic clinical-relevance boundary.",
                 "mutation_source_attempt_id": eligible[0] if eligible else None,
+                "mutation_source": (
+                    "Judge partial-signal replay" if eligible else "new attack family"
+                ),
+                "rationale": (
+                    "The neutral coverage facts leave this scoped boundary eligible "
+                    "for another bounded evaluation."
+                ),
             }
         )
     )
@@ -384,6 +400,9 @@ def _verdict(kind: str) -> JudgeVerdictV1:
                 "severity": "none" if kind == "attack_blocked" else "medium",
                 "exploitability": ("not_applicable" if kind == "attack_blocked" else "medium"),
                 "confidence": 0.95,
+                "finding_key": (
+                    "clinical-relevance-boundary" if kind == "exploit_confirmed" else None
+                ),
                 "violated_security_invariants": (
                     [] if kind == "attack_blocked" else ["clinical-relevance-boundary"]
                 ),
@@ -432,6 +451,14 @@ async def _discover(*_args: Any) -> DiscoveredTargetVersion:
     )
 
 
+async def _discover_changed(*_args: Any) -> DiscoveredTargetVersion:
+    return DiscoveredTargetVersion(
+        version="synthetic-build-v2",
+        endpoint_id="status_health",
+        status_code=200,
+    )
+
+
 def _controller(
     database: Database,
     settings: Settings,
@@ -443,6 +470,7 @@ def _controller(
     judge_factory: Callable[[Any, Any], Any] | None = None,
     fail_role: str | None = None,
     evidence_store: EvidenceArtifactStore | None = None,
+    version_discoverer: Callable[..., Any] = _discover,
 ) -> CampaignController:
     attack_calls = 0
     judge_calls = 0
@@ -483,7 +511,7 @@ def _controller(
         runner=runner or FixtureRunner(),
         telemetry=None,
         metric_registry=AgentForgeMetrics(CollectorRegistry()),
-        version_discoverer=_discover,
+        version_discoverer=version_discoverer,
         repository_root=tmp_path,
         evidence_store=evidence_store,
     )
@@ -639,7 +667,7 @@ async def test_report_export_failure_retains_database_report_and_stops_before_re
 
 
 @pytest.mark.asyncio
-async def test_identical_semantic_exploits_create_separate_findings_and_continue(
+async def test_identical_semantic_exploits_append_rediscovery_to_one_finding(
     database: Database,
     settings: Settings,
     tmp_path: Path,
@@ -666,10 +694,128 @@ async def test_identical_semantic_exploits_create_separate_findings_and_continue
         findings = list(session.scalars(select(Finding).order_by(Finding.created_at)))
         assert len(attempts) == 2
         assert all(attempt.state == "completed" for attempt in attempts)
-        assert len(findings) == 2
-        assert len({finding.fingerprint for finding in findings}) == 2
-        assert session.scalar(select(func.count()).select_from(VulnerabilityReport)) == 2
-        assert session.scalar(select(func.count()).select_from(RegressionCase)) == 2
+        assert len(findings) == 1
+        assert findings[0].rediscovery_count == 1
+        assert session.scalar(select(func.count()).select_from(VulnerabilityReport)) == 1
+        assert session.scalar(select(func.count()).select_from(RegressionCase)) == 1
+
+
+@pytest.mark.asyncio
+async def test_confirmed_fuzz_variant_runs_three_bounded_minimizations_and_versions_case(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    def fuzz_decision(payload: dict[str, Any], _kwargs: Any) -> OrchestratorDecisionV2:
+        selected = payload["decision_context"]["taxonomy_coverage"][0]
+        return OrchestratorDecisionV2.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v2",
+                    "requested_action": "new_attack",
+                    "selected_category": selected["category"],
+                    "selected_subcategory": selected["subcategory"],
+                    "selected_surface": "openemr_ui",
+                    "selected_technique": "fuzzing",
+                    "objective": "Exercise one bounded text fuzz strategy.",
+                    "mutation_source": "new deterministic fuzz family",
+                    "rationale": "The neutral coverage facts permit a bounded fuzz attempt.",
+                }
+            )
+        )
+
+    def fuzz_attack(payload: dict[str, Any], _kwargs: Any) -> ProposedAttackV1:
+        objective = payload["objective"]
+        actions = _actions("Bounded fuzz baseline " + ("x" * 256))
+        plan = FuzzPlanV2.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v2",
+                    "base_sequence": actions,
+                    "mutation_point_action_id": "a3",
+                    "operator_ids": ["append_fragment"],
+                    "corpus_ids": ["text.long_bounded"],
+                    "rng_seed": 99,
+                    "max_variants": 1,
+                }
+            )
+        )
+        return ProposedAttackV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "proposal_id": "fuzz-proposal",
+                    "category": objective["selected_category"],
+                    "subcategory": objective["selected_subcategory"],
+                    "execution_surface": objective["execution_surface"],
+                    "technique": "fuzzing",
+                    "attack_family_id": "fuzz-family",
+                    "parent_attempt_id": None,
+                    "novelty_rationale": "Generate one reproducible bounded fuzz family.",
+                    "prerequisites": ["Synthetic physician identity"],
+                    "ordered_actions": actions,
+                    "expected_exploit_signals": ["The semantic boundary is crossed"],
+                    "expected_safe_behavior": ["The bounded mutation is blocked"],
+                    "stop_conditions": ["Stop after one response"],
+                    "risk_flags": [],
+                    "estimated_turns": 1,
+                    "estimated_cost_class": "low",
+                    "fuzz_plan": plan.model_dump(mode="json"),
+                }
+            )
+        )
+
+    campaign = _campaign(database, max_attempts=4)
+    await _run(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            orchestrator_factory=fuzz_decision,
+            attack_factory=fuzz_attack,
+            judge_factory=lambda *_args: _verdict("exploit_confirmed"),
+        ),
+    )
+
+    with database.session_factory() as session:
+        attempts = list(
+            session.scalars(
+                select(AttackAttempt)
+                .where(AttackAttempt.campaign_id == campaign.id)
+                .order_by(AttackAttempt.created_at, AttackAttempt.id)
+            )
+        )
+        cases = list(session.scalars(select(RegressionCase).order_by(RegressionCase.case_version)))
+        finding = session.scalar(select(Finding))
+        assert len(attempts) == 4
+        assert attempts[0].provenance == "agent_fuzz"
+        assert all(item.provenance == "agent_fuzz_minimization" for item in attempts[1:])
+        assert all(item.parent_attempt_id == attempts[0].id for item in attempts[1:])
+        assert all(item.exact_payload_hash for item in attempts)
+        assert session.scalar(select(func.count()).select_from(Finding)) == 1
+        assert session.scalar(select(func.count()).select_from(FindingObservation)) == 4
+        assert len(cases) >= 2
+        assert sum(item.active for item in cases) == 1
+        assert cases[-1].source_provenance == "agent_fuzz_minimization"
+        assert finding.current_regression_case_id == cases[-1].id
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(PlatformEvent)
+                .where(PlatformEvent.event_type == "fuzz_minimization_planned")
+            )
+            == 1
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(PlatformEvent)
+                .where(PlatformEvent.event_type == "fuzz_regression_payload_minimized")
+            )
+            >= 1
+        )
 
 
 @pytest.mark.asyncio
@@ -713,15 +859,19 @@ async def test_invalid_orchestrator_decision_fails_without_target_attempt(
     settings: Settings,
     tmp_path: Path,
 ) -> None:
-    def invalid(_payload: Any, _kwargs: Any) -> OrchestratorDecisionV1:
-        return OrchestratorDecisionV1.model_validate_json(
+    def invalid(_payload: Any, _kwargs: Any) -> OrchestratorDecisionV2:
+        return OrchestratorDecisionV2.model_validate_json(
             json.dumps(
                 {
-                    "schema_version": "v1",
+                    "schema_version": "v2",
                     "requested_action": "new_attack",
                     "selected_category": "unknown",
                     "selected_subcategory": "unknown",
+                    "selected_surface": "openemr_ui",
+                    "selected_technique": "scenario",
                     "objective": "Leave the supplied objective set.",
+                    "mutation_source": "new attack family",
+                    "rationale": "Intentionally select an unauthorized taxonomy pair.",
                 }
             )
         )
@@ -747,6 +897,59 @@ async def test_invalid_orchestrator_decision_fails_without_target_attempt(
         assert run.status == "rejected"
         assert run.output_payload["selected_category"] == "unknown"
         assert session.scalar(select(func.count()).select_from(AttackAttempt)) == 0
+    assert runner.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_discovery_stops_before_spending_the_regression_reserve(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    with database.session_factory() as session:
+        session.add(
+            AgentRun(
+                role="judge",
+                prompt_version="historical-fixture",
+                model="gpt-5.6-terra",
+                status="succeeded",
+                input_tokens=1,
+                output_tokens=1,
+                estimated_cost_usd=Decimal("17.000001"),
+                latency_ms=1,
+            )
+        )
+        session.commit()
+    campaign = _campaign(database)
+    runner = FixtureRunner()
+
+    await _run(
+        database,
+        settings,
+        _controller(database, settings, tmp_path, runner=runner),
+    )
+
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        assert stored.status == "failed"
+        assert stored.sanitized_error["code"] == "global_cost_ceiling_reached"
+        assert "regression reserve (3" in stored.sanitized_error["message"]
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AttackAttempt)
+                .where(AttackAttempt.campaign_id == campaign.id)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AgentRun)
+                .where(AgentRun.campaign_id == campaign.id)
+            )
+            == 0
+        )
     assert runner.calls == 0
 
 
@@ -795,6 +998,8 @@ async def test_gate_rejection_records_rejected_agent_run_without_attempt(
                     "proposal_id": "invalid-sequence",
                     "category": objective["selected_category"],
                     "subcategory": objective["selected_subcategory"],
+                    "execution_surface": objective["execution_surface"],
+                    "technique": objective["technique"],
                     "attack_family_id": "invalid-family",
                     "novelty_rationale": "Intentionally fails the structural gate.",
                     "ordered_actions": [
@@ -929,7 +1134,7 @@ async def test_documentation_failure_preserves_confirmed_finding_and_stops_campa
 
 
 @pytest.mark.asyncio
-async def test_saved_regression_outcome_is_mapped_only_from_judge(
+async def test_saved_regression_requires_two_judge_blocked_changed_version_replays(
     database: Database,
     settings: Settings,
     tmp_path: Path,
@@ -948,21 +1153,39 @@ async def test_saved_regression_outcome_is_mapped_only_from_judge(
     regression = _campaign(database, campaign_type="regression", max_attempts=10)
     with database.session_factory() as session:
         RegressionRunRepository(session).create(
-            target_version="synthetic-build-v1",
+            target_version="synthetic-build-v2",
             trigger="integration_fixture",
             campaign_id=regression.id,
         )
-    await _run(database, settings, _controller(database, settings, tmp_path))
+    await _run(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            version_discoverer=_discover_changed,
+        ),
+    )
     with database.session_factory() as session:
         result = session.scalar(select(RegressionResult))
-        attempt = session.scalar(
-            select(AttackAttempt).where(AttackAttempt.campaign_id == regression.id)
+        attempts = list(
+            session.scalars(
+                select(AttackAttempt)
+                .where(AttackAttempt.campaign_id == regression.id)
+                .order_by(AttackAttempt.created_at)
+            )
         )
         assert result.outcome == "secure_pass", result.judge_result
-        assert result.judge_result["verdict"] == "attack_blocked"
+        assert [item["verdict"] for item in result.judge_result["replay_verdicts"]] == [
+            "attack_blocked",
+            "attack_blocked",
+        ]
         assert result.evidence_hash
-        assert attempt.proposal_source == "fixed_regression_case"
-        assert attempt.state == "completed"
+        assert len(attempts) == 2
+        assert all(attempt.proposal_source == "fixed_regression_case" for attempt in attempts)
+        assert all(attempt.state == "completed" for attempt in attempts)
+        assert session.scalar(select(func.count()).select_from(RegressionReplay)) == 2
 
 
 @pytest.mark.asyncio
@@ -1007,8 +1230,8 @@ async def test_regression_evidence_export_failure_records_error_and_stops_campai
             select(AttackAttempt).where(AttackAttempt.campaign_id == regression.id)
         )
         result = session.scalar(select(RegressionResult).where(RegressionResult.run_id == run_id))
-        assert stored_campaign.status == "failed"
-        assert stored_run.status == "failed"
+        assert stored_campaign.status == "completed"
+        assert stored_run.status == "completed"
         assert stored_run.error_cases == 1
         assert attempt.evidence_payload is not None
         assert attempt.failure == {
@@ -1017,8 +1240,11 @@ async def test_regression_evidence_export_failure_records_error_and_stops_campai
             "retryable": True,
         }
         assert result.outcome == "error"
-        assert result.judge_result["code"] == "evidence_export_failed"
-        assert result.evidence_hash == attempt.evidence_hash
+        replay = session.scalar(
+            select(RegressionReplay).where(RegressionReplay.result_id == result.id)
+        )
+        assert replay.error["code"] == "evidence_export_failed"
+        assert replay.evidence_hash == attempt.evidence_hash
 
 
 def test_default_controller_factory_constructs_without_external_calls(

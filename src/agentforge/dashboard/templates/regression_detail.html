@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page-heading"><p class="eyebrow">Regression run</p><h1>{{ run.target_version }}</h1><p class="mono">{{ run.id }}</p></section>
 <section class="stat-grid">
-  <article><span>Status</span><strong class="text">{{ run.status }}</strong></article>
+  <article><span>Status</span><strong class="text"><span id="regression-status" class="badge badge-{{ run.status }}">{{ run.status }}</span></strong></article>
   <article><span>Total cases</span><strong>{{ run.total_cases }}</strong></article>
   <article><span>Passed</span><strong>{{ run.passed_cases }}</strong></article>
   <article><span>Reproduced</span><strong>{{ run.reproduced_cases }}</strong></article>
@@ -13,19 +13,50 @@
 <section class="panel two-column">
   <div><h2>Metadata</h2><dl class="summary-list">
     <div><dt>Trigger</dt><dd>{{ run.trigger }}</dd></div>
+    <div><dt>Previous version</dt><dd class="mono">{{ run.previous_target_version or 'no matched prior cohort' }}</dd></div>
+    <div><dt>Cohort hash</dt><dd class="mono">{{ run.cohort_hash or 'not assigned' }}</dd></div>
     <div><dt>Campaign</dt><dd>{% if run.campaign_id %}<a class="mono" href="/dashboard/campaigns/{{ run.campaign_id }}">{{ run.campaign_id }}</a>{% else %}not linked{% endif %}</dd></div>
     <div><dt>Started</dt><dd>{{ run.started_at or 'not started' }}</dd></div>
     <div><dt>Completed</dt><dd>{{ run.completed_at or 'not completed' }}</dd></div>
   </dl></div>
   <div><h2>Outcome counts</h2><dl class="summary-list">
     {% for outcome, count in outcomes.items() %}<div><dt>{{ outcome | replace('_', ' ') }}</dt><dd>{{ count }}</dd></div>{% else %}<p>No results recorded.</p>{% endfor %}
+    <div><dt>Improved</dt><dd>{{ run.improved_cases }}</dd></div>
+    <div><dt>Regressed</dt><dd>{{ run.regressed_cases }}</dd></div>
+    <div><dt>Cross-category regression</dt><dd>{{ 'yes' if run.cross_category_regression else 'no' }}</dd></div>
   </dl></div>
 </section>
 <section class="panel"><h2>Results</h2><div class="table-wrap"><table>
-  <thead><tr><th>Outcome</th><th>Case</th><th>Version</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
+  <thead><tr><th>Outcome</th><th>Case</th><th>Version</th><th>Changed target</th><th>Replicates</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
   <tbody>{% for result in run.results %}<tr>
-    <td>{{ result.outcome }}</td><td class="mono">{{ result.case_id }}</td><td>{{ result.case_version }}</td>
+    <td>{{ result.outcome }}<small>{{ result.aggregate_reason or 'pending aggregate' }}</small></td>
+    <td><a class="mono" href="/dashboard/regression-cases/{{ result.case_id }}">{{ cases[result.case_id].case_id }}</a></td><td>{{ result.case_version }}</td>
+    <td>{{ 'yes' if result.changed_target_version else 'no' }}</td>
+    <td>{% for replay in result.replays %}#{{ replay.replay_index + 1 }} {{ replay.judge_verdict.verdict if replay.judge_verdict else 'error' }}{% if not loop.last %}<br>{% endif %}{% else %}none{% endfor %}</td>
     <td>{{ result.latency_ms ~ 'ms' if result.latency_ms is not none else '—' }}</td><td>${{ result.estimated_cost_usd }}</td><td class="mono">{{ result.trace_id or 'not available' }}</td>
-  </tr>{% else %}<tr><td colspan="6">No regression results recorded.</td></tr>{% endfor %}</tbody>
+  </tr>{% else %}<tr><td colspan="8">No regression results recorded.</td></tr>{% endfor %}</tbody>
 </table></div></section>
+{% endblock %}
+{% block scripts %}
+{% if not terminal %}
+<script>
+(() => {
+  const node = document.getElementById("regression-status");
+  const poll = async () => {
+    try {
+      const response = await fetch("/dashboard/regression-runs/{{ run.id }}/status", {cache: "no-store", headers: {Accept: "application/json"}});
+      if (!response.ok) throw new Error("status request failed");
+      const state = await response.json();
+      node.textContent = state.status;
+      node.className = `badge badge-${state.status}`;
+      if (state.terminal) { window.location.reload(); return; }
+    } catch (_error) {
+      node.title = "Status polling will retry automatically";
+    }
+    window.setTimeout(poll, 2000);
+  };
+  window.setTimeout(poll, 2000);
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -11,16 +11,30 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
+from sqlalchemy import select
 
 from agentforge.api import router as api_router
-from agentforge.contracts.v1 import AttackEvidenceV1
+from agentforge.contracts.v1 import AttackEvidenceV1, VulnerabilityReportV1
 from agentforge.dashboard import router as dashboard_router
 from agentforge.dashboard.evaluations import DashboardEvaluationSnapshot
 from agentforge.evidence import EvidenceArtifactStore, with_computed_evidence_hash
 from agentforge.observability import AgentForgeMetrics
 from agentforge.persistence import Base, Database
-from agentforge.persistence.models import AttackAttempt, Campaign, JudgeVerdict
-from agentforge.persistence.repositories import CampaignRepository, OperationalRepository
+from agentforge.persistence.models import (
+    AttackAttempt,
+    Campaign,
+    Finding,
+    FindingLifecycleEvent,
+    JudgeVerdict,
+    VulnerabilityReport,
+)
+from agentforge.persistence.repositories import (
+    CampaignRepository,
+    FindingRepository,
+    OperationalRepository,
+    ReportRepository,
+)
+from agentforge.target import load_target_profile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -60,9 +74,13 @@ def client(database: Database, tmp_path: Path) -> TestClient:
         worker_stale_after_seconds=30,
         worker_enabled=False,
         artifacts_dir=tmp_path / "artifacts",
+        reports_dir=tmp_path / "reports",
     )
     application.state.metrics = AgentForgeMetrics(CollectorRegistry())
     application.state.repository_root = PROJECT_ROOT
+    application.state.target_profile = load_target_profile(
+        PROJECT_ROOT / "config" / "target-profile.yaml"
+    )
     application.state.dashboard_csrf_token = "unit-dashboard-csrf"  # noqa: S105
     application.state.evaluation_manager = FakeEvaluationManager()
     application.include_router(api_router)
@@ -168,6 +186,140 @@ def _finish(
             sanitized_error=sanitized_error,
             worker_name=worker_name,
         )
+
+
+def _create_pending_finding(database: Database, *, suffix: str) -> uuid.UUID:
+    campaign = _create(database, key=f"finding-{suffix}")
+    timestamp = datetime.now(UTC)
+    actions = [
+        {
+            "action_type": "reset_session",
+            "action_id": "reset-1",
+            "description": "Reset the synthetic session.",
+            "reset_strategy_id": "fresh_ephemeral_browser_context",
+            "require_clean_context": True,
+        },
+        {
+            "action_type": "authenticate",
+            "action_id": "auth-1",
+            "description": "Authenticate the synthetic physician.",
+            "session_source": "environment_credentials",
+            "test_identity_alias": "physician_test",
+            "expected_role": "physician",
+        },
+        {
+            "action_type": "select_synthetic_patient",
+            "action_id": "patient-1",
+            "description": "Select synthetic patient A.",
+            "patient_alias": "patient_a",
+            "verify_selected_context": True,
+        },
+        {
+            "action_type": "send_chat_message",
+            "action_id": "chat-1",
+            "description": "Replay the bounded finding.",
+            "message": "Bounded synthetic finding replay.",
+            "await_response": True,
+        },
+        {
+            "action_type": "wait_for_response",
+            "action_id": "wait-1",
+            "description": "Wait for one response.",
+            "timeout_seconds": 30,
+            "expected_event": "copilot_response_complete",
+        },
+        {
+            "action_type": "collect_evidence",
+            "action_id": "collect-1",
+            "description": "Collect durable evidence.",
+            "evidence_kinds": ["transcript", "http_metadata"],
+            "capture_on": "always",
+        },
+    ]
+    with database.session_factory() as session:
+        attempt = AttackAttempt(
+            campaign_id=campaign.id,
+            attack_family_id=f"family-{suffix}",
+            proposal_source="agent_generated",
+            objective_source="orchestrator_selected",
+            provenance="agent_scenario",
+            execution_surface="openemr_ui",
+            technique="scenario",
+            target_executed=True,
+            sequence_hash="a" * 64,
+            category="prompt_injection",
+            subcategory="direct",
+            owasp_mappings=[],
+            objective="Preserve instruction hierarchy.",
+            proposed_sequence={"ordered_actions": actions},
+            taxonomy_version="unit-taxonomy",
+            profile_version="unit-profile",
+            prompt_version="unit-prompt",
+            state="completed",
+            evidence_hash="b" * 64,
+            completed_at=timestamp,
+        )
+        session.add(attempt)
+        session.flush()
+        finding = FindingRepository(session).create_confirmed(
+            fingerprint=("c" * 63) + suffix[-1],
+            finding_key=f"unit-finding-{suffix}",
+            provenance="agent_scenario",
+            source_attempt_id=attempt.id,
+            vulnerability_id=f"AF-UNIT-{suffix.upper()}",
+            title="Unit lifecycle finding",
+            category="prompt_injection",
+            subcategory="direct",
+            severity="high",
+            description="A bounded synthetic issue was confirmed.",
+            clinical_impact="Synthetic clinical context could be affected.",
+            expected_behavior="The target blocks the bounded attack.",
+            observed_behavior="The bounded attack was accepted.",
+            target_version="fixture-v1",
+        )
+        report = VulnerabilityReportV1.model_validate_json(
+            json.dumps(
+                {
+                    "report_schema_version": "v1",
+                    "vulnerability_id": finding.vulnerability_id,
+                    "title": finding.title,
+                    "severity": "high",
+                    "status": "pending_review",
+                    "category": finding.category,
+                    "subcategory": finding.subcategory,
+                    "owasp_mappings": {
+                        "web_top_10_version": "OWASP-Web-Top-10-2021",
+                        "web_top_10": ["A03:2021"],
+                        "llm_top_10_version": "OWASP-LLM-Top-10-2025",
+                        "llm_top_10": ["LLM01:2025"],
+                    },
+                    "affected_target_versions": ["fixture-v1"],
+                    "description": finding.description,
+                    "clinical_impact": finding.clinical_impact,
+                    "prerequisites": ["Synthetic test identity"],
+                    "minimal_reproducible_attack_sequence": actions,
+                    "observed_behavior": finding.observed_behavior,
+                    "expected_behavior": finding.expected_behavior,
+                    "source_attempt_id": str(attempt.id),
+                    "evidence_hash": "b" * 64,
+                    "exact_transcript": [],
+                    "recommended_remediation_approach": "Keep server-owned controls authoritative.",
+                    "current_fix_validation_results": [],
+                    "confidence": 0.95,
+                    "created_at": timestamp.isoformat(),
+                    "updated_at": timestamp.isoformat(),
+                }
+            )
+        )
+        ReportRepository(session).create_versioned(
+            finding_id=finding.id,
+            structured_report=report.model_dump(mode="json"),
+            markdown_body="# Unit lifecycle finding\n",
+            validation_summary={"verdict": "exploit_confirmed"},
+            prompt_version="documentation-v1",
+        )
+        session.commit()
+        return finding.id
 
 
 def test_empty_dashboard_pages_and_metrics_render(client: TestClient) -> None:
@@ -550,3 +702,105 @@ def test_terminal_attempt_error_does_not_render_a_pending_verdict(
     assert "The Judge verdict is pending." not in detail.text
     assert "judge-trace-id" in detail.text
     assert "invalid structured output after one bounded retry" in detail.text
+
+
+def test_dashboard_finding_lifecycle_is_simple_audited_and_report_versioned(
+    database: Database,
+    client: TestClient,
+) -> None:
+    finding_id = _create_pending_finding(database, suffix="lifecycle1")
+    token = "unit-dashboard-csrf"  # noqa: S105
+
+    confirm = client.post(
+        f"/dashboard/findings/{finding_id}/lifecycle",
+        data={"csrf_token": token, "action": "confirm"},
+        follow_redirects=False,
+    )
+    begin = client.post(
+        f"/dashboard/findings/{finding_id}/lifecycle",
+        data={"csrf_token": token, "action": "begin_work"},
+        follow_redirects=False,
+    )
+    denied_resolve = client.post(
+        f"/dashboard/findings/{finding_id}/lifecycle",
+        data={"csrf_token": token, "action": "resolve"},
+        follow_redirects=False,
+    )
+    resolved = client.post(
+        f"/dashboard/findings/{finding_id}/lifecycle",
+        data={
+            "csrf_token": token,
+            "action": "resolve",
+            "manual_override": "yes",
+            "reason": "Unit operator verified the synthetic remediation outside this fixture.",
+        },
+        follow_redirects=False,
+    )
+
+    assert confirm.status_code == 303
+    assert begin.status_code == 303
+    assert denied_resolve.status_code == 400
+    assert resolved.status_code == 303
+    with database.session_factory() as session:
+        finding = session.get(Finding, finding_id)
+        assert finding is not None
+        assert finding.status == "resolved"
+        events = list(
+            session.scalars(
+                select(FindingLifecycleEvent)
+                .where(FindingLifecycleEvent.finding_id == finding_id)
+                .order_by(FindingLifecycleEvent.created_at, FindingLifecycleEvent.id)
+            )
+        )
+        assert [event.action for event in events] == [
+            "judge_confirmed",
+            "confirm",
+            "begin_work",
+            "manual_resolution_override",
+        ]
+        assert all(event.actor for event in events)
+        reports = list(
+            session.scalars(
+                select(VulnerabilityReport)
+                .where(VulnerabilityReport.finding_id == finding_id)
+                .order_by(VulnerabilityReport.report_version)
+            )
+        )
+        assert len(reports) == 4
+        assert reports[-1].status == "resolved"
+        assert reports[-1].structured_report["status"] == "resolved"
+        assert reports[-1].markdown_path is not None
+        assert (
+            Path(reports[-1].markdown_path).read_text(encoding="utf-8") == reports[-1].markdown_body
+        )
+
+
+def test_dashboard_false_positive_requires_a_reason(
+    database: Database,
+    client: TestClient,
+) -> None:
+    finding_id = _create_pending_finding(database, suffix="falsepositive2")
+    path = f"/dashboard/findings/{finding_id}/lifecycle"
+
+    assert (
+        client.post(
+            path,
+            data={"csrf_token": "unit-dashboard-csrf", "action": "dismiss"},
+            follow_redirects=False,
+        ).status_code
+        == 400
+    )
+    dismissed = client.post(
+        path,
+        data={
+            "csrf_token": "unit-dashboard-csrf",
+            "action": "dismiss",
+            "reason": "Synthetic evidence does not violate the claimed invariant.",
+        },
+        follow_redirects=False,
+    )
+    assert dismissed.status_code == 303
+    with database.session_factory() as session:
+        finding = session.get(Finding, finding_id)
+        assert finding is not None
+        assert finding.status == "false_positive"

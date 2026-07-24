@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import hmac
 import uuid
 from collections import Counter
@@ -12,8 +13,9 @@ from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Query, Req
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
+from sqlalchemy import select
 
-from agentforge.api.schemas import CampaignCreateRequest
+from agentforge.api.schemas import CampaignCreateRequest, RegressionRunCreateRequest
 from agentforge.api.services import ApplicationService
 from agentforge.dashboard.evaluations import (
     DashboardEvaluationManager,
@@ -29,15 +31,18 @@ from agentforge.evidence import (
 )
 from agentforge.observability.metrics import AgentForgeMetrics
 from agentforge.observability.metrics import metrics as default_metrics
-from agentforge.persistence.models import AttackAttempt
+from agentforge.observability.snapshot import PlatformObservabilityService
+from agentforge.orchestration.objectives import surface_capability_facts
+from agentforge.persistence.models import AttackAttempt, RegressionCase, RegressionResult
 from agentforge.persistence.repositories import (
     CampaignNotFound,
     CampaignRepository,
     FindingRepository,
     OperationalRepository,
+    RegressionCaseRepository,
     RegressionRunRepository,
-    coverage_summary,
 )
+from agentforge.reports import create_report_lifecycle_version, export_stored_report
 from agentforge.security.auth import require_dashboard_auth
 from agentforge.security.redaction import redact
 
@@ -128,6 +133,11 @@ def _csrf_token(request: Request) -> str:
     return str(getattr(request.app.state, "dashboard_csrf_token", ""))
 
 
+def _dashboard_actor(request: Request) -> str:
+    username = getattr(request.app.state.settings, "dashboard_auth_username", None)
+    return f"dashboard:{username or 'local-operator'}"
+
+
 def _campaign_form_defaults(request: Request) -> dict[str, str]:
     settings = request.app.state.settings
     return {
@@ -146,9 +156,7 @@ def _campaign_form_defaults(request: Request) -> dict[str, str]:
 
 
 def _taxonomy_options(request: Request) -> list[dict[str, Any]]:
-    taxonomy = getattr(request.app.state, "taxonomy", None)
-    if taxonomy is None:
-        taxonomy = load_taxonomy(_repository_root(request) / "config" / "attack-taxonomy.yaml")
+    taxonomy = _taxonomy(request)
     return [
         {
             "id": category.id,
@@ -159,6 +167,13 @@ def _taxonomy_options(request: Request) -> list[dict[str, Any]]:
         }
         for category in taxonomy.categories
     ]
+
+
+def _taxonomy(request: Request) -> Any:
+    taxonomy = getattr(request.app.state, "taxonomy", None)
+    if taxonomy is not None:
+        return taxonomy
+    return load_taxonomy(_repository_root(request) / "config" / "attack-taxonomy.yaml")
 
 
 def _campaign_page_context(
@@ -262,7 +277,9 @@ def prometheus_metrics(request: Request) -> Response:
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def overview(request: Request) -> HTMLResponse:
     seed_catalog = _seed_catalog(request)
-    case_ids = [case.id for case, _path in seed_catalog]
+    case_hashes = {
+        case.id: hashlib.sha256(path.read_bytes()).hexdigest() for case, path in seed_catalog
+    }
     with request.app.state.database.session_factory() as session:
         operations = OperationalRepository(session)
         campaigns = operations.campaign_status_counts()
@@ -272,8 +289,14 @@ def overview(request: Request) -> HTMLResponse:
         regression_summary = operations.regression_summary()
         recent_campaigns, _ = operations.campaign_rows(limit=8)
         recent_events = operations.recent_events(limit=12)
-        coverage = coverage_summary(session)
-        latest_evaluations = operations.latest_live_evaluations(case_ids)
+        observability = PlatformObservabilityService(
+            session,
+            taxonomy=_taxonomy(request),
+            seed_cases=[case for case, _path in seed_catalog],
+            surface_capabilities=surface_capability_facts(request.app.state.target_profile.profile),
+        ).snapshot(timeline_limit=100)
+        coverage = observability.coverage
+        latest_evaluations = operations.latest_live_evaluations(case_hashes)
     seed_groups = []
     for category in CATEGORY_ORDER:
         cases = []
@@ -287,6 +310,7 @@ def overview(request: Request) -> HTMLResponse:
                     "category": case.category,
                     "subcategory": case.subcategory,
                     "surface": case.surface,
+                    "yaml_hash": case_hashes[case.id],
                     "latest": latest_evaluations.get(case.id),
                 }
             )
@@ -307,6 +331,7 @@ def overview(request: Request) -> HTMLResponse:
             "recent_campaigns": recent_campaigns,
             "recent_events": recent_events,
             "coverage": coverage,
+            "observability": observability,
             "seed_groups": seed_groups,
             "evaluation": evaluation,
             "csrf_token": _csrf_token(request),
@@ -432,7 +457,7 @@ def launch_campaign(
                 session,
                 settings=request.app.state.settings,
                 target_profile=request.app.state.target_profile,
-                taxonomy=request.app.state.taxonomy,
+                taxonomy=_taxonomy(request),
             ).create_campaign(
                 body,
                 trigger_type="dashboard",
@@ -591,13 +616,106 @@ def finding_detail(request: Request, finding_id: uuid.UUID) -> HTMLResponse:
             finding = FindingRepository(session).get(finding_id, include_reports=True)
             report = max(finding.reports, key=lambda item: item.report_version, default=None)
             safe_report_body = redact(report.markdown_body) if report else None
+            lifecycle_events = list(finding.lifecycle_events)
+            observations = list(finding.observations)
+            secure_results = list(
+                session.scalars(
+                    select(RegressionResult)
+                    .join(RegressionCase, RegressionCase.id == RegressionResult.case_id)
+                    .where(RegressionCase.finding_id == finding.id)
+                    .where(RegressionResult.outcome == "secure_pass")
+                    .where(RegressionResult.changed_target_version.is_(True))
+                    .order_by(RegressionResult.created_at.desc())
+                )
+            )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="finding not found") from exc
     return templates.TemplateResponse(
         request=request,
         name="finding_detail.html",
-        context={"finding": finding, "report": report, "safe_report_body": safe_report_body},
+        context={
+            "finding": finding,
+            "report": report,
+            "safe_report_body": safe_report_body,
+            "lifecycle_events": lifecycle_events,
+            "observations": observations,
+            "secure_results": secure_results,
+            "csrf_token": _csrf_token(request),
+        },
     )
+
+
+@router.post(
+    "/dashboard/findings/{finding_id}/lifecycle",
+    response_class=RedirectResponse,
+    include_in_schema=False,
+)
+def transition_finding(
+    request: Request,
+    finding_id: uuid.UUID,
+    csrf_token: str = Form(...),
+    action: str = Form(...),
+    reason: str = Form(""),
+    regression_result_id: str = Form(""),
+    manual_override: str = Form(""),
+) -> RedirectResponse:
+    expected_csrf = _csrf_token(request)
+    if not expected_csrf or not hmac.compare_digest(csrf_token, expected_csrf):
+        raise HTTPException(status_code=403, detail="invalid dashboard action token")
+    try:
+        result_id = (
+            uuid.UUID(regression_result_id.strip()) if regression_result_id.strip() else None
+        )
+        with request.app.state.database.session_factory() as session:
+            evidence = session.get(RegressionResult, result_id) if result_id else None
+            if result_id is not None and evidence is None:
+                raise ValueError("selected regression evidence was not found")
+            finding = FindingRepository(session).transition(
+                finding_id,
+                action=action,
+                actor=_dashboard_actor(request),
+                reason=reason,
+                evidence_reference=str(result_id) if result_id else None,
+                secure_evidence_on_changed_version=bool(
+                    evidence is not None
+                    and evidence.outcome == "secure_pass"
+                    and evidence.changed_target_version
+                ),
+                manual_override=manual_override == "yes",
+            )
+            version = create_report_lifecycle_version(
+                session,
+                finding=finding,
+                template_path=_repository_root(request) / "config" / "report-template.md",
+                event_details={
+                    "action": action,
+                    "actor": _dashboard_actor(request),
+                    "reason": reason or None,
+                    "evidence_reference": str(result_id) if result_id else None,
+                    "manual_override": manual_override == "yes",
+                },
+            )
+            session.commit()
+            if version is not None:
+                configured = Path(request.app.state.settings.reports_dir)
+                reports_dir = (
+                    configured
+                    if configured.is_absolute()
+                    else _repository_root(request) / configured
+                )
+                version.markdown_path = str(
+                    export_stored_report(
+                        version,
+                        vulnerability_id=finding.vulnerability_id,
+                        reports_dir=reports_dir,
+                    )
+                )
+                session.commit()
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="finding not found") from exc
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/dashboard/findings/{finding_id}", status_code=303)
 
 
 @router.get(
@@ -612,15 +730,55 @@ def regression_runs(
 ) -> HTMLResponse:
     with request.app.state.database.session_factory() as session:
         items, total = RegressionRunRepository(session).list(offset=offset, limit=limit)
+        cases = RegressionCaseRepository(session).list(active_only=True)
     return templates.TemplateResponse(
         request=request,
         name="regressions.html",
         context={
             "runs": items,
+            "cases": cases,
             "total": total,
+            "csrf_token": _csrf_token(request),
             **_pagination(offset=offset, limit=limit, total=total),
         },
     )
+
+
+@router.post(
+    "/dashboard/regression-runs",
+    response_class=RedirectResponse,
+    include_in_schema=False,
+)
+def launch_regression_run(
+    request: Request,
+    csrf_token: str = Form(...),
+    target_alias: str = Form("deployed"),
+    confirm_authorized: str = Form(""),
+) -> RedirectResponse:
+    expected_csrf = _csrf_token(request)
+    if not expected_csrf or not hmac.compare_digest(csrf_token, expected_csrf):
+        raise HTTPException(status_code=403, detail="invalid dashboard action token")
+    if target_alias == "deployed" and confirm_authorized != "yes":
+        raise HTTPException(
+            status_code=400,
+            detail="deployed regression requires synthetic-target authorization confirmation",
+        )
+    try:
+        with request.app.state.database.session_factory() as session:
+            run = ApplicationService(
+                session,
+                settings=request.app.state.settings,
+                target_profile=request.app.state.target_profile,
+                taxonomy=_taxonomy(request),
+            ).create_regression_run(
+                RegressionRunCreateRequest(
+                    target_alias=target_alias,
+                    idempotency_key=f"dashboard-regression-{uuid.uuid4().hex}",
+                )
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/dashboard/regression-runs/{run.id}", status_code=303)
 
 
 @router.get(
@@ -633,6 +791,10 @@ def regression_run_detail(request: Request, run_id: uuid.UUID) -> HTMLResponse:
         with request.app.state.database.session_factory() as session:
             run = RegressionRunRepository(session).get(run_id)
             outcomes = Counter(result.outcome for result in run.results)
+            cases = {
+                result.case_id: RegressionCaseRepository(session).get(result.case_id)
+                for result in run.results
+            }
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="regression run not found") from exc
     duration_seconds = (
@@ -643,5 +805,55 @@ def regression_run_detail(request: Request, run_id: uuid.UUID) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="regression_detail.html",
-        context={"run": run, "outcomes": outcomes, "duration_seconds": duration_seconds},
+        context={
+            "run": run,
+            "outcomes": outcomes,
+            "duration_seconds": duration_seconds,
+            "cases": cases,
+            "terminal": run.status in {"completed", "failed", "cancelled", "interrupted"},
+        },
+    )
+
+
+@router.get(
+    "/dashboard/regression-runs/{run_id}/status",
+    response_class=JSONResponse,
+    include_in_schema=False,
+)
+def regression_run_status(request: Request, run_id: uuid.UUID) -> JSONResponse:
+    try:
+        with request.app.state.database.session_factory() as session:
+            run = RegressionRunRepository(session).get(run_id)
+            payload = {
+                "run_id": str(run.id),
+                "status": run.status,
+                "terminal": run.status in {"completed", "failed", "cancelled", "interrupted"},
+                "total_cases": run.total_cases,
+                "passed_cases": run.passed_cases,
+                "reproduced_cases": run.reproduced_cases,
+                "inconclusive_cases": run.inconclusive_cases,
+                "error_cases": run.error_cases,
+                "updated_at": run.updated_at.isoformat(),
+            }
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="regression run not found") from exc
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
+@router.get(
+    "/dashboard/regression-cases/{case_id}",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+def regression_case_detail(request: Request, case_id: uuid.UUID) -> HTMLResponse:
+    try:
+        with request.app.state.database.session_factory() as session:
+            case = RegressionCaseRepository(session).get(case_id)
+            finding = FindingRepository(session).get(case.finding_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="regression case not found") from exc
+    return templates.TemplateResponse(
+        request=request,
+        name="regression_case_detail.html",
+        context={"case": case, "finding": finding},
     )

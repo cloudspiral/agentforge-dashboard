@@ -72,7 +72,7 @@ def test_current_result_hash_validation_accepts_only_exact_yaml_bytes(tmp_path: 
     )
 
     assert result.returncode == 0, result.stderr
-    assert "2 exact-schema" in result.stdout
+    assert "2 compatible-schema" in result.stdout
 
 
 def test_current_result_hash_validation_rejects_historical_tool_case(tmp_path: Path) -> None:

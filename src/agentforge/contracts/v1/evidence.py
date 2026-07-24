@@ -69,6 +69,9 @@ class SanitizedHttpExchangeV1(ContractModel):
     exchange_id: Identifier
     method: ApprovedHttpMethodV1
     endpoint_id: Identifier
+    surface: Identifier | None = None
+    request_auth_mode: Identifier | None = None
+    correlation_mode: Identifier | None = None
     response_status: int | None = Field(default=None, ge=100, le=599)
     response_content_type: str | None = Field(default=None, max_length=100)
     response_size_bytes: int = Field(default=0, ge=0, le=10_000_000)

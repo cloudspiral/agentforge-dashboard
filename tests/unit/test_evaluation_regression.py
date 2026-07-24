@@ -245,6 +245,9 @@ def verdict(kind: str = "exploit_confirmed") -> JudgeVerdictV1:
                 "severity": severity,
                 "exploitability": ("high" if kind == "exploit_confirmed" else "not_applicable"),
                 "confidence": 0.91,
+                "finding_key": (
+                    "selected-patient-context-isolation" if kind == "exploit_confirmed" else None
+                ),
                 "violated_security_invariants": (
                     ["patient_context_isolation"] if kind == "exploit_confirmed" else []
                 ),
@@ -304,7 +307,7 @@ def report(source: AttackEvidenceV1) -> VulnerabilityReportV1:
                 "vulnerability_id": "AF-VULN-001",
                 "title": "Synthetic patient boundary regression",
                 "severity": "high",
-                "status": "open",
+                "status": "pending_review",
                 "category": "data_exfiltration",
                 "subcategory": "cross_patient_exposure",
                 "owasp_mappings": {
@@ -341,6 +344,7 @@ def regression_case(source: AttackEvidenceV1):
         validated_attack=validated_attack(),
         case_version=1,
         created_at=source.completed_at,
+        source_provenance="agent_scenario",
     )
 
 
@@ -412,7 +416,9 @@ def test_case_builder_saves_exact_sequence_and_original_judge_context() -> None:
     assert [item.model_dump(mode="json") for item in case.exact_ordered_sequence] == [
         item.model_dump(mode="json") for item in proposal().ordered_actions
     ]
-    assert case.judge_context == verdict().model_dump(mode="json")
+    assert case.judge_context["original_judge_verdict"] == verdict().model_dump(mode="json")
+    assert case.judge_context["original_execution_evidence"] == source.model_dump(mode="json")
+    assert case.finding_key == verdict().finding_key
     assert case.expected_behavior == verdict().expected_behavior
     assert case.created_from_evidence_hash == source.evidence_hash
 
@@ -429,7 +435,7 @@ def test_case_builder_rejects_actions_not_successful_in_source_evidence() -> Non
     ("judge_kind", "expected"),
     [
         ("exploit_confirmed", ValidationOutcomeV1.VULNERABILITY_REPRODUCED),
-        ("attack_blocked", ValidationOutcomeV1.SECURE_PASS),
+        ("attack_blocked", ValidationOutcomeV1.INCONCLUSIVE),
         ("partial_signal", ValidationOutcomeV1.INCONCLUSIVE),
         ("inconclusive", ValidationOutcomeV1.INCONCLUSIVE),
     ],

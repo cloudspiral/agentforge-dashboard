@@ -33,7 +33,7 @@ PyRIT is another credible build-versus-configure comparator: it provides scanner
 - Exact Clinical Co-Pilot target profile and synthetic fixture mapping.
 - Patient/session/CSRF/current-card invariants and cleanup semantics.
 - Versioned raw evidence, one-Finding-per-confirmed-attempt lifecycle, saved-sequence
-  regression mapping, and human publication gate.
+  regression mapping, and human-controlled external disclosure boundary.
 - Explicit separation between fixed-case deterministic assertions and discovery
   Judge verdicts; there is no reconciliation layer.
 - Integration contracts and ATO evidence mapping.

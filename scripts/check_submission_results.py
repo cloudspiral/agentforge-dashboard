@@ -45,7 +45,8 @@ def validate_current_results(
     for result_path in sorted(current_directory.glob("*.json")):
         try:
             result = LiveLocalEvaluationResultV1.model_validate_json(
-                result_path.read_text(encoding="utf-8")
+                result_path.read_text(encoding="utf-8"),
+                context={"allow_legacy_confirmed_verdict_without_finding_key": True},
             )
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             errors.append(f"{result_path.name}: invalid result schema ({type(exc).__name__})")
@@ -141,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         "validated current submission results: "
-        f"{len(results)} exact-schema, exact-case-hash exports"
+        f"{len(results)} compatible-schema, exact-case-hash exports"
     )
     return 0
 

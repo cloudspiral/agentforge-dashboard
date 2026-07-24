@@ -3,11 +3,12 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agentforge.api.schemas import CampaignCreateRequest, RegressionRunCreateRequest
 from agentforge.evaluation import TaxonomyV1
-from agentforge.persistence.models import Campaign, Finding, RegressionRun
+from agentforge.persistence.models import Campaign, Finding, RegressionCase, RegressionRun
 from agentforge.persistence.repositories import (
     CampaignRepository,
     FindingRepository,
@@ -57,6 +58,7 @@ class ApplicationService:
         trigger_type: str = "manual",
         target_version: str | None = None,
         idempotency_key: str | None = None,
+        commit: bool = True,
     ) -> Campaign:
         if request.target_alias not in self.target_profile.profile.aliases:
             raise ValueError("target alias is not defined by the checked-in profile")
@@ -80,25 +82,44 @@ class ApplicationService:
             ),
             priority=request.priority,
             idempotency_key=idempotency_key or request.idempotency_key,
+            commit=commit,
         )
 
     def create_regression_run(self, request: RegressionRunCreateRequest) -> RegressionRun:
         target_version = request.target_version or self.settings.target_version
+        active_cases = (
+            self.session.scalar(
+                select(func.count(RegressionCase.id)).where(RegressionCase.active.is_(True))
+            )
+            or 0
+        )
+        max_attempts = min(100, max(2, int(active_cases) * 2))
         campaign = self.create_campaign(
             CampaignCreateRequest(
                 campaign_type="regression",
                 target_alias=request.target_alias,
-                max_attempts=100,
+                max_attempts=max_attempts,
                 idempotency_key=request.idempotency_key,
             ),
             idempotency_key=request.idempotency_key,
             target_version=target_version,
+            commit=False,
         )
-        return RegressionRunRepository(self.session).create(
+        existing = self.session.scalar(
+            select(RegressionRun).where(RegressionRun.campaign_id == campaign.id)
+        )
+        if existing is not None:
+            self.session.commit()
+            return existing
+        run = RegressionRunRepository(self.session).create(
             target_version=target_version,
             trigger="manual",
             campaign_id=campaign.id,
+            commit=False,
         )
+        self.session.commit()
+        self.session.refresh(run)
+        return run
 
     def trigger_deployment_regression(
         self,
@@ -106,16 +127,19 @@ class ApplicationService:
         deployment_id: str,
         target_version: str,
     ) -> Campaign:
-        return self.create_campaign(
-            CampaignCreateRequest(
-                campaign_type="regression",
-                target_alias="deployed",
-                max_attempts=100,
-            ),
-            trigger_type="deployment",
+        request = RegressionRunCreateRequest(
+            target_alias="deployed",
             target_version=target_version,
             idempotency_key=f"deployment:{deployment_id}:{target_version}",
         )
+        run = self.create_regression_run(request)
+        run.trigger = "deployment"
+        campaign = self.session.get(Campaign, run.campaign_id)
+        if campaign is None:
+            raise LookupError("regression campaign was not created")
+        campaign.trigger_type = "deployment"
+        self.session.commit()
+        return campaign
 
     def export_report(self, finding_id: uuid.UUID) -> tuple[str, int]:
         finding = FindingRepository(self.session).get(finding_id)

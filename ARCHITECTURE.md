@@ -4,10 +4,11 @@
 
 AgentForge separates **semantic security judgment** from **mechanical control**.
 
-Agents decide what to explore, what exact attack to try, what the observed behavior
-means, and how to document a confirmed exploit. Deterministic code decides only
-whether an action is authorized, runs the approved action, constructs typed transport,
-persists immutable evidence, and enforces campaign limits.
+Agents decide what to explore, which surface and technique to use, what exact attack
+to try, what the observed behavior means, and how to document a confirmed exploit.
+Deterministic code validates authorization and contract shape, expands a model-chosen
+fuzz plan reproducibly, runs the approved action, constructs typed transport, persists
+immutable evidence, and enforces campaign limits.
 
 No deterministic evaluator can create, replace, upgrade, or downgrade a discovery
 verdict.
@@ -21,10 +22,12 @@ flowchart TB
     DB --> Worker["Queue worker"]
     Worker --> Controller["Mechanical controller"]
 
-    Controller --> O{{"Orchestrator Agent"}}
+    DB --> Facts["Shared observability facts"]
+    Facts --> O{{"Orchestrator Agent"}}
+    Controller --> O
     O --> A{{"Attack Generator Agent"}}
     A --> Gate["Authorization gate"]
-    Gate -->|"ValidatedAttackV1"| Runner["HTTP / Playwright runner"]
+    Gate -->|"ValidatedAttackV1"| Runner["UI / same-origin API / sidecar API runner"]
     Runner --> Target["Synthetic Clinical Co-Pilot target"]
     Runner --> Evidence["AttackEvidenceV1"]
     Evidence --> DB
@@ -32,7 +35,8 @@ flowchart TB
     Evidence --> J{{"Judge Agent"}}
     J --> Controller
 
-    Controller -->|"exploit_confirmed"| Finding["Finding"]
+    Controller -->|"new semantic exploit"| Finding["Pending-review Finding"]
+    Controller -->|"rediscovery"| Finding
     Finding --> D{{"Documentation Agent"}}
     D --> Report["Report"]
     Report --> Regression["Regression case"]
@@ -45,24 +49,26 @@ flowchart TB
 ```
 
 PostgreSQL is authoritative for campaigns, attempts, evidence, verdicts, Findings,
-reports, regressions, and agent usage. Langfuse and metrics are optional,
-failure-isolated observability. The target is a separate deployment reached through
-normal authenticated UI or narrowly allowlisted status routes. AgentForge never
-connects to the target database or Docker socket.
+reports, regressions, agent usage, and the ordered platform timeline. The dashboard
+and Orchestrator read the same typed observability service. Langfuse and metrics are
+optional, failure-isolated secondary telemetry. The target is reached only through
+the authenticated UI and controller-owned same-origin or sidecar endpoint bindings.
+AgentForge never connects to the target database or Docker socket.
 
 ## Responsibilities
 
 | Component | Makes semantic decisions? | Mechanical authority |
 | --- | --- | --- |
-| Orchestrator Agent | Chooses `new_attack`, `mutation`, or `stop` | None |
-| Attack Generator Agent | Creates the exact ordered proposal | None |
-| Authorization gate | No | Validates target, operation, payload, duplicate hash, target version, and safety policy |
+| Orchestrator Agent | Chooses action, taxonomy scope, surface, technique, objective, mutation source, and rationale | None |
+| Attack Generator Agent | Creates the exact scenario or fuzz strategy | None |
+| Fuzz expander | No | Expands the selected corpus/operators/RNG seed into at most six exact variants |
+| Authorization gate | No | Validates target, surface, operation, payload, duplicate hash, target version, and safety policy |
 | Runner | No | Executes only `ValidatedAttackV1`; constructs typed raw evidence |
 | Judge Agent | Sole authority for the security verdict | None |
 | Controller | No | Retries, state transitions, limits, persistence, and agent handoffs |
 | Documentation Agent | Writes the report for a confirmed Finding | None |
-| Regression harness | No | Replays the saved sequence and maps the new Judge verdict |
-| Human reviewer | Decides remediation and external disclosure | Publication authority |
+| Regression harness | No | Replays the saved sequence and conservatively projects the typed Judge verdict |
+| Human reviewer | Decides whether the issue is real and controls remediation lifecycle | Finding lifecycle authority |
 
 ## Discovery sequence
 
@@ -81,21 +87,21 @@ sequenceDiagram
 
     H->>P: Queue bounded campaign
     loop until stop or campaign limit
-        C->>O: Allowed taxonomy, constraints, history, remaining limits
-        O-->>C: new_attack / mutation / stop
+        C->>O: Neutral 17-subcategory coverage, surfaces, findings, history, limits
+        O-->>C: action + taxonomy + surface + technique + rationale
         alt invalid output after bounded retries
             C->>P: Persist AgentRun failures; fail campaign
         else stop
             C->>P: Complete campaign
         else selected objective
-            C->>A: Objective and optional partial-signal parent
-            A-->>C: Exact ProposedAttackV1
+            C->>A: Objective, endpoint catalog, fuzz corpus, optional partial-signal parent
+            A-->>C: Exact scenario or FuzzPlanV2
             alt invalid output after bounded retries
                 C->>P: Persist AgentRun failures; fail campaign
             else typed proposal
                 C->>G: Authorize proposal
                 alt rejected or duplicate
-                    C->>P: Preserve AgentRun; fail campaign without AttackAttempt
+                    C->>P: Preserve rejected proposal and gate event; do not contact target
                 else authorized
                     C->>P: Create pending attempt with trusted provenance
                     C->>R: Execute validated sequence
@@ -109,11 +115,13 @@ sequenceDiagram
                         J-->>C: JudgeVerdictV1
                         alt persistent Judge failure
                             C->>P: Preserve evidence; fail campaign
-                        else exploit_confirmed
-                            C->>P: Completed attempt + one Finding
+                        else new semantic exploit_confirmed
+                            C->>P: Completed attempt + pending-review Finding
                             C->>D: Finding, exact sequence, evidence, verdict
                             D-->>C: VulnerabilityReportV1
                             C->>P: Report + regression case
+                        else rediscovered exploit_confirmed
+                            C->>P: Append observation and validation history
                         else other verdict
                             C->>P: Completed attempt + verdict
                         end
@@ -127,7 +135,9 @@ sequenceDiagram
 Each invalid structured agent response is retried by the same role within a bounded
 adapter limit. There is no deterministic objective selection, attack seed, alternate
 agent, or synthetic Judge fallback. Rejected proposals remain visible through their
-`AgentRun`; because the target was never executed, they are not `AttackAttempt`s.
+`AgentRun` and the platform timeline. Fuzz variants may also retain a rejected
+`AttackAttempt` record with `target_executed=false`; only target-executed attempts
+consume the execution-attempt budget.
 
 ## Mutation semantics
 
@@ -135,6 +145,12 @@ The Orchestrator may request a mutation only for an existing attempt whose Judge
 verdict is `partial_signal`. The new proposal stores only `parent_attempt_id`; lineage
 and generation are derived by walking parent links. Every mutation is an ordinary
 attempt and consumes the same campaign `max_attempts` budget.
+
+Fuzzing is a technique, not a taxonomy category. The Orchestrator decides when it is
+appropriate; the Attack Generator selects mutation points, corpus/operator IDs, and a
+fixed RNG seed. The controller expands at most six variants. If one is confirmed, it
+may run at most three strictly smaller candidates, but replaces the active regression
+payload only when a smaller candidate is independently Judge-confirmed.
 
 ## Evidence boundary
 
@@ -150,8 +166,9 @@ failure and skips the Judge. If the runner successfully returns partial or
 error-bearing typed evidence, the controller passes it unchanged to the Judge.
 
 Fixed-case deterministic assertions live outside raw evidence. They assess only the
-selected YAML case, do not appear in the Judge prompt, cannot change the Judge
-verdict, and cannot create a discovery Finding.
+selected YAML case, do not appear in the Judge prompt, and cannot change the Judge
+verdict. A separately Judge-confirmed seed exploit goes through the same promotion
+service as scenario, fuzz, and API discoveries.
 
 ## Verdict and finding semantics
 
@@ -162,14 +179,15 @@ The Judge returns exactly one of:
 - `attack_blocked`
 - `inconclusive`
 
-It also returns confidence, severity, exploitability, violated invariants, and
-observed/expected behavior. The controller does not interpret those fields beyond
-mechanically branching on the typed verdict.
+It also returns confidence, severity, exploitability, a semantic `finding_key`,
+violated invariants, and observed/expected behavior. The key is required for a
+confirmed exploit. The controller does not make a competing security judgment.
 
-One `exploit_confirmed` attempt creates one Finding with a unique fingerprint derived
-from attempt ID and evidence hash. There is no reproduction threshold, confirmation
-counter, semantic deduplication, or finding upsert. Identical confirmed attacks in
-different attempts intentionally create separate Findings and reports.
+The promotion service hashes the Judge key, taxonomy scope, and sorted violated
+invariants. A new fingerprint creates one pending-review Finding; a repeated
+fingerprint appends an immutable observation and validation history to the existing
+Finding. This prevents seed replays and agent rediscoveries from manufacturing
+duplicate reports while preserving every attempt and evidence hash.
 
 Documentation or regression-case failure does not erase the confirmed Finding or
 evidence, but it ends the campaign visibly. After both succeed, discovery continues.
@@ -177,8 +195,9 @@ evidence, but it ends the campaign visibly. After both succeed, discovery contin
 The Documentation Agent receives the full evidence, but transcript provenance remains
 controller-owned: any model-supplied transcript is replaced with the exact committed
 turns. Structured report data and rendered Markdown are committed before a generated
-Markdown export is attempted. Export failure leaves the database report recoverable
-and prevents regression-case creation.
+Markdown export is attempted. PostgreSQL Markdown is canonical. Human lifecycle
+changes and regression validation create deterministic report versions; there is no
+separate report approval/publication state.
 
 ## Persistence model
 
@@ -191,11 +210,12 @@ pending | running | completed | failed | cancelled
 An optional operational failure stores `stage`, `code`, and `retryable`. A security
 outcome exists only on `JudgeVerdict.verdict`.
 
-New discovery provenance is limited to:
+Attempt records distinguish execution lane, surface, technique, and source:
 
 ```text
-proposal: agent_generated | agent_generated_mutation
-objective: orchestrator_selected
+human_authored_seed | curated_discovery_replay
+agent_scenario | agent_fuzz | agent_fuzz_minimization
+regression_replay
 ```
 
 Historical records may contain retired fallback labels. They remain readable and are
@@ -209,25 +229,32 @@ retains source IDs and hash; no file is imported as operational state.
 
 ## Regression replay
 
-A regression case stores the ordered sequence, target requirements, original Judge
-context, expected secure behavior, taxonomy metadata, and source evidence hash. The
-same runner and Judge are used on replay:
+A regression case stores the exact sequence, setup, target/profile version,
+provenance, finding key, original Judge confirmation, original execution evidence,
+violated invariants, expected secure behavior, taxonomy metadata, and source evidence
+hash. The same runner and Judge are used on replay. Each replay and Judge verdict is
+stored separately; deterministic code validates the replay and makes only this
+conservative aggregate projection:
 
-| New result | Regression outcome |
+| Replay set | Aggregate outcome |
 | --- | --- |
-| `exploit_confirmed` | `vulnerability_reproduced` |
-| `attack_blocked` | `secure_pass` |
-| `partial_signal` or `inconclusive` | `inconclusive` |
-| Operational failure | `error` |
+| Any valid replay with the same finding key and `exploit_confirmed` | `vulnerability_reproduced` |
+| Two valid, consistent `attack_blocked` replays on a changed target version | `secure_pass` |
+| Same-version blocking or mixed/partial verdicts | `inconclusive` |
+| Setup, sequence, version, evidence, timeout, or Judge failure | `error` |
 
-No deterministic invariant can turn an uncertain replay into a secure pass.
+Matched active-case cohorts across adjacent exact target versions provide
+reproduced-to-secure improvements, secure-to-reproduced regressions, and
+cross-category regression flags. A reproduced case reopens `resolved` to `open` and
+`false_positive` to `pending_review` with an immutable audit event.
 
 ## Campaign limits and recovery
 
-Before each iteration the controller checks cancellation, duration, target-version
-binding, maximum attempts, and maximum cost. `max_attempts` is the only iteration
-counter. Operational or agent failures are visible terminal campaign failures; they
-are not security verdicts.
+Before each iteration and target execution the controller checks cancellation,
+duration, target-version binding, maximum target-executed attempts, campaign cost,
+the global model-cost ceiling, and a regression reserve equal to the greater of the
+configured minimum or 125% of projected full-suite replay cost. Operational or agent
+failures are visible failures; they are not security verdicts.
 
 Queue claiming, stale-job recovery, idempotency, and state transitions are
 transactional. Model and target actions are not retried as if they were exactly-once:
@@ -242,13 +269,28 @@ confirmation. It calls the same application validation as the bearer-authenticat
 API and never exposes the bearer token to the browser.
 
 The execution gate is the sole pre-target authorization boundary. It validates
-server-owned target/profile bindings and rejects model-supplied URLs, credentials,
-shell commands, SQL, unsupported files, persistent clinical operations, cross-origin
-activity, and duplicate sequences.
+server-owned target/profile and execution-surface bindings and rejects model-supplied
+URLs, secrets, shell commands, SQL, unsupported files, unbounded persistent
+operations, unrelated origins, and duplicate sequences. The runner injects browser
+session/CSRF state or the sidecar shared secret without exposing either to models or
+evidence. At most one explicitly labeled synthetic artifact may remain when no
+approved cleanup route exists.
+
+The human finding lifecycle is:
+
+```text
+pending_review -> open -> in_progress -> resolved
+              \-> false_positive
+```
+
+Dismissal requires a reason. Resolution normally requires a secure regression result
+on a changed target version; a manual override is visibly labeled and requires a
+reason. Actor, transition, reason, evidence reference, and timestamp are durable.
 
 ## Current evidence boundary
 
-The simplified controller and migration are covered by unit, contract, and isolated
-PostgreSQL integration tests. Checked-in live exports predate this branch and remain
-historical target evidence. The branch is not merged or deployed; no Clinical
-Co-Pilot code or infrastructure is changed by this work.
+The V2 controller, additive migration, surface runners, fuzz expansion, promotion,
+lifecycle, replicated regression semantics, shared observability, and cost model are
+covered by unit, contract, and isolated PostgreSQL integration tests. Deployment and
+live-run claims remain separate and are recorded in `docs/FINAL_READINESS.md`; no
+Clinical Co-Pilot code or infrastructure is modified by an AgentForge release.

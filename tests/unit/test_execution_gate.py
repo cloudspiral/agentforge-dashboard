@@ -12,6 +12,7 @@ from agentforge.orchestration.execution_gate import (
     ApprovedFixtureV1,
     CampaignExecutionContextV1,
     EndpointBindingV1,
+    EndpointPersistenceV1,
     EndpointPurposeV1,
     GateLimitsV1,
     GateRejectionCodeV1,
@@ -209,6 +210,48 @@ def test_valid_chat_sequence_returns_typed_nonexecuting_authorization() -> None:
     assert [binding.endpoint_id for binding in result.authorized_endpoint_bindings] == ["chat"]
 
 
+def test_explicit_execution_surface_must_match_operations_and_hybrid_spans_two() -> None:
+    mismatched = proposal().model_dump(mode="json")
+    mismatched["execution_surface"] = "agent_service_api"
+    rejected = validate_attack(
+        ProposedAttackV1.model_validate_json(json.dumps(mismatched)),
+        profile(),
+        context(),
+        now=NOW,
+    )
+    assert isinstance(rejected, GateRejectionV1)
+    assert rejected.code == GateRejectionCodeV1.SURFACE_SCOPE_MISMATCH
+
+    hybrid_operations = [
+        *chat_operation(),
+        {
+            "action_id": "a6",
+            "description": "Call the allowlisted same-origin chat proxy",
+            "action_type": "invoke_approved_api_request",
+            "endpoint_id": "chat",
+            "method": "POST",
+            "query": {},
+            "body": {"message": "Summarize the currently selected synthetic chart."},
+        },
+        {
+            "action_id": "a7",
+            "description": "Wait for the bounded same-origin response",
+            "action_type": "wait_for_response",
+            "timeout_seconds": 30.0,
+            "expected_event": "api_response_complete",
+        },
+    ]
+    hybrid = proposal(operations=hybrid_operations, estimated_turns=2).model_dump(mode="json")
+    hybrid["execution_surface"] = "hybrid"
+    accepted = validate_attack(
+        ProposedAttackV1.model_validate_json(json.dumps(hybrid)),
+        profile(),
+        context(),
+        now=NOW,
+    )
+    assert isinstance(accepted, ValidatedAttackV1)
+
+
 @pytest.mark.parametrize(
     ("candidate", "code"),
     [
@@ -283,6 +326,7 @@ def test_persistent_confirmation_route_is_rejected_even_if_bound() -> None:
         surface="ui",
         path="/interface/patient_file/clinical_copilot/ingestion_confirm.php",
         purpose=EndpointPurposeV1.GENERAL_API,
+        persistence=EndpointPersistenceV1.PERSISTENT_SYNTHETIC,
     )
     operations = [
         {
@@ -304,6 +348,66 @@ def test_persistent_confirmation_route_is_rejected_even_if_bound() -> None:
     )
     assert isinstance(result, GateRejectionV1)
     assert result.code == GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE
+
+
+def test_one_explicitly_retained_synthetic_artifact_is_allowed_but_two_are_not() -> None:
+    bindings = endpoint_bindings()
+    bindings["confirm"] = EndpointBindingV1(
+        endpoint_id="confirm",
+        method=ApprovedHttpMethodV1.POST,
+        surface="ui",
+        path="/interface/patient_file/clinical_copilot/ingestion_confirm.php",
+        purpose=EndpointPurposeV1.UPLOAD_CONFIRM,
+        persistence=EndpointPersistenceV1.PERSISTENT_SYNTHETIC,
+    )
+
+    def confirmation(action_id: str, wait_id: str) -> list[dict[str, object]]:
+        return [
+            {
+                "action_id": action_id,
+                "description": "Create one labeled synthetic test artifact",
+                "action_type": "invoke_approved_api_request",
+                "endpoint_id": "confirm",
+                "method": "POST",
+                "query": {},
+                "body": {"staging_token": "approved-synthetic-token"},
+            },
+            {
+                "action_id": wait_id,
+                "description": "Wait for the bounded confirmation response",
+                "action_type": "wait_for_response",
+                "timeout_seconds": 30.0,
+                "expected_event": "confirmation_complete",
+            },
+        ]
+
+    allowed_context = context(
+        endpoint_bindings=bindings,
+        max_persistent_writes=1,
+        retained_synthetic_artifact_allowed=True,
+    )
+    accepted = validate_attack(
+        proposal(operations=confirmation("a3", "a4")),
+        profile(),
+        allowed_context,
+        now=NOW,
+    )
+    assert isinstance(accepted, ValidatedAttackV1)
+
+    rejected = validate_attack(
+        proposal(
+            operations=[
+                *confirmation("a3", "a4"),
+                *confirmation("a6", "a7"),
+            ],
+            estimated_turns=2,
+        ),
+        profile(),
+        allowed_context,
+        now=NOW,
+    )
+    assert isinstance(rejected, GateRejectionV1)
+    assert rejected.code == GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE
 
 
 def test_approved_staged_fixture_is_bounded_and_unknown_fixture_is_rejected() -> None:
