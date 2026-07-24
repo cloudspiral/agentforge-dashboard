@@ -17,6 +17,16 @@ from agentforge.settings import Settings
 from agentforge.target.profile import LoadedTargetProfile, ResolvedTargetAlias, TargetProfileV1
 
 EndpointSurface = Literal["status", "ui", "agent_service"]
+PENDING_TARGET_VERSION = "pending-discovery"
+LOCAL_UNKNOWN_TARGET_VERSION = "local-unknown"
+UNRESOLVED_TARGET_VERSIONS = (
+    LOCAL_UNKNOWN_TARGET_VERSION,
+    PENDING_TARGET_VERSION,
+)
+
+
+def target_version_is_resolved(value: str | None) -> bool:
+    return bool(value and value not in UNRESOLVED_TARGET_VERSIONS)
 
 
 @dataclass(frozen=True, slots=True)

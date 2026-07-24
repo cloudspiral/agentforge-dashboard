@@ -18,7 +18,7 @@ from agentforge.persistence.repositories import (
 )
 from agentforge.reports import export_stored_report
 from agentforge.settings import Settings
-from agentforge.target import LoadedTargetProfile
+from agentforge.target import PENDING_TARGET_VERSION, LoadedTargetProfile
 
 
 class ApplicationService:
@@ -87,7 +87,7 @@ class ApplicationService:
 
     def create_regression_run(self, request: RegressionRunCreateRequest) -> RegressionRun:
         target_version = request.target_version or (
-            "pending-discovery"
+            PENDING_TARGET_VERSION
             if request.target_alias == "deployed"
             else self.settings.target_version
         )

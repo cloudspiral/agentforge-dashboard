@@ -24,7 +24,13 @@ from agentforge.observability.cost_analysis import (
 )
 from agentforge.orchestration.objectives import surface_capability_facts
 from agentforge.persistence import Base, Database
-from agentforge.persistence.models import AgentRun, AttackAttempt, Campaign, JudgeVerdict
+from agentforge.persistence.models import (
+    AgentRun,
+    AttackAttempt,
+    Campaign,
+    JudgeVerdict,
+    RegressionRun,
+)
 from agentforge.target import load_target_profile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -162,6 +168,47 @@ def test_dashboard_snapshot_and_orchestrator_use_identical_neutral_coverage(
                 assert planning_fact.by_provenance == dashboard_fact.by_provenance
             assert dashboard_snapshot.surface_capabilities == capabilities
             assert orchestrator.surface_capabilities == capabilities
+    finally:
+        database.dispose()
+
+
+def test_resilience_excludes_unresolved_and_same_version_transitions(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    taxonomy = load_taxonomy(ROOT / "config" / "attack-taxonomy.yaml")
+    cohort_hash = "a" * 64
+    try:
+        with database.session_factory() as session:
+            session.add_all(
+                [
+                    RegressionRun(
+                        target_version="local-unknown",
+                        trigger="legacy",
+                        status="completed",
+                        cohort_hash=cohort_hash,
+                        completed_at=datetime.now(UTC),
+                    ),
+                    RegressionRun(
+                        target_version="openemr-build-1",
+                        previous_target_version="local-unknown",
+                        trigger="manual",
+                        status="completed",
+                        cohort_hash=cohort_hash,
+                        completed_at=datetime.now(UTC),
+                    ),
+                    RegressionRun(
+                        target_version="openemr-build-1",
+                        previous_target_version="openemr-build-1",
+                        trigger="manual",
+                        status="completed",
+                        cohort_hash=cohort_hash,
+                        completed_at=datetime.now(UTC),
+                    ),
+                ]
+            )
+            session.commit()
+
+            service = PlatformObservabilityService(session, taxonomy=taxonomy)
+            assert service.resilience_transitions() == []
     finally:
         database.dispose()
 
