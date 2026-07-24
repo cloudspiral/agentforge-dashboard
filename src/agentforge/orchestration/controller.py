@@ -127,6 +127,10 @@ from agentforge.target.version import DiscoveredTargetVersion, discover_target_v
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _HEX_SHA = re.compile(r"^[0-9a-fA-F]{7,64}$")
 _CONTROLLER_PROMPT_VERSION = "controller-policy-v3-2026-07-24"
+_UPLOAD_SURFACE_ID = "clinical_document_upload"
+_UPLOAD_STAGE_ENDPOINT_ID = "document_stage"
+_UPLOAD_REJECT_ENDPOINT_ID = "document_reject"
+_MAX_PLANNING_REJECTIONS = 12
 
 PROPOSAL_AGENT_GENERATED = "agent_generated"
 PROPOSAL_AGENT_GENERATED_MUTATION = "agent_generated_mutation"
@@ -550,6 +554,58 @@ class CampaignController:
         value = session.scalar(select(func.coalesce(func.sum(AgentRun.estimated_cost_usd), 0)))
         return _decimal(value or 0)
 
+    @staticmethod
+    def _planning_rejection_limit(campaign: Campaign) -> int:
+        return min(_MAX_PLANNING_REJECTIONS, max(3, campaign.max_attempts))
+
+    def _planning_rejection_result(
+        self,
+        session: Any,
+        *,
+        campaign: Campaign,
+        stage: str,
+        code: str,
+    ) -> CampaignProcessResult | None:
+        """Record a bounded replan request without consuming a target attempt."""
+
+        rejection_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(AgentRun)
+                .where(AgentRun.campaign_id == campaign.id)
+                .where(AgentRun.role == "attack_generator")
+                .where(AgentRun.status == "rejected")
+            )
+            or 0
+        )
+        rejection_limit = self._planning_rejection_limit(campaign)
+        PlatformEventRepository(session).record(
+            event_type="attack_plan_rejected",
+            actor="agentforge:controller",
+            campaign_id=campaign.id,
+            role="attack_generator",
+            details={
+                "stage": stage,
+                "code": code,
+                "rejection_count": rejection_count,
+                "rejection_limit": rejection_limit,
+                "target_attempt_consumed": False,
+                "will_replan": rejection_count < rejection_limit,
+            },
+        )
+        session.commit()
+        if rejection_count < rejection_limit:
+            return None
+        return self._failed_result(
+            campaign,
+            code="planning_rejection_limit_reached",
+            message=(
+                "Attack Generator proposals reached the bounded pre-execution "
+                f"rejection limit after {code}"
+            ),
+            retryable=True,
+        )
+
     def _projected_regression_reserve(self, session: Any) -> Decimal:
         active_cases = int(
             session.scalar(
@@ -830,9 +886,9 @@ class CampaignController:
             test_role=expected_role,
             endpoint_bindings=endpoint_bindings(self.loaded_profile.profile),
             chat_endpoint_id="copilot_chat_proxy",
-            upload_surface_id="clinical_document_upload",
-            upload_stage_endpoint_id="document_stage",
-            upload_reject_endpoint_id="document_reject",
+            upload_surface_id=_UPLOAD_SURFACE_ID,
+            upload_stage_endpoint_id=_UPLOAD_STAGE_ENDPOINT_ID,
+            upload_reject_endpoint_id=_UPLOAD_REJECT_ENDPOINT_ID,
             approved_fixtures={
                 fixture_id: ApprovedFixtureV1(
                     fixture_id=authorization.fixture_id,
@@ -2120,6 +2176,9 @@ class CampaignController:
                             "expected_role": "physician",
                             "patient_alias": "patient_a",
                             "verify_selected_context": True,
+                            "upload_surface_id": _UPLOAD_SURFACE_ID,
+                            "upload_stage_endpoint_id": _UPLOAD_STAGE_ENDPOINT_ID,
+                            "upload_reject_endpoint_id": _UPLOAD_REJECT_ENDPOINT_ID,
                             "wait_expected_event": "copilot_response_complete",
                             "evidence_kinds": [
                                 "transcript",
@@ -2235,13 +2294,15 @@ class CampaignController:
                             "retryable": True,
                         },
                     )
-                    session.commit()
-                    return self._failed_result(
-                        campaign,
+                    terminal = self._planning_rejection_result(
+                        session,
+                        campaign=campaign,
+                        stage="attack_generator",
                         code="proposal_scope_mismatch",
-                        message="Attack Generator proposal did not match its objective",
-                        retryable=True,
                     )
+                    if terminal is not None:
+                        return terminal
+                    continue
 
                 if objective.technique == AttackTechniqueV2.FUZZING:
                     try:
@@ -2259,13 +2320,15 @@ class CampaignController:
                                 "retryable": True,
                             },
                         )
-                        session.commit()
-                        return self._failed_result(
-                            campaign,
+                        terminal = self._planning_rejection_result(
+                            session,
+                            campaign=campaign,
+                            stage="fuzz_expansion",
                             code="invalid_fuzz_plan",
-                            message="The selected fuzz plan could not be expanded safely",
-                            retryable=True,
                         )
+                        if terminal is not None:
+                            return terminal
+                        continue
                     expanded = expanded[:remaining_attempts]
                     PlatformEventRepository(session).record(
                         event_type="fuzz_plan_expanded",
@@ -2407,6 +2470,16 @@ class CampaignController:
                             "retryable": validated.retryable_after_revision,
                         },
                     )
+                    if validated.retryable_after_revision:
+                        terminal = self._planning_rejection_result(
+                            session,
+                            campaign=campaign,
+                            stage="authorization",
+                            code=validated.code.value,
+                        )
+                        if terminal is not None:
+                            return terminal
+                        continue
                     session.commit()
                     return self._failed_result(
                         campaign,

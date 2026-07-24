@@ -756,7 +756,7 @@ def validate_attack(
                 return _reject(
                     context,
                     proposal,
-                    GateRejectionCodeV1.FIXTURE_NOT_ALLOWLISTED,
+                    GateRejectionCodeV1.SURFACE_SCOPE_MISMATCH,
                     "upload surface is not the controller-owned staged fixture surface",
                     action_id=action.action_id,
                 )

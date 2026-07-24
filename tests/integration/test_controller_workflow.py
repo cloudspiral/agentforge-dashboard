@@ -576,6 +576,17 @@ async def test_secure_attempt_persists_raw_evidence_and_judge_only_outcome(
         assert session.scalar(select(func.count()).select_from(JudgeVerdict)) == 1
         assert session.scalar(select(func.count()).select_from(Finding)) == 0
         assert session.scalar(select(func.count()).select_from(AgentRun)) == 3
+        attack_run = session.scalar(
+            select(AgentRun)
+            .where(AgentRun.campaign_id == campaign.id)
+            .where(AgentRun.role == "attack_generator")
+        )
+        exact_values = attack_run.input_payload["target_constraints"][
+            "exact_controller_owned_values"
+        ]
+        assert exact_values["upload_surface_id"] == "clinical_document_upload"
+        assert exact_values["upload_stage_endpoint_id"] == "document_stage"
+        assert exact_values["upload_reject_endpoint_id"] == "document_reject"
 
 
 @pytest.mark.asyncio
@@ -984,12 +995,18 @@ async def test_attack_generator_failure_has_no_seed_fallback_or_attempt(
 
 
 @pytest.mark.asyncio
-async def test_gate_rejection_records_rejected_agent_run_without_attempt(
+async def test_retryable_gate_rejection_replans_without_consuming_target_attempt(
     database: Database,
     settings: Settings,
     tmp_path: Path,
 ) -> None:
-    def invalid_sequence(payload: Any, _kwargs: Any) -> ProposedAttackV1:
+    generated_calls = 0
+
+    def invalid_then_valid(payload: Any, _kwargs: Any) -> ProposedAttackV1:
+        nonlocal generated_calls
+        generated_calls += 1
+        if generated_calls > 1:
+            return _proposal(payload, generated_calls)
         objective = payload["objective"]
         return ProposedAttackV1.model_validate_json(
             json.dumps(
@@ -1031,20 +1048,103 @@ async def test_gate_rejection_records_rejected_agent_run_without_attempt(
             settings,
             tmp_path,
             runner=runner,
+            attack_factory=invalid_then_valid,
+        ),
+    )
+    with database.session_factory() as session:
+        attack_runs = list(
+            session.scalars(
+                select(AgentRun)
+                .where(AgentRun.campaign_id == campaign.id)
+                .where(AgentRun.role == "attack_generator")
+                .order_by(AgentRun.created_at)
+            )
+        )
+        assert session.get(Campaign, campaign.id).status == "completed"
+        assert [run.status for run in attack_runs] == ["rejected", "succeeded"]
+        assert attack_runs[0].typed_error["stage"] == "authorization"
+        assert attack_runs[0].output_payload["proposal_id"] == "invalid-sequence"
+        assert session.scalar(select(func.count()).select_from(AttackAttempt)) == 1
+        rejection_event = session.scalar(
+            select(PlatformEvent).where(PlatformEvent.event_type == "attack_plan_rejected")
+        )
+        assert rejection_event.details_json["target_attempt_consumed"] is False
+        assert rejection_event.details_json["will_replan"] is True
+    assert runner.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_repeated_retryable_gate_rejections_stop_at_bounded_planning_limit(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    def invalid_sequence(payload: Any, _kwargs: Any) -> ProposedAttackV1:
+        objective = payload["objective"]
+        return ProposedAttackV1.model_validate_json(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "proposal_id": f"invalid-sequence-{uuid.uuid4().hex}",
+                    "category": objective["selected_category"],
+                    "subcategory": objective["selected_subcategory"],
+                    "execution_surface": objective["execution_surface"],
+                    "technique": objective["technique"],
+                    "attack_family_id": "invalid-family",
+                    "novelty_rationale": "Intentionally fails the structural gate.",
+                    "ordered_actions": [
+                        {
+                            "action_id": "only-chat",
+                            "description": "Missing required safety prefix",
+                            "action_type": "send_chat_message",
+                            "message": "Unsafe sequence shape",
+                            "conversation_alias": "fixture",
+                            "await_response": True,
+                        }
+                    ],
+                    "expected_exploit_signals": ["No signal"],
+                    "expected_safe_behavior": ["Gate rejection"],
+                    "stop_conditions": ["Stop"],
+                    "estimated_turns": 1,
+                    "estimated_cost_class": "low",
+                }
+            )
+        )
+
+    campaign = _campaign(database)
+    runner = FixtureRunner()
+    await _run(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            runner=runner,
             attack_factory=invalid_sequence,
         ),
     )
     with database.session_factory() as session:
-        attack_run = session.scalar(
-            select(AgentRun)
-            .where(AgentRun.campaign_id == campaign.id)
-            .where(AgentRun.role == "attack_generator")
+        stored = session.get(Campaign, campaign.id)
+        rejected_runs = list(
+            session.scalars(
+                select(AgentRun)
+                .where(AgentRun.campaign_id == campaign.id)
+                .where(AgentRun.role == "attack_generator")
+                .where(AgentRun.status == "rejected")
+            )
         )
-        assert session.get(Campaign, campaign.id).status == "failed"
-        assert attack_run.status == "rejected"
-        assert attack_run.typed_error["stage"] == "authorization"
-        assert attack_run.output_payload["proposal_id"] == "invalid-sequence"
-        assert session.scalar(select(func.count()).select_from(AttackAttempt)) == 0
+        assert stored.status == "failed"
+        assert stored.sanitized_error["code"] == "planning_rejection_limit_reached"
+        assert len(rejected_runs) == 3
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AttackAttempt)
+                .where(AttackAttempt.campaign_id == campaign.id)
+            )
+            == 0
+        )
     assert runner.calls == 0
 
 
