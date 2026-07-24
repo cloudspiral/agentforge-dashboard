@@ -45,6 +45,7 @@ from agentforge.persistence.repositories import (
 from agentforge.reports import create_report_lifecycle_version, export_stored_report
 from agentforge.security.auth import require_dashboard_auth
 from agentforge.security.redaction import redact
+from agentforge.target import target_version_is_resolved
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 TERMINAL_CAMPAIGN_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
@@ -802,6 +803,16 @@ def regression_run_detail(request: Request, run_id: uuid.UUID) -> HTMLResponse:
         if run.started_at and run.completed_at
         else None
     )
+    if not run.previous_target_version:
+        comparison_note = "No matched prior cohort; no resilience transition was calculated."
+    elif not target_version_is_resolved(run.previous_target_version):
+        comparison_note = (
+            "Unresolved legacy placeholder; excluded from resilience transition calculations."
+        )
+    elif run.previous_target_version == run.target_version:
+        comparison_note = "Same target version; excluded from resilience transition calculations."
+    else:
+        comparison_note = "Exact changed-version cohort comparison is eligible."
     return templates.TemplateResponse(
         request=request,
         name="regression_detail.html",
@@ -810,6 +821,7 @@ def regression_run_detail(request: Request, run_id: uuid.UUID) -> HTMLResponse:
             "outcomes": outcomes,
             "duration_seconds": duration_seconds,
             "cases": cases,
+            "comparison_note": comparison_note,
             "terminal": run.status in {"completed", "failed", "cancelled", "interrupted"},
         },
     )
