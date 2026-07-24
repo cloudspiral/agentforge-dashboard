@@ -155,7 +155,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             OrchestratorDecisionV2,
             "gpt-5.6-terra",
             900,
-            "orchestrator-v4-2026-07-24",
+            "orchestrator-v5-2026-07-24",
             False,
         ),
         (
@@ -163,7 +163,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             ProposedAttackV1,
             "gpt-5.6-terra",
             2400,
-            "attack-generator-v5-2026-07-24",
+            "attack-generator-v6-2026-07-24",
             False,
         ),
         (
