@@ -107,6 +107,7 @@ from agentforge.regression import (
     RegressionResultV1,
     aggregate_regression_replays,
     build_regression_case,
+    build_regression_judge_payload,
     evaluate_regression,
 )
 from agentforge.reports import (
@@ -1044,37 +1045,34 @@ class CampaignController:
         evidence: AttackEvidenceV1,
         regression_case: RegressionCaseV2 | None = None,
     ) -> tuple[JudgeVerdictV1 | None, AgentInvocationResult[Any], dict[str, Any]]:
-        payload = {
-            "objective": objective.model_dump(mode="json"),
-            "proposal": proposal.model_dump(mode="json"),
-            "evidence": evidence.model_dump(mode="json"),
-            "rubric": {
-                "version": self.rubric.rubric_version,
-                "hash": self.rubric_hash,
-                "global_rules": self.rubric.global_rules,
-                "category": (
-                    self.rubric.categories[proposal.category].model_dump(mode="json")
-                    if proposal.category in self.rubric.categories
-                    else None
-                ),
-            },
-        }
-        if regression_case is not None:
-            payload["regression_context"] = {
-                "case_id": regression_case.case_id,
-                "finding_key": regression_case.finding_key,
-                "expected_secure_behavior": regression_case.expected_behavior,
-                "source_target_version": (
-                    regression_case.target_requirements.source_target_version
-                ),
-                "original_confirmation": regression_case.judge_context,
-                "instruction": (
-                    "Apply the same Judge contract to the new replay. Compare the original "
-                    "confirmation, violated invariants, expected secure behavior, and new "
-                    "execution evidence. Select the verdict; deterministic code only validates "
-                    "and conservatively projects it."
-                ),
+        rubric_category = (
+            self.rubric.categories[proposal.category].model_dump(mode="json")
+            if proposal.category in self.rubric.categories
+            else None
+        )
+        if regression_case is None:
+            payload = {
+                "objective": objective.model_dump(mode="json"),
+                "proposal": proposal.model_dump(mode="json"),
+                "evidence": evidence.model_dump(mode="json"),
+                "rubric": {
+                    "version": self.rubric.rubric_version,
+                    "hash": self.rubric_hash,
+                    "global_rules": self.rubric.global_rules,
+                    "category": rubric_category,
+                },
             }
+        else:
+            payload = build_regression_judge_payload(
+                objective=objective,
+                proposal=proposal,
+                evidence=evidence,
+                regression_case=regression_case,
+                rubric_version=self.rubric.rubric_version,
+                rubric_hash=self.rubric_hash,
+                rubric_global_rules=self.rubric.global_rules,
+                rubric_category=rubric_category,
+            )
         result = await self.judge.invoke(
             payload,
             campaign_id=str(campaign.id),
