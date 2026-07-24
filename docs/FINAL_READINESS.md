@@ -24,7 +24,7 @@ was performed locally on 2026-07-23. `VERIFIED LOCALLY` does not mean deployed.
 | OWASP A06 | `EXPOSURE, NOT EXPLOITABILITY` | Affected installed Composer versions were verified; the Co-Pilot bridge uses native cURL and advisory prerequisites were not exercised |
 | OWASP A09 | `PARTIAL` | Correlation mechanism exists in source, but attributable runtime security-log evidence was unavailable |
 | Feature branch deployment | `NO` | Branch is intentionally not merged or deployed; Clinical Co-Pilot and infrastructure are untouched |
-| Docker build | `BLOCKED FOR THIS REVISION` | A fresh `docker build` retry was stopped before Buildx started because the desktop approval service rejected Docker's write to its own Buildx activity metadata. The earlier image predates these evidence-export changes and is not claimed as current proof |
+| Docker build | `VERIFIED LOCALLY` | Commit `98cfc6f` built as non-root ARM64 image `sha256:cd20c3f07575a1d8d7b9f01e7a8cf9faa18cada06a17e1a09e629f10ceaed136`; an ephemeral container launched packaged Chromium 149 and imported AgentForge successfully |
 | Browser dashboard smoke | `VERIFIED LOCALLY` | Source service returned ready; Chrome rendered the exact user/assistant transcript and historical “durable evidence unavailable” state, rendered launcher defaults/CSRF/idempotency with no bearer/platform credential field, and emitted no console warnings or errors |
 
 ## Validation commands

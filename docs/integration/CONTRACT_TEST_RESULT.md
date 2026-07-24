@@ -17,10 +17,10 @@ On 2026-07-23, feature-branch verification produced:
 - `docker compose config --quiet`: passed.
 - Isolated PostgreSQL upgrade/current/check: passed at `a812e4c97f30 (head)` with
   no pending operations or model/migration drift.
-- A fresh Docker build for the evidence-export revision was retried but blocked
-  before Buildx started because the desktop approval service rejected Docker's
-  Buildx activity-metadata write. The earlier image predates this change and is not
-  current build proof; GitLab CI remains the independent branch build gate.
+- Commit `98cfc6f` built successfully as non-root ARM64 image
+  `sha256:cd20c3f07575a1d8d7b9f01e7a8cf9faa18cada06a17e1a09e629f10ceaed136`.
+  An ephemeral container launched packaged Chromium 149 and imported AgentForge;
+  GitLab CI remains the independent branch build gate.
 
 The isolated database was named `agentforge_evidence_test`; it is distinct from
 development/production data.
@@ -37,7 +37,8 @@ development/production data.
 - The migrations and controller/job lifecycles work on an isolated PostgreSQL
   database.
 - The source-level dashboard smoke renders exact transcripts and fails closed for
-  historical missing artifacts; a current-revision container build remains unverified.
+  historical missing artifacts; the current-revision image packages a working
+  Chromium runtime and imports the application as its non-root user.
 
 ## What these checks do not establish
 
