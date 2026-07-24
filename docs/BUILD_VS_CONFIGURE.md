@@ -2,7 +2,13 @@
 
 ## Decision
 
-Keep the current combination of the OpenAI Agents SDK for four bounded structured model calls, plain Python for deterministic orchestration and policy, HTTPX for status-only target access, Playwright for the authenticated UI, PostgreSQL for durable state, and Langfuse/Prometheus for optional telemetry. Build the Clinical Co-Pilot-specific controller, authorization gate, evidence model, regression semantics, and report lifecycle because those encode project-specific safety invariants. Configure established tools alongside AgentForge where they cover a different layer.
+Keep the current combination of the OpenAI Agents SDK for four bounded structured
+model roles, plain Python for mechanical orchestration and authorization, HTTPX for
+status-only target access, Playwright for the authenticated UI, PostgreSQL for durable
+state, and Langfuse/Prometheus for optional telemetry. Build the Clinical
+Co-Pilot-specific authorization gate, typed raw-evidence transport, saved-sequence
+regression mapping, and report lifecycle. Semantic objective, attack, verdict, and
+report decisions remain with the four agents.
 
 ## Options evaluated
 
@@ -23,11 +29,13 @@ PyRIT is another credible build-versus-configure comparator: it provides scanner
 
 ## What AgentForge should build
 
-- The deterministic campaign controller and gate-to-runner authorized envelope.
+- The mechanical campaign controller and gate-to-runner authorized envelope.
 - Exact Clinical Co-Pilot target profile and synthetic fixture mapping.
 - Patient/session/CSRF/current-card invariants and cleanup semantics.
-- Versioned evidence, finding deduplication, regression-case lifecycle, and human publication gate.
-- Domain-specific reconciliation of deterministic and semantic results.
+- Versioned raw evidence, one-Finding-per-confirmed-attempt lifecycle, saved-sequence
+  regression mapping, and human-controlled external disclosure boundary.
+- Explicit separation between fixed-case deterministic assertions and discovery
+  Judge verdicts; there is no reconciliation layer.
 - Integration contracts and ATO evidence mapping.
 
 ## What AgentForge should configure or buy
@@ -40,4 +48,10 @@ PyRIT is another credible build-versus-configure comparator: it provides scanner
 
 ## Re-evaluation triggers
 
-Adopt a graph runtime only when campaigns require durable human pauses, complex parallel branches, or replayable node-level recovery that the explicit controller cannot handle cleanly. Adopt a commercial platform when multi-team tenancy, fleet scheduling, regulatory workflow, or managed probe maintenance outweighs data-control and integration costs. Every substitution must preserve typed contracts, exact target authorization, deterministic evidence, and human publication authority.
+Adopt a graph runtime only when campaigns require durable human pauses, complex
+parallel branches, or replayable node-level recovery that the explicit controller
+cannot handle cleanly. Adopt a commercial platform when multi-team tenancy, fleet
+scheduling, regulatory workflow, or managed probe maintenance outweighs data-control
+and integration costs. Every substitution must preserve typed contracts, exact target
+authorization, runner-produced raw evidence, Judge-only semantic authority, and human
+publication authority.

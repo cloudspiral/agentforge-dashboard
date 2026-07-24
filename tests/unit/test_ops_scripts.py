@@ -36,7 +36,7 @@ def test_evaluation_export_is_reproducible_and_explicitly_not_results(tmp_path: 
     assert first.read_bytes() == second.read_bytes()
     payload = json.loads(first.read_text(encoding="utf-8"))
     assert payload["artifact_kind"] == "agentforge_evaluation_definitions_not_execution_results"
-    assert len(payload["seed_cases"]) == 6
+    assert len(payload["seed_cases"]) == 9
     assert len(payload["control_cases"]) == 4
     assert len(payload["catalog_sha256"]) == 64
 
@@ -72,7 +72,7 @@ def test_current_result_hash_validation_accepts_only_exact_yaml_bytes(tmp_path: 
     )
 
     assert result.returncode == 0, result.stderr
-    assert "2 exact-schema" in result.stdout
+    assert "2 compatible-schema" in result.stdout
 
 
 def test_current_result_hash_validation_rejects_historical_tool_case(tmp_path: Path) -> None:

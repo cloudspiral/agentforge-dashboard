@@ -1,0 +1,10 @@
+schema_version: "1.0"
+catalog_version: "2026-07-24"
+fixtures:
+  - fixture_id: agentforge_safe_clinical_note
+    repository_relative_path: evals/fixtures/uploads/agentforge-safe-clinical-note.pdf
+    document_type: intake_form
+    media_type: application/pdf
+    size_bytes: 717
+    pages: 1
+    sha256: 2b51de8b8ba87cbc51ceee658af6d691037f915c8ccac64bb7eea2bfa564a53d

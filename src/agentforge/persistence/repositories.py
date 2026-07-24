@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -15,8 +16,12 @@ from agentforge.persistence.models import (
     Campaign,
     CampaignEvent,
     Finding,
+    FindingLifecycleEvent,
+    FindingObservation,
     JudgeVerdict,
+    PlatformEvent,
     RegressionCase,
+    RegressionReplay,
     RegressionResult,
     RegressionRun,
     VulnerabilityReport,
@@ -70,10 +75,9 @@ class CampaignRepository:
         max_cost_usd: Decimal,
         max_attempts: int,
         max_duration_seconds: int,
-        max_mutations: int,
-        no_signal_limit: int,
         priority: int = 0,
         idempotency_key: str | None = None,
+        commit: bool = True,
     ) -> Campaign:
         campaign = Campaign(
             campaign_type=campaign_type,
@@ -85,8 +89,6 @@ class CampaignRepository:
             max_cost_usd=max_cost_usd,
             max_attempts=max_attempts,
             max_duration_seconds=max_duration_seconds,
-            max_mutations=max_mutations,
-            no_signal_limit=no_signal_limit,
             priority=priority,
             idempotency_key=idempotency_key,
         )
@@ -99,7 +101,10 @@ class CampaignRepository:
         )
         self.session.add(campaign)
         try:
-            self.session.commit()
+            if commit:
+                self.session.commit()
+            else:
+                self.session.flush()
         except IntegrityError as exc:
             self.session.rollback()
             if idempotency_key:
@@ -108,7 +113,8 @@ class CampaignRepository:
                     return existing
                 raise DuplicateIdempotencyKey(idempotency_key) from exc
             raise
-        self.session.refresh(campaign)
+        if commit:
+            self.session.refresh(campaign)
         return campaign
 
     def get(self, campaign_id: uuid.UUID, *, include_attempts: bool = False) -> Campaign:
@@ -297,7 +303,23 @@ class CampaignRepository:
 
 
 class FindingRepository:
-    ALLOWED_STATUSES = {"open", "in_progress", "resolved", "reopened", "false_positive"}
+    ALLOWED_STATUSES = {
+        "pending_review",
+        "open",
+        "in_progress",
+        "resolved",
+        "false_positive",
+    }
+    ACTION_TARGETS = {
+        "confirm": {"pending_review": "open"},
+        "begin_work": {"open": "in_progress"},
+        "dismiss": {
+            "pending_review": "false_positive",
+            "open": "false_positive",
+            "in_progress": "false_positive",
+        },
+        "resolve": {"open": "resolved", "in_progress": "resolved"},
+    }
 
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -319,24 +341,87 @@ class FindingRepository:
     def get(self, finding_id: uuid.UUID, *, include_reports: bool = False) -> Finding:
         statement = select(Finding).where(Finding.id == finding_id)
         if include_reports:
-            statement = statement.options(selectinload(Finding.reports))
+            statement = statement.options(
+                selectinload(Finding.reports),
+                selectinload(Finding.lifecycle_events),
+                selectinload(Finding.observations),
+            )
         finding = self.session.scalar(statement)
         if finding is None:
             raise LookupError(str(finding_id))
         return finding
 
-    def set_status(self, finding_id: uuid.UUID, status: str) -> Finding:
-        if status not in self.ALLOWED_STATUSES:
-            raise ValueError(f"unsupported finding status: {status}")
-        finding = self.get(finding_id)
-        finding.status = status
-        self.session.commit()
+    def transition(
+        self,
+        finding_id: uuid.UUID,
+        *,
+        action: str,
+        actor: str,
+        reason: str | None = None,
+        evidence_reference: str | None = None,
+        secure_evidence_on_changed_version: bool = False,
+        manual_override: bool = False,
+    ) -> Finding:
+        finding = self.session.scalar(
+            select(Finding).where(Finding.id == finding_id).with_for_update()
+        )
+        if finding is None:
+            raise LookupError(str(finding_id))
+        target = self.ACTION_TARGETS.get(action, {}).get(finding.status)
+        if target is None:
+            raise ValueError(f"action {action!r} is invalid from status {finding.status!r}")
+        normalized_reason = reason.strip() if isinstance(reason, str) else None
+        if action == "dismiss" and not normalized_reason:
+            raise ValueError("dismissing a finding requires a reason")
+        if action == "resolve":
+            evidence_based = bool(evidence_reference and secure_evidence_on_changed_version)
+            if not evidence_based and not (manual_override and normalized_reason):
+                raise ValueError(
+                    "resolution requires changed-version secure evidence or a reasoned override"
+                )
+        previous = finding.status
+        finding.status = target
+        self.session.add(
+            FindingLifecycleEvent(
+                finding_id=finding.id,
+                from_status=previous,
+                to_status=target,
+                action=("manual_resolution_override" if manual_override else action),
+                actor=actor,
+                reason=normalized_reason,
+                evidence_reference=evidence_reference,
+                details_json={
+                    "secure_evidence_on_changed_version": secure_evidence_on_changed_version,
+                    "manual_override": manual_override,
+                },
+            )
+        )
+        PlatformEventRepository(self.session).record(
+            event_type="finding_lifecycle_transition",
+            actor=actor,
+            finding_id=finding.id,
+            details={
+                "from_status": previous,
+                "to_status": target,
+                "action": ("manual_resolution_override" if manual_override else action),
+                "reason": normalized_reason,
+                "evidence_reference": evidence_reference,
+            },
+        )
+        self.session.flush()
         return finding
 
-    def upsert_confirmed(
+    def get_by_fingerprint(self, fingerprint: str) -> Finding | None:
+        return self.session.scalar(
+            select(Finding).where(Finding.fingerprint == fingerprint).with_for_update()
+        )
+
+    def create_confirmed(
         self,
         *,
         fingerprint: str,
+        finding_key: str,
+        provenance: str,
         source_attempt_id: uuid.UUID,
         vulnerability_id: str,
         title: str,
@@ -348,51 +433,127 @@ class FindingRepository:
         expected_behavior: str,
         observed_behavior: str,
         target_version: str,
-    ) -> tuple[Finding, bool]:
-        finding = self.session.scalar(
-            select(Finding).where(Finding.fingerprint == fingerprint).with_for_update()
+    ) -> Finding:
+        finding = Finding(
+            vulnerability_id=vulnerability_id,
+            fingerprint=fingerprint,
+            finding_key=finding_key,
+            provenance=provenance,
+            source_attempt_id=source_attempt_id,
+            title=title,
+            category=category,
+            subcategory=subcategory,
+            severity=severity,
+            status="pending_review",
+            description=description,
+            clinical_impact=clinical_impact,
+            expected_behavior=expected_behavior,
+            observed_behavior=observed_behavior,
+            first_seen_target_version=target_version,
+            last_seen_target_version=target_version,
         )
-        created = finding is None
-        if finding is None:
-            finding = Finding(
-                vulnerability_id=vulnerability_id,
-                fingerprint=fingerprint,
-                source_attempt_id=source_attempt_id,
-                title=title,
-                category=category,
-                subcategory=subcategory,
-                severity=severity,
-                status="open",
-                description=description,
-                clinical_impact=clinical_impact,
-                expected_behavior=expected_behavior,
-                observed_behavior=observed_behavior,
-                first_seen_target_version=target_version,
-                last_seen_target_version=target_version,
-            )
-            self.session.add(finding)
-        else:
-            finding.source_attempt_id = source_attempt_id
-            finding.title = title
-            finding.severity = severity
-            finding.description = description
-            finding.clinical_impact = clinical_impact
-            finding.expected_behavior = expected_behavior
-            finding.observed_behavior = observed_behavior
-            finding.last_seen_target_version = target_version
-            if finding.status == "resolved":
-                finding.status = "reopened"
+        self.session.add(finding)
         self.session.flush()
-        return finding, created
+        self.session.add(
+            FindingLifecycleEvent(
+                finding_id=finding.id,
+                from_status=None,
+                to_status="pending_review",
+                action="judge_confirmed",
+                actor="agentforge:promotion",
+                reason=None,
+                evidence_reference=str(source_attempt_id),
+                details_json={"provenance": provenance},
+            )
+        )
+        PlatformEventRepository(self.session).record(
+            event_type="finding_confirmed",
+            actor="agentforge:promotion",
+            finding_id=finding.id,
+            details={
+                "status": "pending_review",
+                "provenance": provenance,
+                "source_attempt_id": str(source_attempt_id),
+            },
+        )
+        return finding
 
-    def reopen(self, finding_id: uuid.UUID) -> Finding:
+    def record_observation(
+        self,
+        *,
+        finding: Finding,
+        attempt_id: uuid.UUID,
+        target_version: str,
+        provenance: str,
+        evidence_hash: str,
+        judge_verdict: dict[str, Any],
+        observation_kind: str = "confirmation",
+    ) -> FindingObservation:
+        existing = self.session.scalar(
+            select(FindingObservation).where(
+                FindingObservation.finding_id == finding.id,
+                FindingObservation.attempt_id == attempt_id,
+            )
+        )
+        if existing is not None:
+            return existing
+        observation = FindingObservation(
+            finding_id=finding.id,
+            attempt_id=attempt_id,
+            target_version=target_version,
+            provenance=provenance,
+            evidence_hash=evidence_hash,
+            judge_verdict=judge_verdict,
+            observation_kind=observation_kind,
+        )
+        self.session.add(observation)
+        finding.last_seen_target_version = target_version
+        if attempt_id != finding.source_attempt_id:
+            finding.rediscovery_count += 1
+        self.session.flush()
+        return observation
+
+    def reopen_from_regression(
+        self,
+        finding_id: uuid.UUID,
+        *,
+        actor: str,
+        evidence_reference: str,
+    ) -> Finding:
         finding = self.session.scalar(
             select(Finding).where(Finding.id == finding_id).with_for_update()
         )
         if finding is None:
             raise LookupError(str(finding_id))
+        previous = finding.status
         if finding.status == "resolved":
-            finding.status = "reopened"
+            finding.status = "open"
+        elif finding.status == "false_positive":
+            finding.status = "pending_review"
+        else:
+            return finding
+        self.session.add(
+            FindingLifecycleEvent(
+                finding_id=finding.id,
+                from_status=previous,
+                to_status=finding.status,
+                action="regression_reproduced",
+                actor=actor,
+                reason="A Judge-confirmed replay reproduced the saved vulnerability.",
+                evidence_reference=evidence_reference,
+                details_json={"immutable_reopen_event": True},
+            )
+        )
+        PlatformEventRepository(self.session).record(
+            event_type="finding_reopened_by_regression",
+            actor=actor,
+            finding_id=finding.id,
+            details={
+                "from_status": previous,
+                "to_status": finding.status,
+                "evidence_reference": evidence_reference,
+            },
+        )
         self.session.flush()
         return finding
 
@@ -420,7 +581,7 @@ class ReportRepository:
         markdown_body: str,
         validation_summary: dict[str, Any],
         prompt_version: str,
-        status: str = "draft",
+        status: str = "pending_review",
     ) -> VulnerabilityReport:
         version = (
             self.session.scalar(
@@ -439,7 +600,7 @@ class ReportRepository:
             status=status,
             validation_summary=validation_summary,
             prompt_version=prompt_version,
-            schema_version="v1",
+            schema_version="v2",
         )
         self.session.add(report)
         self.session.flush()
@@ -458,6 +619,22 @@ class RegressionCaseRepository:
                 .order_by(RegressionCase.created_at, RegressionCase.id)
             )
         )
+
+    def list(self, *, active_only: bool = False) -> list[RegressionCase]:
+        statement = select(RegressionCase).order_by(
+            RegressionCase.category,
+            RegressionCase.subcategory,
+            RegressionCase.case_id,
+        )
+        if active_only:
+            statement = statement.where(RegressionCase.active.is_(True))
+        return list(self.session.scalars(statement))
+
+    def get(self, case_id: uuid.UUID) -> RegressionCase:
+        row = self.session.get(RegressionCase, case_id)
+        if row is None:
+            raise LookupError(str(case_id))
+        return row
 
     def create_versioned(
         self,
@@ -487,13 +664,12 @@ class RegressionCaseRepository:
             case_id=case_payload["case_id"],
             finding_id=finding_id,
             case_version=expected_version,
+            schema_version=case_payload.get("schema_version", "v2"),
             active=case_payload["active"],
             setup=case_payload["setup"],
             ordered_sequence=case_payload["exact_ordered_sequence"],
-            expected_security_invariants=case_payload["expected_security_invariants"],
-            deterministic_checks=case_payload["deterministic_check_ids"],
-            judge_required=case_payload["judge_required"],
-            judge_rubric_subset=None,
+            judge_context=case_payload["judge_context"],
+            expected_behavior=case_payload["expected_behavior"],
             category=case_payload["category"],
             subcategory=case_payload["subcategory"],
             owasp_mappings=case_payload["owasp_mappings"],
@@ -501,6 +677,14 @@ class RegressionCaseRepository:
             created_from_evidence_hash=case_payload["created_from_evidence_hash"],
             sequence_hash=case_payload["sequence_hash"],
             fingerprint=case_payload["fingerprint"],
+            finding_key=case_payload.get(
+                "finding_key",
+                case_payload.get("judge_context", {}).get("finding_key")
+                or f"legacy-{case_payload['fingerprint'][:16]}",
+            ),
+            source_target_version=case_payload["target_requirements"]["source_target_version"],
+            source_provenance=case_payload.get("source_provenance", "legacy_unknown"),
+            required_replays=case_payload.get("required_replays", 2),
             created_at=case_payload["created_at"],
         )
         self.session.add(case)
@@ -518,16 +702,24 @@ class RegressionRunRepository:
         target_version: str,
         trigger: str,
         campaign_id: uuid.UUID | None = None,
+        previous_target_version: str | None = None,
+        cohort_hash: str | None = None,
+        commit: bool = True,
     ) -> RegressionRun:
         run = RegressionRun(
             target_version=target_version,
             campaign_id=campaign_id,
+            previous_target_version=previous_target_version,
+            cohort_hash=cohort_hash,
             trigger=trigger,
             status="queued",
         )
         self.session.add(run)
-        self.session.commit()
-        self.session.refresh(run)
+        if commit:
+            self.session.commit()
+            self.session.refresh(run)
+        else:
+            self.session.flush()
         return run
 
     def list(self, *, offset: int = 0, limit: int = 50) -> tuple[list[RegressionRun], int]:
@@ -535,7 +727,7 @@ class RegressionRunRepository:
         runs = list(
             self.session.scalars(
                 select(RegressionRun)
-                .options(selectinload(RegressionRun.results))
+                .options(selectinload(RegressionRun.results).selectinload(RegressionResult.replays))
                 .order_by(RegressionRun.created_at.desc())
                 .offset(offset)
                 .limit(limit)
@@ -547,7 +739,7 @@ class RegressionRunRepository:
         run = self.session.scalar(
             select(RegressionRun)
             .where(RegressionRun.id == run_id)
-            .options(selectinload(RegressionRun.results))
+            .options(selectinload(RegressionRun.results).selectinload(RegressionResult.replays))
         )
         if run is None:
             raise LookupError(str(run_id))
@@ -568,28 +760,103 @@ class RegressionRunRepository:
         case_id: uuid.UUID,
         case_version: int,
         outcome: str,
-        deterministic_results: list[dict[str, Any]],
         judge_result: dict[str, Any] | None,
-        evidence_references: list[str],
+        evidence_hash: str | None,
         estimated_cost_usd: Decimal,
         latency_ms: int | None,
         trace_id: str | None,
+        changed_target_version: bool = False,
+        aggregate_reason: str | None = None,
     ) -> RegressionResult:
         result = RegressionResult(
             run_id=run_id,
             case_id=case_id,
             case_version=case_version,
             outcome=outcome,
-            deterministic_results=deterministic_results,
             judge_result=judge_result,
-            evidence_references=evidence_references,
+            evidence_hash=evidence_hash,
             estimated_cost_usd=estimated_cost_usd,
             latency_ms=latency_ms,
             trace_id=trace_id,
+            changed_target_version=changed_target_version,
+            aggregate_reason=aggregate_reason,
         )
         self.session.add(result)
         self.session.flush()
         return result
+
+    def add_replay(
+        self,
+        *,
+        result_id: uuid.UUID,
+        attempt_id: uuid.UUID | None,
+        replay_index: int,
+        target_version: str,
+        valid_replay: bool,
+        judge_verdict: dict[str, Any] | None,
+        evidence_hash: str | None,
+        error: dict[str, Any] | None,
+        estimated_cost_usd: Decimal,
+        latency_ms: int | None,
+        trace_id: str | None,
+    ) -> RegressionReplay:
+        replay = RegressionReplay(
+            result_id=result_id,
+            attempt_id=attempt_id,
+            replay_index=replay_index,
+            target_version=target_version,
+            valid_replay=valid_replay,
+            judge_verdict=judge_verdict,
+            evidence_hash=evidence_hash,
+            error=error,
+            estimated_cost_usd=estimated_cost_usd,
+            latency_ms=latency_ms,
+            trace_id=trace_id,
+        )
+        self.session.add(replay)
+        self.session.flush()
+        return replay
+
+
+class PlatformEventRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def record(
+        self,
+        *,
+        event_type: str,
+        actor: str,
+        campaign_id: uuid.UUID | None = None,
+        attempt_id: uuid.UUID | None = None,
+        finding_id: uuid.UUID | None = None,
+        regression_run_id: uuid.UUID | None = None,
+        role: str | None = None,
+        model: str | None = None,
+        prompt_version: str | None = None,
+        trace_id: str | None = None,
+        latency_ms: int | None = None,
+        cost_usd: Decimal = Decimal("0"),
+        details: dict[str, Any] | None = None,
+    ) -> PlatformEvent:
+        event = PlatformEvent(
+            campaign_id=campaign_id,
+            attempt_id=attempt_id,
+            finding_id=finding_id,
+            regression_run_id=regression_run_id,
+            event_type=event_type,
+            actor=actor,
+            role=role,
+            model=model,
+            prompt_version=prompt_version,
+            trace_id=trace_id,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+            details_json=details or {},
+        )
+        self.session.add(event)
+        self.session.flush()
+        return event
 
 
 class AgentRunRepository:
@@ -620,21 +887,23 @@ class OperationalRepository:
             )
         }
 
-    def latest_live_evaluations(self, case_ids: list[str]) -> dict[str, dict[str, Any]]:
+    def latest_live_evaluations(self, case_hashes: dict[str, str]) -> dict[str, dict[str, Any]]:
         """Return the latest deployed single-case attempt for each requested seed ID."""
 
-        if not case_ids:
+        if not case_hashes:
             return {}
         statement = (
             select(AttackAttempt, Campaign, JudgeVerdict)
             .join(Campaign, Campaign.id == AttackAttempt.campaign_id)
             .outerjoin(JudgeVerdict, JudgeVerdict.attempt_id == AttackAttempt.id)
-            .where(AttackAttempt.attack_family_id.in_(case_ids))
+            .where(AttackAttempt.attack_family_id.in_(case_hashes))
             .where(Campaign.trigger_type == "live_deployed")
             .order_by(Campaign.created_at.desc(), AttackAttempt.created_at.desc())
         )
         latest: dict[str, dict[str, Any]] = {}
         for attempt, campaign, verdict in self.session.execute(statement):
+            if attempt.seed_case_hash != case_hashes[attempt.attack_family_id]:
+                continue
             latest.setdefault(
                 attempt.attack_family_id,
                 {"attempt": attempt, "campaign": campaign, "verdict": verdict},
@@ -707,11 +976,50 @@ class OperationalRepository:
             if attempt_ids
             else {}
         )
+        agent_runs = list(
+            self.session.scalars(
+                select(AgentRun)
+                .where(AgentRun.campaign_id == campaign_id)
+                .order_by(AgentRun.created_at, AgentRun.id)
+            )
+        )
+        proposal_sources = Counter(attempt.proposal_source for attempt in attempts)
+        objective_sources = Counter(attempt.objective_source for attempt in attempts)
+        attempts_by_id = {attempt.id: attempt for attempt in attempts}
+        generations: dict[uuid.UUID, int] = {}
+
+        def generation(attempt: AttackAttempt, seen: frozenset[uuid.UUID] = frozenset()) -> int:
+            if attempt.id in generations:
+                return generations[attempt.id]
+            if attempt.id in seen or attempt.parent_attempt_id is None:
+                generations[attempt.id] = 0
+                return 0
+            parent = attempts_by_id.get(attempt.parent_attempt_id)
+            value = 0 if parent is None else generation(parent, seen | {attempt.id}) + 1
+            generations[attempt.id] = value
+            return value
+
+        for attempt in attempts:
+            generation(attempt)
+        proposal_verdict_counts: dict[str, Counter[str]] = {}
+        for attempt in attempts:
+            source_counts = proposal_verdict_counts.setdefault(
+                attempt.proposal_source,
+                Counter(),
+            )
+            source_counts["attempts"] += 1
+            verdict = verdicts.get(attempt.id)
+            source_counts[verdict.verdict if verdict is not None else "no_verdict"] += 1
         return {
             "campaign": campaign,
             "attempts": attempts,
             "events": events,
             "verdicts": verdicts,
+            "agent_runs": agent_runs,
+            "proposal_sources": proposal_sources,
+            "objective_sources": objective_sources,
+            "generations": generations,
+            "proposal_verdict_counts": proposal_verdict_counts,
         }
 
     def queue_summary(self, *, stale_after_seconds: int) -> dict[str, Any]:
@@ -773,7 +1081,7 @@ class OperationalRepository:
         return {
             "total": sum(status_counts.values()),
             "active": sum(
-                status_counts.get(status, 0) for status in ("open", "in_progress", "reopened")
+                status_counts.get(status, 0) for status in ("pending_review", "open", "in_progress")
             ),
             "reports": report_count,
             "by_status": status_counts,
@@ -810,10 +1118,19 @@ class OperationalRepository:
             select(func.avg(AttackAttempt.latency_ms)).where(AttackAttempt.latency_ms.is_not(None))
         )
         total_attempts = self.session.scalar(select(func.count()).select_from(AttackAttempt)) or 0
+        proposal_sources = {
+            source: count
+            for source, count in self.session.execute(
+                select(AttackAttempt.proposal_source, func.count(AttackAttempt.id)).group_by(
+                    AttackAttempt.proposal_source
+                )
+            )
+        }
         return {
             "actual_cost_usd": total_cost,
             "average_attempt_latency_ms": float(average_latency or 0),
             "attempts": total_attempts,
+            "proposal_sources": proposal_sources,
         }
 
     def metrics_snapshot(self, *, stale_after_seconds: int) -> dict[str, Any]:
@@ -956,6 +1273,8 @@ def coverage_summary(session: Session) -> list[dict[str, Any]]:
             "partial_signal": row[5],
             "attack_blocked": row[6],
             "inconclusive": row[7],
+            "secure_rate": (row[6] / sum(row[4:8]) if sum(row[4:8]) else 0.0),
+            "confirmed_rate": (row[4] / sum(row[4:8]) if sum(row[4:8]) else 0.0),
         }
         for row in session.execute(statement)
     ]

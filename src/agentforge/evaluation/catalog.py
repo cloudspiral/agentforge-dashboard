@@ -47,7 +47,7 @@ class TaxonomyCategoryV1(CatalogModel):
     expected_security_invariants: list[BoundedText] = Field(min_length=1)
     owasp_web: list[str] = Field(min_length=1)
     owasp_llm: list[str] = Field(min_length=1)
-    deterministic_signals: list[Identifier] = Field(min_length=1)
+    observable_signals: list[Identifier] = Field(min_length=1)
     human_review_common: bool
     subcategories: list[TaxonomySubcategoryV1] = Field(min_length=1)
 
@@ -86,30 +86,33 @@ class TaxonomyV1(CatalogModel):
 
 
 class JudgeCategoryV1(CatalogModel):
-    safe_behavior: BoundedText
+    attack_blocked: BoundedText
     exploit_confirmed: BoundedText
     partial_signal: BoundedText
     inconclusive: BoundedText
-    deterministic_overrides: list[Identifier]
     severity_rules: dict[str, str]
     exploitability_rules: dict[str, str]
-    human_escalation: list[Identifier]
 
 
 class JudgeRubricV1(CatalogModel):
     schema_version: Literal["1.0"]
     rubric_version: str
     confidence_thresholds: dict[str, float | bool]
-    default_required_reproductions: int = Field(ge=1, le=10)
-    single_run_confirmation: dict[str, object]
     global_rules: list[BoundedText]
     categories: dict[str, JudgeCategoryV1]
 
     @model_validator(mode="after")
-    def initial_categories_are_covered(self) -> JudgeRubricV1:
-        required = {"prompt_injection", "data_exfiltration", "tool_misuse"}
+    def all_taxonomy_categories_are_covered(self) -> JudgeRubricV1:
+        required = {
+            "prompt_injection",
+            "data_exfiltration",
+            "state_corruption",
+            "tool_misuse",
+            "denial_of_service",
+            "identity_role_exploitation",
+        }
         if set(self.categories) != required:
-            raise ValueError("Judge rubric must cover exactly the initial three categories")
+            raise ValueError("Judge rubric must cover all six taxonomy categories")
         return self
 
 
@@ -131,6 +134,16 @@ class SeedSendMessageActionV1(CatalogModel):
     message: BoundedText
 
 
+class SeedInvokeApiActionV1(CatalogModel):
+    type: Literal["invoke_approved_api_request"]
+    endpoint_id: Identifier
+    method: Literal["GET", "POST"]
+    credential_mode: Literal["endpoint_default", "missing", "invalid", "valid"] = "endpoint_default"
+    correlation_mode: Literal["valid", "missing", "invalid", "mismatch"] = "valid"
+    query: dict[str, object] = Field(default_factory=dict, max_length=25)
+    body: dict[str, object] = Field(default_factory=dict)
+
+
 class SeedWaitActionV1(CatalogModel):
     type: Literal["wait_for_response"]
     timeout_seconds: float = Field(gt=0, le=120)
@@ -145,6 +158,7 @@ SeedActionV1 = Annotated[
     | SeedAuthenticateActionV1
     | SeedSelectPatientActionV1
     | SeedSendMessageActionV1
+    | SeedInvokeApiActionV1
     | SeedWaitActionV1
     | SeedCollectEvidenceActionV1,
     Field(discriminator="type"),
@@ -186,7 +200,14 @@ class SeedCaseV1(CatalogModel):
     schema_version: Literal["1.0"]
     id: Identifier
     name: BoundedText
-    category: Literal["prompt_injection", "data_exfiltration", "tool_misuse"]
+    category: Literal[
+        "prompt_injection",
+        "data_exfiltration",
+        "state_corruption",
+        "tool_misuse",
+        "denial_of_service",
+        "identity_role_exploitation",
+    ]
     subcategory: Identifier
     owasp_web: list[str] = Field(min_length=1)
     owasp_llm: list[str] = Field(min_length=1)
@@ -326,7 +347,7 @@ def load_seed_cases(directory: Path) -> list[SeedCaseV1]:
         raise ValueError("seed case IDs must be unique")
     counts = Counter(case.category for case in cases)
     required = {"prompt_injection", "data_exfiltration", "tool_misuse"}
-    if set(counts) != required or any(counts[category] < 2 for category in required):
+    if not required.issubset(counts) or any(counts[category] < 2 for category in required):
         raise ValueError("seed suite requires at least two cases in each initial category")
     return cases
 

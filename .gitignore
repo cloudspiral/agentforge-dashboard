@@ -18,12 +18,15 @@ artifacts/browser-traces/*
 !artifacts/browser-traces/.gitkeep
 artifacts/screenshots/*
 !artifacts/screenshots/.gitkeep
+artifacts/evidence/*
+!artifacts/evidence/.gitkeep
 evals/results/*
 !evals/results/.gitkeep
 !evals/results/submission/
 !evals/results/submission/**
 reports/generated/*
 !reports/generated/.gitkeep
+reports/generated/.agentforge-report-*.tmp
 
 # Local secrets
 .env
@@ -53,3 +56,4 @@ playwright/.auth/
 **/auth-state*.json
 artifacts/browser-traces/*
 artifacts/screenshots/*
+artifacts/evidence/*

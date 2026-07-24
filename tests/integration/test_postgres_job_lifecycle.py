@@ -32,7 +32,7 @@ from agentforge.persistence.models import Campaign, CampaignEvent
 from agentforge.persistence.repositories import CampaignRepository
 
 TEST_DATABASE_URL = os.getenv("AGENTFORGE_TEST_DATABASE_URL")
-MIGRATION_HEAD = "c71d9e5a4b20"
+MIGRATION_HEAD = "d94e7b3a21c8"
 API_TOKEN = uuid.UUID(int=0).hex
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -134,8 +134,6 @@ def _create_campaign(database: Database, *, key: str) -> Campaign:
             max_cost_usd=Decimal("0.01"),
             max_attempts=1,
             max_duration_seconds=30,
-            max_mutations=0,
-            no_signal_limit=1,
             idempotency_key=key,
         )
 
@@ -149,8 +147,6 @@ def _api(database: Database) -> FastAPI:
         global_max_cost_usd=10.0,
         default_campaign_max_attempts=5,
         default_campaign_max_duration_seconds=60,
-        default_max_mutations=0,
-        default_no_signal_limit=2,
         target_version="fixture-v1",
     )
     application.state.target_profile = SimpleNamespace(

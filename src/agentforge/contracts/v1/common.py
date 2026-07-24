@@ -70,6 +70,7 @@ class CampaignTypeV1(StrEnum):
 class RequestedActionV1(StrEnum):
     NEW_ATTACK = "new_attack"
     MUTATION = "mutation"
+    STOP = "stop"
 
 
 class SeverityV1(StrEnum):
@@ -89,11 +90,13 @@ class ExploitabilityV1(StrEnum):
 
 
 class FindingStatusV1(StrEnum):
+    PENDING_REVIEW = "pending_review"
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
-    REOPENED = "reopened"
     FALSE_POSITIVE = "false_positive"
+    # Read compatibility only. New transitions reopen directly to open or pending_review.
+    REOPENED = "reopened"
 
 
 class OwaspMappingsV1(ContractModel):

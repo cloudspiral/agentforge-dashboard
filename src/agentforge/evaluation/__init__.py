@@ -12,18 +12,34 @@ from agentforge.evaluation.catalog import (
     load_seed_cases,
     load_taxonomy,
 )
+from agentforge.evaluation.fuzz import (
+    ExpandedFuzzVariantV2,
+    FuzzCorpusEntryV1,
+    FuzzCorpusV1,
+    MinimizedFuzzCandidateV2,
+    expand_fuzz_plan,
+    load_fuzz_corpus,
+    minimize_confirmed_fuzz_variant,
+)
 
 __all__ = [
     "ControlCaseV1",
     "ControlResultV1",
     "CoverageStatusV1",
+    "ExpandedFuzzVariantV2",
+    "FuzzCorpusEntryV1",
+    "FuzzCorpusV1",
+    "MinimizedFuzzCandidateV2",
     "JudgeRubricV1",
     "SeedCaseV1",
     "TaxonomyV1",
     "load_control_case",
     "load_control_cases",
     "load_judge_rubric",
+    "load_fuzz_corpus",
     "load_seed_case",
     "load_seed_cases",
     "load_taxonomy",
+    "expand_fuzz_plan",
+    "minimize_confirmed_fuzz_variant",
 ]

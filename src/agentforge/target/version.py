@@ -16,7 +16,7 @@ from agentforge.security.allowlist import TargetRejected, require_allowed_url
 from agentforge.settings import Settings
 from agentforge.target.profile import LoadedTargetProfile, ResolvedTargetAlias, TargetProfileV1
 
-EndpointSurface = Literal["status", "ui"]
+EndpointSurface = Literal["status", "ui", "agent_service"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +68,29 @@ class _TargetResponseRejected(TargetRejected):
 _ENDPOINT_ALIASES: dict[str, tuple[str, EndpointSurface, str]] = {
     "status_health": ("GET", "status", "/health"),
     "status_ready": ("GET", "status", "/ready"),
+    "agent_metrics": ("GET", "agent_service", "/metrics"),
+    "agent_openapi": ("GET", "agent_service", "/openapi.json"),
+    "agent_chat": ("POST", "agent_service", "/agent/chat"),
+    "agent_document_extract": (
+        "POST",
+        "agent_service",
+        "/agent/document-ingestions/extract",
+    ),
+    "agent_document_validate_confirmation": (
+        "POST",
+        "agent_service",
+        "/agent/document-ingestions/validate-confirmation",
+    ),
+    "agent_evidence_retrieve": (
+        "POST",
+        "agent_service",
+        "/agent/evidence/retrieve",
+    ),
+    "agent_document_outcome": (
+        "POST",
+        "agent_service",
+        "/agent/document-ingestions/outcome",
+    ),
     "copilot_chat_proxy": (
         "POST",
         "ui",
@@ -82,6 +105,36 @@ _ENDPOINT_ALIASES: dict[str, tuple[str, EndpointSurface, str]] = {
         "POST",
         "ui",
         "/interface/patient_file/clinical_copilot/ingestion_reject.php",
+    ),
+    "copilot_source": (
+        "POST",
+        "ui",
+        "/interface/patient_file/clinical_copilot/source.php",
+    ),
+    "copilot_evidence_region": (
+        "POST",
+        "ui",
+        "/interface/patient_file/clinical_copilot/evidence_region.php",
+    ),
+    "document_status": (
+        "POST",
+        "ui",
+        "/interface/patient_file/clinical_copilot/ingestion_status.php",
+    ),
+    "document_confirm": (
+        "POST",
+        "ui",
+        "/interface/patient_file/clinical_copilot/ingestion_confirm.php",
+    ),
+    "staged_document": (
+        "POST",
+        "ui",
+        "/interface/patient_file/clinical_copilot/staged_document.php",
+    ),
+    "staged_evidence_region": (
+        "POST",
+        "ui",
+        "/interface/patient_file/clinical_copilot/staged_evidence_region.php",
     ),
 }
 
@@ -120,7 +173,9 @@ def resolve_endpoint(
     ):
         raise TargetRejected("endpoint alias is not enabled by the target profile")
 
-    base_url = target_alias.status_url if surface == "status" else target_alias.base_url
+    base_url = (
+        target_alias.status_url if surface in {"status", "agent_service"} else target_alias.base_url
+    )
     url = require_allowed_url(
         path,
         target_alias.expected_hosts,

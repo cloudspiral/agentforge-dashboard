@@ -39,12 +39,16 @@ class Settings(BaseSettings):
     openai_judge_model: str = "gpt-5.6-terra"
     openai_judge_escalation_model: str = "gpt-5.6-sol"
     openai_documentation_model: str = "gpt-5.6-luna"
-    global_max_cost_usd: float = Field(default=10, gt=0)
-    default_campaign_max_cost_usd: float = Field(default=2, gt=0)
-    default_campaign_max_attempts: int = Field(default=10, ge=1, le=100)
-    default_campaign_max_duration_seconds: int = Field(default=1200, ge=30, le=86_400)
-    default_max_mutations: int = Field(default=3, ge=0, le=20)
-    default_no_signal_limit: int = Field(default=4, ge=1, le=20)
+    global_max_cost_usd: float = Field(default=20, gt=0)
+    default_campaign_max_cost_usd: float = Field(default=8, gt=0)
+    default_campaign_max_attempts: int = Field(default=30, ge=1, le=100)
+    default_campaign_max_duration_seconds: int = Field(
+        default=21_600,
+        ge=30,
+        le=86_400,
+    )
+    regression_reserve_min_usd: float = Field(default=3, ge=0)
+    regression_reserve_multiplier: float = Field(default=1.25, ge=1, le=10)
 
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
@@ -66,6 +70,7 @@ class Settings(BaseSettings):
     target_test_role: str = "physician"
     target_test_patient_a_id: str | None = None
     target_test_patient_b_id: str | None = None
+    target_test_user_id: str | None = None
     target_agent_shared_secret: SecretStr | None = None
     target_reset_url: str | None = None
     target_reset_token: SecretStr | None = None

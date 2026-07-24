@@ -31,6 +31,7 @@
             <p class="eyebrow">{{ case.id }} · {{ case.subcategory | replace('_', ' ') }}</p>
             <h4>{{ case.name }}</h4>
             <p class="case-meta">{{ case.surface | upper }} surface</p>
+            <small class="mono">YAML {{ case.yaml_hash[:12] }}</small>
           </div>
           {% if case.latest %}
           <p>
@@ -77,6 +78,8 @@
     <h2>Stored activity</h2>
     <dl class="summary-list">
       <div><dt>Attempts</dt><dd>{{ activity.attempts }}</dd></div>
+      <div><dt>Agent-generated proposals</dt><dd>{{ activity.proposal_sources.get('agent_generated', 0) + activity.proposal_sources.get('agent_generated_mutation', 0) }}</dd></div>
+      <div><dt>Historical fallback records</dt><dd>{{ activity.proposal_sources.get('deterministic_seed_fallback', 0) }}</dd></div>
       <div><dt>Average attempt latency</dt><dd>{{ '%.1f' | format(activity.average_attempt_latency_ms) }}ms</dd></div>
       <div><dt>Findings</dt><dd>{{ finding_summary.total }}</dd></div>
       <div><dt>Reports</dt><dd>{{ finding_summary.reports }}</dd></div>
@@ -143,11 +146,82 @@
   </div>
 </section>
 
-<section class="panel">
-  <h2>Category coverage</h2>
+<section class="panel" id="surface-capabilities">
+  <h2>Execution surfaces and endpoint catalog</h2>
+  <p>Controller-owned capabilities are shown independently from the Orchestrator’s planning choices. A blocked surface remains visible with its reason.</p>
   <div class="table-wrap"><table>
-    <thead><tr><th>Category</th><th>Subcategory</th><th>Version</th><th>Attempts</th><th>Confirmed</th><th>Partial</th></tr></thead>
-    <tbody>{% for row in coverage %}<tr><td>{{ row.category }}</td><td>{{ row.subcategory }}</td><td>{{ row.target_version }}</td><td>{{ row.attempts }}</td><td>{{ row.exploit_confirmed }}</td><td>{{ row.partial_signal }}</td></tr>{% else %}<tr><td colspan="6">Coverage begins with the first completed attempt.</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>Surface</th><th>Status</th><th>Approved endpoint bindings</th><th>Blocked reason</th></tr></thead>
+    <tbody>{% for item in observability.surface_capabilities %}<tr>
+      <td>{{ item.surface | replace('_', ' ') }}</td>
+      <td><span class="badge badge-{{ 'completed' if item.supported else 'failed' }}">{{ 'supported' if item.supported else 'blocked' }}</span></td>
+      <td><code>{{ item.endpoint_ids }}</code></td>
+      <td>{{ item.blocked_reason or '—' }}</td>
+    </tr>{% else %}<tr><td colspan="4">No execution-surface capability data is available.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel" id="taxonomy-coverage">
+  <h2>Complete taxonomy coverage</h2>
+  <p>All 17 subcategories are shown in neutral order. Attempted includes errors and gate rejections; executed means the target returned evidence.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Category</th><th>Subcategory</th><th>Seeds</th><th>Discovery</th><th>Fuzz</th><th>Regression cases/replays</th><th>Attempted/executed</th><th>Outcomes</th><th>Surfaces</th><th>Versions</th></tr></thead>
+    <tbody>{% for row in coverage %}<tr>
+      <td>{{ row.category | replace('_', ' ') }}</td><td>{{ row.subcategory | replace('_', ' ') }}<small>{{ row.description }}</small></td>
+      <td>{{ row.seed_cases }}</td><td>{{ row.discovery_attempts }}</td><td>{{ row.fuzz_variants }}</td><td>{{ row.regression_cases }} / {{ row.regression_replays }}</td>
+      <td>{{ row.attempted }} / {{ row.executed }}</td><td><code>{{ row.outcomes }}</code></td><td><code>{{ row.by_surface }}</code></td><td><code>{{ row.by_target_version }}</code></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel two-column">
+  <div>
+    <h2>Separated outcome lanes</h2>
+    <dl class="summary-list">{% for lane in observability.outcome_lanes %}
+      <div><dt>{{ lane.lane | replace('_', ' ') }}</dt><dd>{{ lane.executed }}/{{ lane.attempted }} executed · {{ lane.outcomes }} · {{ lane.errors }} errors · {{ lane.no_verdict }} no verdict</dd></div>
+    {% endfor %}</dl>
+  </div>
+  <div>
+    <h2>Finding lifecycle</h2>
+    <dl class="summary-list">{% for status, count in observability.finding_lifecycle.items() %}
+      <div><dt>{{ status | replace('_', ' ') }}</dt><dd>{{ count }}</dd></div>
+    {% else %}<div><dt>No findings</dt><dd>0</dd></div>{% endfor %}</dl>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Matched-cohort resilience transitions</h2>
+  <p>Only the same active regression cases across exact adjacent target versions are compared.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Transition</th><th>Matched cases</th><th>Improved</th><th>Regressed</th><th>Still secure</th><th>Still reproduced</th><th>Uncertain/error</th><th>Cross-category</th></tr></thead>
+    <tbody>{% for item in observability.resilience_transitions %}<tr>
+      <td class="mono">{{ item.previous_target_version }} → {{ item.target_version }}</td><td>{{ item.matched_case_count }}</td><td>{{ item.improved }}</td><td>{{ item.regressed }}</td><td>{{ item.unchanged_secure }}</td><td>{{ item.unchanged_reproduced }}</td><td>{{ item.inconclusive_or_error }}</td><td>{{ 'yes' if item.cross_category_regression else 'no' }}</td>
+    </tr>{% else %}<tr><td colspan="8">A matched transition appears after the active suite runs on two distinct target versions.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel">
+  <h2>Model cost dimensions</h2>
+  <dl class="summary-list">
+    <div><dt>Total measured model cost</dt><dd>${{ observability.cost_summary.total_model_cost_usd }}</dd></div>
+    <div><dt>Cost per completed attempt</dt><dd>${{ observability.cost_summary.cost_per_completed_attempt_usd }}</dd></div>
+    <div><dt>Recent marginal attempt cost</dt><dd>${{ observability.cost_summary.recent_marginal_cost_usd }}</dd></div>
+    {% for projection in observability.cost_summary.active_campaign_projections %}<div><dt>Projected remaining · {{ projection.campaign_id }}</dt><dd>${{ projection.projected_remaining_cost_usd }} over {{ projection.remaining_attempts }} attempts</dd></div>{% endfor %}
+  </dl>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Dimension</th><th>Key</th><th>Calls/attempts</th><th>Input tokens</th><th>Output tokens</th><th>Cost</th></tr></thead>
+    <tbody>{% for item in observability.cost_facts %}<tr><td>{{ item.dimension }}</td><td class="mono">{{ item.key }}</td><td>{{ item.calls }}</td><td>{{ item.input_tokens }}</td><td>{{ item.output_tokens }}</td><td>${{ item.model_cost_usd }}</td></tr>{% else %}<tr><td colspan="6">No measured model usage yet.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel">
+  <h2>Ordered platform timeline</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Event</th><th>Actor/role</th><th>Campaign/attempt</th><th>Latency</th><th>Cost</th><th>Model/prompt/trace</th><th>Details</th></tr></thead>
+    <tbody>{% for item in observability.timeline %}<tr>
+      <td>{{ item.occurred_at }}</td><td>{{ item.event_type | replace('_', ' ') }}</td><td>{{ item.actor }}<small>{{ item.role or 'controller' }}</small></td>
+      <td class="mono">{{ item.campaign_id or '—' }}<small>{{ item.attempt_id or '—' }}</small></td><td>{{ item.latency_ms ~ 'ms' if item.latency_ms is not none else '—' }}</td><td>${{ item.cost_usd }}</td>
+      <td>{{ item.model or '—' }}<small>{{ item.prompt_version or '—' }} · {{ item.trace_id or '—' }}</small></td><td><code>{{ item.details }}</code></td>
+    </tr>{% else %}<tr><td colspan="8">V2 timeline events begin with the next campaign.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% endblock %}

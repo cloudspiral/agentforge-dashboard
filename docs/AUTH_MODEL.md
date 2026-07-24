@@ -9,13 +9,22 @@ AgentForge has three separate credential domains: dashboard/API control-plane cr
 - `/healthz` and `/readyz` remain public and content-minimal.
 - The Playwright runner obtains the fixed synthetic test credentials from runtime secrets, creates a fresh context, selects the exact configured synthetic patient, binds the live numeric PID/CSRF/proxy endpoint, blocks cross-origin navigation, and does not persist browser state.
 - PostgreSQL is private and authoritative. The linkage verifier is SELECT-only and runs locally or through authenticated Railway SSH; there is no inspection route.
+- Evidence downloads use the existing dashboard Basic or API bearer boundary. Each
+  request resolves the campaign/attempt in PostgreSQL and verifies the derived JSON
+  file against that record before returning an attachment; filesystem paths are never
+  accepted from clients.
 - Langfuse receives identifiers and redacted metadata. Verified trace payloads were fully masked, observation payloads were absent, and the trace was non-public.
 
 The dashboard evaluation manager is process-local and serializes one browser evaluation at a time. It persists the campaign/attempt/evidence/Judge records directly; it is not claimed by the normal PostgreSQL polling worker.
 
 ## Deterministic authorization
 
-A model proposal is not executable authority. The gate validates the checked-in target alias, category/subcategory, identity alias, physician role, exact synthetic patient, method/path bindings, action order, time/turn/message bounds, cost reservation, duplicate limit, prohibited URL/file/shell/SQL authority, and cleanup state. Only immutable `ValidatedAttackV1` reaches a runner.
+A model proposal is not executable authority. The gate validates the checked-in target
+alias, category/subcategory, identity alias, physician role, exact synthetic patient,
+method/path bindings, action order, time/turn/message bounds, duplicate sequence hash,
+prohibited URL/file/shell/SQL authority, target version, and cleanup state. Only
+immutable `ValidatedAttackV1` reaches a runner. Campaign cost and time limits are
+controller checks, not semantic evidence and not part of the gate's security verdict.
 
 The target owns the final clinical authorization decision. The normal OpenEMR session and PHP proxy derive the active patient, user, ACL, CSRF scope, allowed tool catalog, and bounded data scope server-side. A message cannot choose a foreign PID, add tools, or grant persistence.
 
@@ -27,7 +36,13 @@ The bounded missing-session control sent exactly one request to the fixed same-o
 
 ## Secret handling
 
-Runtime-only secrets include database, dashboard, platform, webhook, OpenAI, Langfuse, target login, target sidecar, and reset credentials. They are excluded from Git, result exports, screenshots, browser storage, traces, reports, and error messages. Sanitization preserves semantic schema values such as `authorization_result=allowed` while redacting actual Authorization headers, cookies, passwords, bearer values, API keys, and tokens.
+Runtime-only secrets include database, dashboard, platform, webhook, OpenAI, Langfuse,
+target login, target sidecar, and reset credentials. They are excluded from Git,
+result exports, screenshots, browser storage, traces, reports, and error messages.
+Sanitization redacts Authorization-shaped fields, headers, cookies, passwords, bearer
+values, API keys, and tokens. Discovery evidence does not contain a redundant
+`authorization_result`; successful construction of the validated runner envelope is
+the authorization record.
 
 ## Human-only authority
 

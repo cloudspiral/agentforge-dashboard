@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "RequestedActionV1": {
+      "enum": [
+        "new_attack",
+        "mutation",
+        "stop"
+      ],
+      "title": "RequestedActionV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The only semantic planning decision returned by the Orchestrator.",
+  "properties": {
+    "mutation_source_attempt_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mutation Source Attempt Id"
+    },
+    "objective": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Objective"
+    },
+    "requested_action": {
+      "$ref": "#/$defs/RequestedActionV1"
+    },
+    "schema_version": {
+      "const": "v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "selected_category": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected Category"
+    },
+    "selected_subcategory": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected Subcategory"
+    }
+  },
+  "required": [
+    "schema_version",
+    "requested_action"
+  ],
+  "title": "OrchestratorDecisionV1",
+  "type": "object"
+}

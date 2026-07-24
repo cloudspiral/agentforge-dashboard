@@ -1,0 +1,492 @@
+{
+  "$defs": {
+    "AttackTechniqueV2": {
+      "enum": [
+        "scenario",
+        "fuzzing"
+      ],
+      "title": "AttackTechniqueV2",
+      "type": "string"
+    },
+    "ExecutionSurfaceV2": {
+      "description": "Controller-owned execution surfaces available to planning agents.",
+      "enum": [
+        "openemr_ui",
+        "openemr_same_origin_api",
+        "agent_service_api",
+        "staged_document",
+        "hybrid"
+      ],
+      "title": "ExecutionSurfaceV2",
+      "type": "string"
+    },
+    "FindingPlanningFactV2": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Category",
+          "type": "string"
+        },
+        "finding_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "finding_key_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finding Key Hash"
+        },
+        "last_seen_target_version": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Last Seen Target Version",
+          "type": "string"
+        },
+        "status": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Status",
+          "type": "string"
+        },
+        "subcategory": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Subcategory",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "category",
+        "subcategory",
+        "status",
+        "last_seen_target_version"
+      ],
+      "title": "FindingPlanningFactV2",
+      "type": "object"
+    },
+    "PriorAttemptOutcomeV1": {
+      "enum": [
+        "exploit_confirmed",
+        "partial_signal",
+        "attack_blocked",
+        "inconclusive",
+        "error"
+      ],
+      "title": "PriorAttemptOutcomeV1",
+      "type": "string"
+    },
+    "PriorAttemptSummaryV1": {
+      "additionalProperties": false,
+      "properties": {
+        "attack_family_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Attack Family Id",
+          "type": "string"
+        },
+        "attempt_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Attempt Id",
+          "type": "string"
+        },
+        "evidence_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Hash"
+        },
+        "outcome": {
+          "$ref": "#/$defs/PriorAttemptOutcomeV1"
+        },
+        "parent_attempt_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Attempt Id"
+        },
+        "sequence_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sequence Hash",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attempt_id",
+        "attack_family_id",
+        "outcome",
+        "summary",
+        "sequence_hash"
+      ],
+      "title": "PriorAttemptSummaryV1",
+      "type": "object"
+    },
+    "RemainingBudgetAndLimitsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "remaining_attempts": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Remaining Attempts",
+          "type": "integer"
+        },
+        "remaining_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Remaining Cost Usd"
+        },
+        "remaining_duration_seconds": {
+          "maximum": 86400,
+          "minimum": 0,
+          "title": "Remaining Duration Seconds",
+          "type": "integer"
+        },
+        "remaining_input_tokens": {
+          "minimum": 0,
+          "title": "Remaining Input Tokens",
+          "type": "integer"
+        },
+        "remaining_model_calls": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Remaining Model Calls",
+          "type": "integer"
+        },
+        "remaining_output_tokens": {
+          "minimum": 0,
+          "title": "Remaining Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "remaining_cost_usd",
+        "remaining_attempts",
+        "remaining_duration_seconds",
+        "remaining_model_calls",
+        "remaining_input_tokens",
+        "remaining_output_tokens"
+      ],
+      "title": "RemainingBudgetAndLimitsV1",
+      "type": "object"
+    },
+    "SurfaceCapabilityFactV2": {
+      "additionalProperties": false,
+      "properties": {
+        "blocked_reason": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Blocked Reason"
+        },
+        "endpoint_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Endpoint Ids",
+          "type": "array"
+        },
+        "supported": {
+          "title": "Supported",
+          "type": "boolean"
+        },
+        "surface": {
+          "$ref": "#/$defs/ExecutionSurfaceV2"
+        }
+      },
+      "required": [
+        "surface",
+        "supported"
+      ],
+      "title": "SurfaceCapabilityFactV2",
+      "type": "object"
+    },
+    "TaxonomyCoverageFactV2": {
+      "additionalProperties": false,
+      "description": "Raw, non-ranked durable facts for one taxonomy subcategory.",
+      "properties": {
+        "applicable_surfaces": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Applicable Surfaces",
+          "type": "array"
+        },
+        "attempted": {
+          "minimum": 0,
+          "title": "Attempted",
+          "type": "integer"
+        },
+        "by_provenance": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "maxProperties": 20,
+          "title": "By Provenance",
+          "type": "object"
+        },
+        "by_surface": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "maxProperties": 10,
+          "title": "By Surface",
+          "type": "object"
+        },
+        "by_target_version": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "maxProperties": 50,
+          "title": "By Target Version",
+          "type": "object"
+        },
+        "by_technique": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "maxProperties": 10,
+          "title": "By Technique",
+          "type": "object"
+        },
+        "category": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Category",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "executed": {
+          "minimum": 0,
+          "title": "Executed",
+          "type": "integer"
+        },
+        "expected_security_invariants": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Expected Security Invariants",
+          "type": "array"
+        },
+        "outcomes": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "maxProperties": 12,
+          "title": "Outcomes",
+          "type": "object"
+        },
+        "subcategory": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "title": "Subcategory",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "subcategory",
+        "description",
+        "applicable_surfaces",
+        "expected_security_invariants",
+        "attempted",
+        "executed"
+      ],
+      "title": "TaxonomyCoverageFactV2",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Compact PostgreSQL-backed facts; ordering carries no priority signal.",
+  "properties": {
+    "allowed_surfaces": {
+      "items": {
+        "$ref": "#/$defs/ExecutionSurfaceV2"
+      },
+      "maxItems": 5,
+      "minItems": 1,
+      "title": "Allowed Surfaces",
+      "type": "array"
+    },
+    "allowed_techniques": {
+      "items": {
+        "$ref": "#/$defs/AttackTechniqueV2"
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "title": "Allowed Techniques",
+      "type": "array"
+    },
+    "campaign_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "eligible_mutation_attempt_ids": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Eligible Mutation Attempt Ids",
+      "type": "array"
+    },
+    "partial_signals": {
+      "items": {
+        "$ref": "#/$defs/PriorAttemptSummaryV1"
+      },
+      "maxItems": 20,
+      "title": "Partial Signals",
+      "type": "array"
+    },
+    "pending_findings": {
+      "items": {
+        "$ref": "#/$defs/FindingPlanningFactV2"
+      },
+      "maxItems": 100,
+      "title": "Pending Findings",
+      "type": "array"
+    },
+    "prior_attack_families": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Prior Attack Families",
+      "type": "array"
+    },
+    "remaining_limits": {
+      "$ref": "#/$defs/RemainingBudgetAndLimitsV1"
+    },
+    "schema_version": {
+      "const": "v2",
+      "default": "v2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "surface_capabilities": {
+      "items": {
+        "$ref": "#/$defs/SurfaceCapabilityFactV2"
+      },
+      "maxItems": 10,
+      "minItems": 1,
+      "title": "Surface Capabilities",
+      "type": "array"
+    },
+    "target_version": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Target Version",
+      "type": "string"
+    },
+    "taxonomy_coverage": {
+      "items": {
+        "$ref": "#/$defs/TaxonomyCoverageFactV2"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Taxonomy Coverage",
+      "type": "array"
+    },
+    "taxonomy_version": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Taxonomy Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "campaign_id",
+    "target_version",
+    "taxonomy_version",
+    "taxonomy_coverage",
+    "surface_capabilities",
+    "remaining_limits",
+    "allowed_surfaces",
+    "allowed_techniques"
+  ],
+  "title": "OrchestratorDecisionContextV2",
+  "type": "object"
+}

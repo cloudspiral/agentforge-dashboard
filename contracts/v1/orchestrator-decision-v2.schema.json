@@ -1,0 +1,160 @@
+{
+  "$defs": {
+    "AttackTechniqueV2": {
+      "enum": [
+        "scenario",
+        "fuzzing"
+      ],
+      "title": "AttackTechniqueV2",
+      "type": "string"
+    },
+    "ExecutionSurfaceV2": {
+      "description": "Controller-owned execution surfaces available to planning agents.",
+      "enum": [
+        "openemr_ui",
+        "openemr_same_origin_api",
+        "agent_service_api",
+        "staged_document",
+        "hybrid"
+      ],
+      "title": "ExecutionSurfaceV2",
+      "type": "string"
+    },
+    "RequestedActionV1": {
+      "enum": [
+        "new_attack",
+        "mutation",
+        "stop"
+      ],
+      "title": "RequestedActionV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Semantic next-step decision owned exclusively by the Orchestrator.",
+  "properties": {
+    "mutation_source": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mutation Source"
+    },
+    "mutation_source_attempt_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mutation Source Attempt Id"
+    },
+    "objective": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Objective"
+    },
+    "rationale": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rationale"
+    },
+    "requested_action": {
+      "$ref": "#/$defs/RequestedActionV1"
+    },
+    "schema_version": {
+      "const": "v2",
+      "default": "v2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "selected_category": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected Category"
+    },
+    "selected_subcategory": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selected Subcategory"
+    },
+    "selected_surface": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExecutionSurfaceV2"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "selected_technique": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AttackTechniqueV2"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "requested_action"
+  ],
+  "title": "OrchestratorDecisionV2",
+  "type": "object"
+}

@@ -72,8 +72,6 @@ class Campaign(TimestampMixin, Base):
     max_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     max_duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_mutations: Mapped[int] = mapped_column(Integer, nullable=False)
-    no_signal_limit: Mapped[int] = mapped_column(Integer, nullable=False)
     actual_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
     actual_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -130,7 +128,25 @@ class AttackAttempt(TimestampMixin, Base):
     parent_attempt_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("attack_attempts.id", ondelete="SET NULL")
     )
-    mutation_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    proposal_source: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="legacy_unknown"
+    )
+    objective_source: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="legacy_unknown"
+    )
+    provenance: Mapped[str] = mapped_column(String(40), nullable=False, default="legacy_unknown")
+    execution_surface: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="legacy_unknown"
+    )
+    technique: Mapped[str] = mapped_column(String(32), nullable=False, default="scenario")
+    seed_case_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    orchestrator_rationale: Mapped[str | None] = mapped_column(Text)
+    fuzz_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    fuzz_variant_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    fuzz_variant_index: Mapped[int | None] = mapped_column(Integer)
+    exact_payload_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    target_executed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sequence_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
     owasp_mappings: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
@@ -140,8 +156,8 @@ class AttackAttempt(TimestampMixin, Base):
     taxonomy_version: Mapped[str] = mapped_column(String(64), nullable=False)
     profile_version: Mapped[str] = mapped_column(String(64), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="proposed")
-    evidence_summary: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    failure: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     evidence_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     evidence_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -169,15 +185,12 @@ class JudgeVerdict(TimestampMixin, Base):
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     exploitability: Mapped[str] = mapped_column(String(32), nullable=False)
     confidence: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
-    evidence_references: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
+    finding_key: Mapped[str | None] = mapped_column(String(128), index=True)
     violated_invariants: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
-    next_recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_behavior: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_behavior: Mapped[str] = mapped_column(Text, nullable=False)
     rubric_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     rubric_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    deterministic_override_applied: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
-    deterministic_override_reason: Mapped[str | None] = mapped_column(Text)
 
     attempt: Mapped[AttackAttempt] = relationship(back_populates="verdict")
 
@@ -193,6 +206,13 @@ class Finding(TimestampMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     vulnerability_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    finding_key: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        default="legacy-unclassified",
+    )
+    provenance: Mapped[str] = mapped_column(String(40), nullable=False, default="legacy_unknown")
+    rediscovery_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source_attempt_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("attack_attempts.id", ondelete="RESTRICT"), nullable=False
     )
@@ -200,7 +220,7 @@ class Finding(TimestampMixin, Base):
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_review")
     description: Mapped[str] = mapped_column(Text, nullable=False)
     clinical_impact: Mapped[str] = mapped_column(Text, nullable=False)
     expected_behavior: Mapped[str] = mapped_column(Text, nullable=False)
@@ -219,6 +239,66 @@ class Finding(TimestampMixin, Base):
     reports: Mapped[list[VulnerabilityReport]] = relationship(
         back_populates="finding", cascade="all, delete-orphan"
     )
+    observations: Mapped[list[FindingObservation]] = relationship(
+        back_populates="finding",
+        cascade="all, delete-orphan",
+        order_by="FindingObservation.created_at",
+    )
+    lifecycle_events: Mapped[list[FindingLifecycleEvent]] = relationship(
+        back_populates="finding",
+        cascade="all, delete-orphan",
+        order_by="FindingLifecycleEvent.created_at",
+    )
+
+
+class FindingObservation(Base):
+    __tablename__ = "finding_observations"
+    __table_args__ = (
+        UniqueConstraint("finding_id", "attempt_id"),
+        Index("ix_finding_observations_finding_created", "finding_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    finding_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
+    )
+    attempt_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("attack_attempts.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_version: Mapped[str] = mapped_column(String(255), nullable=False)
+    provenance: Mapped[str] = mapped_column(String(40), nullable=False)
+    evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    judge_verdict: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
+    observation_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="confirmation"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    finding: Mapped[Finding] = relationship(back_populates="observations")
+
+
+class FindingLifecycleEvent(Base):
+    __tablename__ = "finding_lifecycle_events"
+    __table_args__ = (Index("ix_finding_lifecycle_finding_created", "finding_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    finding_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
+    )
+    from_status: Mapped[str | None] = mapped_column(String(32))
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    evidence_reference: Mapped[str | None] = mapped_column(String(255))
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    finding: Mapped[Finding] = relationship(back_populates="lifecycle_events")
 
 
 class VulnerabilityReport(TimestampMixin, Base):
@@ -233,7 +313,7 @@ class VulnerabilityReport(TimestampMixin, Base):
     structured_report: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     markdown_body: Mapped[str] = mapped_column(Text, nullable=False)
     markdown_path: Mapped[str | None] = mapped_column(String(1024))
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_review")
     validation_summary: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1")
@@ -254,17 +334,12 @@ class RegressionCase(TimestampMixin, Base):
         ForeignKey("findings.id", ondelete="CASCADE"), nullable=False, index=True
     )
     case_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v2")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     setup: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     ordered_sequence: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
-    expected_security_invariants: Mapped[list[str]] = mapped_column(
-        JSON_TYPE, nullable=False, default=list
-    )
-    deterministic_checks: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON_TYPE, nullable=False, default=list
-    )
-    judge_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    judge_rubric_subset: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    judge_context: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False, default=dict)
+    expected_behavior: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
     owasp_mappings: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
@@ -272,6 +347,10 @@ class RegressionCase(TimestampMixin, Base):
     created_from_evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     sequence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    finding_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_target_version: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_provenance: Mapped[str] = mapped_column(String(40), nullable=False)
+    required_replays: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
 
 
 class RegressionRun(TimestampMixin, Base):
@@ -280,6 +359,8 @@ class RegressionRun(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     target_version: Mapped[str] = mapped_column(String(255), nullable=False)
+    previous_target_version: Mapped[str | None] = mapped_column(String(255))
+    cohort_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("campaigns.id", ondelete="SET NULL")
     )
@@ -290,6 +371,9 @@ class RegressionRun(TimestampMixin, Base):
     reproduced_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     inconclusive_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    improved_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    regressed_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cross_category_regression: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     estimated_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -315,16 +399,47 @@ class RegressionResult(TimestampMixin, Base):
     )
     case_version: Mapped[int] = mapped_column(Integer, nullable=False)
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
-    deterministic_results: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON_TYPE, nullable=False, default=list
-    )
     judge_result: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
-    evidence_references: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False, default=list)
+    evidence_hash: Mapped[str | None] = mapped_column(String(64))
+    estimated_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    trace_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    changed_target_version: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    aggregate_reason: Mapped[str | None] = mapped_column(Text)
+
+    run: Mapped[RegressionRun] = relationship(back_populates="results")
+    replays: Mapped[list[RegressionReplay]] = relationship(
+        back_populates="result",
+        cascade="all, delete-orphan",
+        order_by="RegressionReplay.replay_index",
+    )
+
+
+class RegressionReplay(TimestampMixin, Base):
+    __tablename__ = "regression_replays"
+    __table_args__ = (
+        UniqueConstraint("result_id", "replay_index"),
+        Index("ix_regression_replays_result_index", "result_id", "replay_index"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    result_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("regression_results.id", ondelete="CASCADE"), nullable=False
+    )
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("attack_attempts.id", ondelete="SET NULL"), index=True
+    )
+    replay_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_version: Mapped[str] = mapped_column(String(255), nullable=False)
+    valid_replay: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    judge_verdict: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    evidence_hash: Mapped[str | None] = mapped_column(String(64))
+    error: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     estimated_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     trace_id: Mapped[str | None] = mapped_column(String(255), index=True)
 
-    run: Mapped[RegressionRun] = relationship(back_populates="results")
+    result: Mapped[RegressionResult] = relationship(back_populates="replays")
 
 
 class AgentRun(TimestampMixin, Base):
@@ -350,9 +465,46 @@ class AgentRun(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sdk_attempts: Mapped[int | None] = mapped_column(Integer)
     estimated_cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     langfuse_trace_id: Mapped[str | None] = mapped_column(String(255))
+    input_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
+    output_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     typed_error: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
 
     campaign: Mapped[Campaign | None] = relationship(back_populates="agent_runs")
+
+
+class PlatformEvent(Base):
+    __tablename__ = "platform_events"
+    __table_args__ = (
+        Index("ix_platform_events_created", "created_at"),
+        Index("ix_platform_events_campaign_created", "campaign_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="SET NULL"), index=True
+    )
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("attack_attempts.id", ondelete="SET NULL"), index=True
+    )
+    finding_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("findings.id", ondelete="SET NULL"), index=True
+    )
+    regression_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("regression_runs.id", ondelete="SET NULL"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(255))
+    prompt_version: Mapped[str | None] = mapped_column(String(64))
+    trace_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    cost_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )

@@ -22,8 +22,8 @@ from agentforge.contracts.v1 import (
     AttackEvidenceV1,
     CampaignObjectiveV1,
     DeterministicAssertionResultV1,
-    EvidenceReferenceKindV1,
-    EvidenceReferenceV1,
+    ExecutionSurfaceV2,
+    JudgeVerdictKindV1,
     JudgeVerdictV1,
     TranscriptRoleV1,
 )
@@ -40,7 +40,13 @@ from agentforge.evaluation.deterministic import (
     TransportStatusV1,
     evaluate_deterministically,
 )
-from agentforge.evaluation.judge_service import reconcile_judge_verdict
+from agentforge.evidence import (
+    EvidenceArtifactCorrupt,
+    EvidenceArtifactError,
+    EvidenceArtifactStore,
+    EvidenceArtifactTooLarge,
+    with_computed_evidence_hash,
+)
 from agentforge.observability import LangfuseTelemetry
 from agentforge.orchestration.budgets import (
     BudgetAccountV1,
@@ -56,6 +62,7 @@ from agentforge.orchestration.execution_gate import (
     GateLimitsV1,
     GateRejectionV1,
     ValidatedAttackV1,
+    proposal_sequence_hash,
     validate_attack,
 )
 from agentforge.orchestration.objectives import (
@@ -73,7 +80,7 @@ from agentforge.persistence.models import (
     JudgeVerdict,
     TargetVersion,
 )
-from agentforge.regression.invariants import SecurityInvariantV1
+from agentforge.runners import CompositeAttackRunner
 from agentforge.runners.base import AttackRunner, TargetExecutionContext
 from agentforge.runners.playwright_runner import (
     PlaywrightAttackRunner,
@@ -256,29 +263,12 @@ def _rehash_evidence(
     evidence: AttackEvidenceV1,
     *,
     secrets: Sequence[str],
-    assertions: list[DeterministicAssertionResultV1] | None = None,
 ) -> AttackEvidenceV1:
     payload = evidence.model_dump(mode="json")
-    if assertions is not None:
-        payload["deterministic_assertion_results"] = [
-            item.model_dump(mode="json") for item in assertions
-        ]
     payload = redact(_replace_secret_values(payload, secrets))
     payload["evidence_hash"] = "0" * 64
     draft = AttackEvidenceV1.model_validate_json(json.dumps(payload))
-    canonical = json.dumps(
-        draft.model_dump(mode="json", exclude={"evidence_hash"}),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return AttackEvidenceV1.model_validate_json(
-        json.dumps(
-            {
-                **draft.model_dump(mode="json"),
-                "evidence_hash": hashlib.sha256(canonical.encode()).hexdigest(),
-            }
-        )
-    )
+    return with_computed_evidence_hash(draft)
 
 
 def _budget_reservation(
@@ -367,54 +357,26 @@ def _judge_payload(
     case: SeedCaseV1,
     objective: CampaignObjectiveV1,
     evidence: AttackEvidenceV1,
-    deterministic: DeterministicEvaluationV1,
-    invariants: list[SecurityInvariantV1],
     rubric: JudgeRubricV1,
     rubric_hash: str,
-) -> tuple[dict[str, Any], str]:
-    evidence_reference_id = f"evidence-{evidence.evidence_hash[:16]}"
-    evidence_reference = EvidenceReferenceV1(
-        reference_id=evidence_reference_id,
-        kind=EvidenceReferenceKindV1.OTHER,
-        artifact_path=None,
-        description="Frozen sanitized evidence package persisted for this attempt.",
-    )
-    return (
-        {
-            "objective": objective.model_dump(mode="json"),
-            "evaluation_case": {
-                "case_id": case.id,
-                "case_version": case.schema_version,
-                "expected_safe_behavior": case.expected_safe_behavior,
-                "configured_assertions": [
-                    item.model_dump(mode="json") for item in case.deterministic_assertions
-                ],
-                "judge_criteria": case.judge.model_dump(mode="json"),
-            },
-            "executed_sequence": [
-                item.model_dump(mode="json") for item in evidence.executed_action_sequence
-            ],
-            "sanitized_transcript": [item.model_dump(mode="json") for item in evidence.transcript],
-            "http_metadata": [
-                item.model_dump(mode="json") for item in evidence.sanitized_http_metadata
-            ],
-            "target_visible_tool_calls": [
-                item.model_dump(mode="json") for item in evidence.target_visible_tool_calls
-            ],
-            "side_effects": [item.model_dump(mode="json") for item in evidence.side_effects],
-            "deterministic_evaluation": deterministic.model_dump(mode="json"),
-            "security_invariants": [item.model_dump(mode="json") for item in invariants],
-            "rubric": {
-                "version": rubric.rubric_version,
-                "hash": rubric_hash,
-                "global_rules": rubric.global_rules,
-                "category": rubric.categories[case.category].model_dump(mode="json"),
-            },
-            "allowed_evidence_references": [evidence_reference.model_dump(mode="json")],
-            "target_version": evidence.target_version,
+) -> dict[str, Any]:
+    return {
+        "objective": objective.model_dump(mode="json"),
+        "evaluation_case": {
+            "case_id": case.id,
+            "case_version": case.schema_version,
+            "expected_safe_behavior": case.expected_safe_behavior,
+            "judge_criteria": case.judge.model_dump(mode="json"),
         },
-        evidence_reference_id,
-    )
+        "raw_evidence": evidence.model_dump(mode="json"),
+        "rubric": {
+            "version": rubric.rubric_version,
+            "hash": rubric_hash,
+            "global_rules": rubric.global_rules,
+            "category": rubric.categories[case.category].model_dump(mode="json"),
+        },
+        "target_version": evidence.target_version,
+    }
 
 
 def _retryable_judge_contract_failure(
@@ -480,9 +442,13 @@ def _persist_agent_runs(
                 status="succeeded" if result.succeeded else "failed",
                 input_tokens=result.usage.tokens.input_tokens,
                 output_tokens=result.usage.tokens.output_tokens,
+                sdk_attempts=result.sdk_attempts,
                 estimated_cost_usd=Decimal(str(result.estimated_cost_usd)),
                 latency_ms=round(result.latency_ms),
                 langfuse_trace_id=result.langfuse_trace_id,
+                output_payload=(
+                    result.output.model_dump(mode="json") if result.output is not None else None
+                ),
                 typed_error=(
                     result.error.model_dump(mode="json") if result.error is not None else None
                 ),
@@ -561,6 +527,7 @@ def _persist_initial(
     started_at: AwareDatetime,
     proposal: Any,
     objective: Any,
+    case_sha256: str,
     target_alias: LiveTargetAlias,
     run_mode: LiveRunMode,
 ) -> None:
@@ -590,7 +557,7 @@ def _persist_initial(
             )
         campaign = Campaign(
             id=campaign_id,
-            campaign_type="discovery",
+            campaign_type="fixed_case",
             trigger_type=run_mode,
             status="running",
             target_alias=target_alias,
@@ -600,8 +567,6 @@ def _persist_initial(
             max_cost_usd=Decimal(str(settings.default_campaign_max_cost_usd)),
             max_attempts=1,
             max_duration_seconds=settings.default_campaign_max_duration_seconds,
-            max_mutations=0,
-            no_signal_limit=1,
             actual_attempts=0,
             started_at=started_at,
         )
@@ -609,7 +574,17 @@ def _persist_initial(
             AttackAttempt(
                 id=attempt_id,
                 attack_family_id=case.id,
-                mutation_generation=0,
+                parent_attempt_id=None,
+                proposal_source="fixed_yaml_case",
+                objective_source="fixed_yaml_case",
+                provenance=(
+                    "curated_discovery_replay" if case.id == "AF-PI-002" else "human_authored_seed"
+                ),
+                execution_surface=proposal.execution_surface.value,
+                technique=proposal.technique.value,
+                seed_case_hash=case_sha256,
+                exact_payload_hash=proposal_sequence_hash(proposal),
+                sequence_hash=proposal_sequence_hash(proposal),
                 category=case.category,
                 subcategory=case.subcategory,
                 owasp_mappings=objective.owasp_mappings.model_dump(mode="json"),
@@ -618,7 +593,7 @@ def _persist_initial(
                 taxonomy_version=taxonomy.taxonomy_version,
                 profile_version=loaded_profile.profile.profile_version,
                 prompt_version=_CASE_PROMPT_VERSION,
-                status="executing",
+                state="running",
                 started_at=started_at,
             )
         )
@@ -631,11 +606,10 @@ def _persist_evidence(
     *,
     campaign_id: uuid.UUID,
     attempt_id: uuid.UUID,
-    case: SeedCaseV1,
     evidence: AttackEvidenceV1,
-    deterministic: DeterministicEvaluationV1,
-    run_mode: LiveRunMode,
+    evidence_store: EvidenceArtifactStore,
 ) -> None:
+    prepared = evidence_store.prepare(evidence)
     with database.session_factory() as session:
         attempt = session.get(AttackAttempt, attempt_id)
         campaign = session.get(Campaign, campaign_id)
@@ -644,18 +618,14 @@ def _persist_evidence(
         attempt.executed_sequence = {
             "actions": [item.model_dump(mode="json") for item in evidence.executed_action_sequence]
         }
-        attempt.evidence_payload = evidence.model_dump(mode="json")
-        attempt.evidence_summary = {
-            "run_mode": run_mode,
-            "case_id": case.id,
-            "case_version": case.schema_version,
-            "deterministic": deterministic.model_dump(mode="json"),
-        }
+        attempt.evidence_payload = prepared.payload
         attempt.evidence_hash = evidence.evidence_hash
         attempt.latency_ms = round(evidence.total_latency_ms)
         attempt.langfuse_trace_id = evidence.langfuse_trace_id
-        attempt.status = "evaluating"
+        attempt.target_executed = True
+        attempt.state = "running"
         session.commit()
+    evidence_store.export(prepared)
 
 
 def _persist_failure(
@@ -681,7 +651,24 @@ def _persist_failure(
             results=judge_results,
         )
         _apply_judge_usage(attempt, campaign, judge_results)
-        attempt.status = "error"
+        attempt.state = "failed"
+        failure_stage = (
+            "judge"
+            if code == "judge_failed"
+            else "evidence"
+            if code
+            in {
+                "evidence_too_large",
+                "evidence_integrity_failed",
+                "evidence_export_failed",
+            }
+            else "runner"
+        )
+        attempt.failure = {
+            "stage": failure_stage,
+            "code": code,
+            "retryable": code == "evidence_export_failed",
+        }
         attempt.completed_at = completed_at
         campaign.status = "failed"
         campaign.actual_attempts = 1
@@ -725,23 +712,16 @@ def _persist_verdict(
                 severity=verdict.severity.value,
                 exploitability=verdict.exploitability.value,
                 confidence=verdict.confidence,
-                evidence_references=[
-                    item.reference_id for item in verdict.supporting_evidence_references
-                ],
+                finding_key=verdict.finding_key,
                 violated_invariants=verdict.violated_security_invariants,
-                next_recommendation=verdict.recommended_next_action.value,
+                observed_behavior=verdict.observed_behavior,
+                expected_behavior=verdict.expected_behavior,
                 rubric_hash=rubric_hash,
                 rubric_version=rubric_version,
-                deterministic_override_applied=verdict.deterministic_override_applied,
-                deterministic_override_reason=(
-                    "Deterministic invariant evidence controlled the final verdict."
-                    if verdict.deterministic_override_applied
-                    else None
-                ),
             )
         )
         _apply_judge_usage(attempt, campaign, judge_results)
-        attempt.status = "completed"
+        attempt.state = "completed"
         attempt.completed_at = completed_at
         campaign.actual_attempts = 1
         campaign.status = "completed"
@@ -852,6 +832,7 @@ async def run_live_local_case(
     telemetry: LangfuseTelemetry | None = None,
     version_discoverer: VersionDiscoverer = _discover_version,
     on_campaign_persisted: CampaignPersistedCallback | None = None,
+    evidence_store: EvidenceArtifactStore | None = None,
 ) -> LiveLocalEvaluationResultV1:
     """Execute, judge, persist, and export one checked-in local or deployed case."""
 
@@ -905,7 +886,7 @@ async def run_live_local_case(
     campaign_id = uuid.uuid4()
     attempt_id = uuid.uuid4()
     deadline = started_at + timedelta(seconds=settings.default_campaign_max_duration_seconds)
-    budget_state, reservation = _budget_reservation(
+    _budget_reservation(
         settings=settings,
         pricing=configured_pricing,
         campaign_id=str(campaign_id),
@@ -921,8 +902,11 @@ async def run_live_local_case(
         remaining_cost_usd=Decimal(str(settings.default_campaign_max_cost_usd)),
         remaining_attempts=1,
         remaining_duration_seconds=settings.default_campaign_max_duration_seconds,
-        max_mutations=0,
-        no_signal_limit=1,
+        execution_surface=(
+            ExecutionSurfaceV2.OPENEMR_SAME_ORIGIN_API
+            if case.surface == "api"
+            else ExecutionSurfaceV2.OPENEMR_UI
+        ),
     )
     proposal = proposal_from_seed(
         case,
@@ -949,10 +933,11 @@ async def run_live_local_case(
         upload_stage_endpoint_id="document_stage",
         upload_reject_endpoint_id="document_reject",
         approved_fixtures={},
+        max_persistent_writes=0,
+        retained_synthetic_artifact_allowed=False,
         limits=GateLimitsV1(
             max_actions=30,
             max_turns=20,
-            max_worst_case_cost_usd=reservation.worst_case_total.cost_usd,
             max_total_wait_seconds=600,
             max_total_message_bytes=20_000,
             max_upload_count=0,
@@ -961,8 +946,6 @@ async def run_live_local_case(
         ),
         campaign_started_at=started_at,
         campaign_deadline_at=deadline,
-        budget_state=budget_state,
-        budget_reservation=reservation,
         attempted_sequence_counts={},
         cancellation_requested=False,
         cleanup_succeeded=True,
@@ -985,6 +968,7 @@ async def run_live_local_case(
         started_at=started_at,
         proposal=proposal,
         objective=objective,
+        case_sha256=hashlib.sha256(case_bytes).hexdigest(),
         target_alias=live_target_alias,
         run_mode=run_mode,
     )
@@ -1000,6 +984,7 @@ async def run_live_local_case(
         if settings.artifacts_dir.is_absolute()
         else repository / settings.artifacts_dir
     )
+    configured_evidence_store = evidence_store or EvidenceArtifactStore(artifacts / "evidence")
     execution_context = TargetExecutionContext(
         target_id=loaded_profile.profile.name,
         campaign_id=str(campaign_id),
@@ -1011,15 +996,28 @@ async def run_live_local_case(
         repository_root=repository,
         artifacts_dir=artifacts,
         credentials=credentials,
+        agent_shared_secret=settings.target_agent_shared_secret,
+        test_user_id=settings.target_test_user_id,
+        test_auth_username=settings.target_test_username,
+        synthetic_patient_ids={
+            alias: value
+            for alias, value in {
+                "patient_a": settings.target_test_patient_a_id,
+                "patient_b": settings.target_test_patient_b_id,
+            }.items()
+            if value
+        },
         request_timeout_seconds=max_case_timeout,
         max_upload_bytes=settings.max_upload_bytes,
     )
-    configured_runner = runner or PlaywrightAttackRunner(
-        headless=True if target_alias == "deployed" else not headed,
-        browser_mode=(
-            "chromium" if target_alias == "deployed" else settings.agentforge_browser_channel
-        ),
-        ignore_https_errors=ignore_https_errors,
+    configured_runner = runner or CompositeAttackRunner(
+        playwright_runner=PlaywrightAttackRunner(
+            headless=True if target_alias == "deployed" else not headed,
+            browser_mode=(
+                "chromium" if target_alias == "deployed" else settings.agentforge_browser_channel
+            ),
+            ignore_https_errors=ignore_https_errors,
+        )
     )
     configured_judge = judge
     if configured_judge is None:
@@ -1053,26 +1051,28 @@ async def run_live_local_case(
         evidence = _rehash_evidence(raw_evidence, secrets=secrets)
         invariants = build_security_invariants(loaded_profile.profile)
         deterministic = evaluate_deterministically(evidence, invariants)
-        evidence = _rehash_evidence(
-            evidence,
-            secrets=secrets,
-            assertions=deterministic.assertion_results,
-        )
-        deterministic = evaluate_deterministically(evidence, invariants)
         _persist_evidence(
             database,
             campaign_id=campaign_id,
             attempt_id=attempt_id,
-            case=case,
             evidence=evidence,
-            deterministic=deterministic,
-            run_mode=run_mode,
+            evidence_store=configured_evidence_store,
         )
-    except Exception:
+    except Exception as exc:
         warnings.extend(getattr(configured_runner, "cleanup_warnings", ()))
         warnings = list(dict.fromkeys(warnings))
-        code = "browser_execution_failed"
-        message = "the predefined browser evaluation did not complete"
+        if isinstance(exc, EvidenceArtifactTooLarge):
+            code = "evidence_too_large"
+            message = "runner evidence exceeded the 5 MiB persistence ceiling"
+        elif isinstance(exc, EvidenceArtifactCorrupt):
+            code = "evidence_integrity_failed"
+            message = "runner evidence failed canonical integrity validation"
+        elif isinstance(exc, EvidenceArtifactError):
+            code = "evidence_export_failed"
+            message = "database evidence was saved but its verified JSON export failed"
+        else:
+            code = "browser_execution_failed"
+            message = "the predefined browser evaluation did not complete"
         _persist_failure(
             database,
             campaign_id=campaign_id,
@@ -1107,7 +1107,10 @@ async def run_live_local_case(
     assert evidence is not None and deterministic is not None
     sent, responses = _message_capture(evidence)
     expected_messages = [
-        action.message for action in case.actions if action.type == "send_chat_message"
+        (action.message if action.type == "send_chat_message" else str(action.body.get("message")))
+        for action in case.actions
+        if action.type in {"send_chat_message", "invoke_approved_api_request"}
+        and (action.type == "send_chat_message" or isinstance(action.body.get("message"), str))
     ]
     if (
         deterministic.transport_status != TransportStatusV1.COMPLETE
@@ -1149,12 +1152,10 @@ async def run_live_local_case(
         )
 
     rubric_hash = canonical_hash(configured_rubric.model_dump(mode="json"))
-    judge_payload, evidence_reference_id = _judge_payload(
+    judge_payload = _judge_payload(
         case=case,
         objective=objective,
         evidence=evidence,
-        deterministic=deterministic,
-        invariants=invariants,
         rubric=configured_rubric,
         rubric_hash=rubric_hash,
     )
@@ -1173,25 +1174,17 @@ async def run_live_local_case(
         if judge_result.output is None:
             judge_failure_reason = _judge_failure_reason(judge_result)
             raise ValueError("Judge returned no verdict")
-        known_references = {
-            evidence_reference_id,
-            *(f"assertion-{item.invariant_id}" for item in deterministic.assertion_results),
-        }
-        if any(
-            reference.reference_id not in known_references
-            for reference in judge_result.output.supporting_evidence_references
-        ):
-            judge_failure_reason = "unknown_evidence_reference"
-            raise ValueError("Judge returned an unknown evidence reference")
         judge_failure_reason = "invalid_verdict_contract"
-        semantic = JudgeVerdictV1.model_validate(
-            {
-                **judge_result.output.model_dump(mode="python"),
-                "rubric_version": configured_rubric.rubric_version,
-                "rubric_hash": rubric_hash,
-            }
+        semantic = JudgeVerdictV1.model_validate_json(
+            json.dumps(
+                {
+                    **judge_result.output.model_dump(mode="json"),
+                    "rubric_version": configured_rubric.rubric_version,
+                    "rubric_hash": rubric_hash,
+                }
+            )
         )
-        verdict = reconcile_judge_verdict(semantic, deterministic, invariants)
+        verdict = semantic
     except Exception:
         code = "judge_failed"
         message = _judge_failure_message(judge_failure_reason, len(judge_results))
@@ -1240,6 +1233,48 @@ async def run_live_local_case(
         rubric_hash=rubric_hash,
         rubric_version=configured_rubric.rubric_version,
     )
+    if verdict.verdict == JudgeVerdictKindV1.EXPLOIT_CONFIRMED:
+        try:
+            from agentforge.agents import DocumentationAgent
+            from agentforge.orchestration.controller import CampaignController
+
+            documentation_options: dict[str, Any] = {"settings": settings}
+            if telemetry is not None:
+                documentation_options["telemetry"] = telemetry
+            promotion = CampaignController(
+                database=database,
+                settings=settings,
+                loaded_profile=loaded_profile,
+                taxonomy=taxonomy,
+                rubric=configured_rubric,
+                orchestrator=None,
+                attack_generator=None,
+                judge=configured_judge,
+                documentation=DocumentationAgent(**documentation_options),
+                runner=configured_runner,
+                telemetry=telemetry,
+                repository_root=repository,
+                evidence_store=configured_evidence_store,
+            )
+            with database.session_factory() as session:
+                campaign = session.get(Campaign, campaign_id)
+                attempt = session.get(AttackAttempt, attempt_id)
+                if campaign is None or attempt is None:
+                    raise LookupError("confirmed seed persistence records are missing")
+                promotion_failure = await promotion.promote_confirmed_finding(
+                    session=session,
+                    campaign=campaign,
+                    attempt=attempt,
+                    objective=objective,
+                    proposal=proposal,
+                    validated=validated,
+                    evidence=evidence,
+                    verdict=verdict,
+                )
+                if promotion_failure is not None:
+                    warnings.append("Confirmed seed finding promotion did not complete.")
+        except Exception:
+            warnings.append("Confirmed seed finding promotion did not complete.")
     return _export_result(
         _build_result(
             status="completed",

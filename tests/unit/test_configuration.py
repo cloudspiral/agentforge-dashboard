@@ -25,10 +25,13 @@ def test_checked_in_configuration_validates() -> None:
     assert set(rubric.categories) == {
         "prompt_injection",
         "data_exfiltration",
+        "state_corruption",
         "tool_misuse",
+        "denial_of_service",
+        "identity_role_exploitation",
     }
     assert len(profile.profile_hash) == 64
-    assert len(seeds) == 6
+    assert len(seeds) == 9
     assert {control.id for control in controls} == {
         "AF-SC-001",
         "AF-AL-001",

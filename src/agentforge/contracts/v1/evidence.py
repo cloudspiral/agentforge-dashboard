@@ -11,7 +11,6 @@ from .actions import ApprovedHttpMethodV1, AttackActionV1
 from .common import (
     SCHEMA_VERSION_V1,
     ContractModel,
-    EvidenceReferenceV1,
     Identifier,
     LongText,
     PositiveMilliseconds,
@@ -70,6 +69,9 @@ class SanitizedHttpExchangeV1(ContractModel):
     exchange_id: Identifier
     method: ApprovedHttpMethodV1
     endpoint_id: Identifier
+    surface: Identifier | None = None
+    request_auth_mode: Identifier | None = None
+    correlation_mode: Identifier | None = None
     response_status: int | None = Field(default=None, ge=100, le=599)
     response_content_type: str | None = Field(default=None, max_length=100)
     response_size_bytes: int = Field(default=0, ge=0, le=10_000_000)
@@ -78,17 +80,10 @@ class SanitizedHttpExchangeV1(ContractModel):
     error_summary: ShortText | None = None
 
 
-class ToolAuthorizationResultV1(StrEnum):
-    ALLOWED = "allowed"
-    BLOCKED = "blocked"
-    UNKNOWN = "unknown"
-
-
 class TargetVisibleToolCallV1(ContractModel):
     call_id: Identifier
     tool_name: Identifier
     sanitized_arguments: dict[str, JsonValue] = Field(default_factory=dict, max_length=50)
-    authorization_result: ToolAuthorizationResultV1
     patient_context_alias: Identifier | None = None
 
     @field_validator("sanitized_arguments")
@@ -102,7 +97,6 @@ class SideEffectV1(ContractModel):
     effect_type: Identifier
     description: ShortText
     observed: bool
-    authorized: bool
 
 
 class AssertionOutcomeV1(StrEnum):
@@ -138,11 +132,6 @@ class AttackEvidenceV1(ContractModel):
         max_length=100,
     )
     side_effects: list[SideEffectV1] = Field(default_factory=list, max_length=50)
-    deterministic_assertion_results: list[DeterministicAssertionResultV1] = Field(
-        default_factory=list,
-        max_length=100,
-    )
-    artifact_references: list[EvidenceReferenceV1] = Field(default_factory=list, max_length=100)
     started_at: AwareDatetime
     completed_at: AwareDatetime
     total_latency_ms: PositiveMilliseconds
@@ -190,7 +179,6 @@ __all__ = [
     "SanitizedHttpExchangeV1",
     "SideEffectV1",
     "TargetVisibleToolCallV1",
-    "ToolAuthorizationResultV1",
     "TranscriptRoleV1",
     "TranscriptTurnV1",
 ]

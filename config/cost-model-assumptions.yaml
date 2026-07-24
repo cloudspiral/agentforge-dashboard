@@ -1,0 +1,111 @@
+schema_version: "1.0"
+currency: USD
+run_definition: >-
+  One workload unit is one seed evaluation, ordinary discovery attempt, fuzz
+  variant, or full two-replay regression case according to the scenario mix.
+scales: [100, 1000, 10000, 100000]
+storage:
+  database_usd_per_gb_month: 0.25
+  artifact_usd_per_gb_month: 0.023
+  retention_months: 3
+telemetry:
+  usd_per_1000_events: 0.10
+labor:
+  reviewer_hourly_usd: 120
+scenarios:
+  low:
+    workload_mix:
+      seed_evaluation: 0.25
+      ordinary_discovery: 0.30
+      fuzz_variant: 0.30
+      regression_case_two_replays: 0.15
+    attacker_model_usd:
+      seed_evaluation: 0.018
+      ordinary_discovery: 0.032
+      fuzz_variant: 0.020
+      regression_case_two_replays: 0.032
+    target_model_calls:
+      seed_evaluation: 1.0
+      ordinary_discovery: 1.0
+      fuzz_variant: 1.0
+      regression_case_two_replays: 2.0
+    target_model_usd_per_call: 0.006
+    retry_and_escalation_rate: 0.03
+    browser_share: 0.45
+    browser_seconds_per_execution: 35
+    api_seconds_per_execution: 4
+    worker_usd_per_vcpu_hour: 0.05
+    database_bytes_per_run: 120000
+    artifact_bytes_per_run: 180000
+    telemetry_events_per_run: 10
+    human_review_rate: 0.01
+    human_review_minutes: 8
+    fixed_platform_usd_by_scale:
+      100: 60
+      1000: 120
+      10000: 650
+      100000: 4500
+  base:
+    workload_mix:
+      seed_evaluation: 0.15
+      ordinary_discovery: 0.35
+      fuzz_variant: 0.30
+      regression_case_two_replays: 0.20
+    attacker_model_usd:
+      seed_evaluation: 0.020
+      ordinary_discovery: 0.045
+      fuzz_variant: 0.025
+      regression_case_two_replays: 0.040
+    target_model_calls:
+      seed_evaluation: 1.0
+      ordinary_discovery: 1.1
+      fuzz_variant: 1.0
+      regression_case_two_replays: 2.0
+    target_model_usd_per_call: 0.015
+    retry_and_escalation_rate: 0.08
+    browser_share: 0.60
+    browser_seconds_per_execution: 60
+    api_seconds_per_execution: 8
+    worker_usd_per_vcpu_hour: 0.08
+    database_bytes_per_run: 200000
+    artifact_bytes_per_run: 350000
+    telemetry_events_per_run: 16
+    human_review_rate: 0.02
+    human_review_minutes: 15
+    fixed_platform_usd_by_scale:
+      100: 75
+      1000: 250
+      10000: 1500
+      100000: 9000
+  high:
+    workload_mix:
+      seed_evaluation: 0.10
+      ordinary_discovery: 0.35
+      fuzz_variant: 0.25
+      regression_case_two_replays: 0.30
+    attacker_model_usd:
+      seed_evaluation: 0.030
+      ordinary_discovery: 0.075
+      fuzz_variant: 0.045
+      regression_case_two_replays: 0.075
+    target_model_calls:
+      seed_evaluation: 1.2
+      ordinary_discovery: 1.5
+      fuzz_variant: 1.2
+      regression_case_two_replays: 2.5
+    target_model_usd_per_call: 0.035
+    retry_and_escalation_rate: 0.18
+    browser_share: 0.75
+    browser_seconds_per_execution: 110
+    api_seconds_per_execution: 15
+    worker_usd_per_vcpu_hour: 0.12
+    database_bytes_per_run: 350000
+    artifact_bytes_per_run: 800000
+    telemetry_events_per_run: 28
+    human_review_rate: 0.05
+    human_review_minutes: 25
+    fixed_platform_usd_by_scale:
+      100: 120
+      1000: 450
+      10000: 3000
+      100000: 18000

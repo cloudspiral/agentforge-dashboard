@@ -21,18 +21,30 @@ from agentforge.contracts.v1 import (  # noqa: E402
     AttackEvidenceV1,
     CampaignObjectiveV1,
     DocumentationRequestV1,
+    FuzzPlanV2,
     JudgeVerdictV1,
+    OrchestratorDecisionContextV2,
+    OrchestratorDecisionV1,
+    OrchestratorDecisionV2,
     ProposedAttackV1,
     VulnerabilityReportV1,
 )
+from agentforge.observability import PlatformObservabilitySnapshotV2  # noqa: E402
+from agentforge.regression import RegressionCaseV2  # noqa: E402
 
 SCHEMA_MODELS: Final[dict[str, type[BaseModel]]] = {
     "campaign-objective.schema.json": CampaignObjectiveV1,
+    "orchestrator-decision.schema.json": OrchestratorDecisionV1,
+    "orchestrator-decision-v2.schema.json": OrchestratorDecisionV2,
+    "orchestrator-context-v2.schema.json": OrchestratorDecisionContextV2,
+    "fuzz-plan-v2.schema.json": FuzzPlanV2,
     "proposed-attack.schema.json": ProposedAttackV1,
     "attack-evidence.schema.json": AttackEvidenceV1,
     "judge-verdict.schema.json": JudgeVerdictV1,
     "documentation-request.schema.json": DocumentationRequestV1,
     "vulnerability-report.schema.json": VulnerabilityReportV1,
+    "regression-case-v2.schema.json": RegressionCaseV2,
+    "observability-snapshot-v2.schema.json": PlatformObservabilitySnapshotV2,
     "agent-error.schema.json": AgentErrorV1,
 }
 

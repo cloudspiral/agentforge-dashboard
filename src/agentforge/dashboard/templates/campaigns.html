@@ -6,6 +6,75 @@
   <h1>Campaigns</h1>
   <p>{{ total }} total campaign{{ '' if total == 1 else 's' }}.</p>
 </section>
+<section class="panel" id="campaign-launcher">
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">Full four-agent workflow</p>
+      <h2>Launch a discovery campaign</h2>
+      <p>Queue a bounded Orchestrator → Attack Generator → Judge → Documentation campaign.</p>
+    </div>
+    <span class="badge badge-{{ 'running' if queue.worker_status in ['active', 'idle'] else 'interrupted' }}">
+      worker {{ queue.worker_status }}
+    </span>
+  </div>
+  {% if launch_error %}<p class="notice danger" role="alert">{{ launch_error }}</p>{% endif %}
+  <form method="post" action="/dashboard/campaigns" class="campaign-launch-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="idempotency_key" value="{{ launch_values.idempotency_key }}">
+    <div class="form-grid">
+      <label>Target
+        <select name="target_alias" id="target-alias">
+          <option value="local" {% if launch_values.target_alias == 'local' %}selected{% endif %}>Local synthetic target</option>
+          <option value="deployed" {% if launch_values.target_alias == 'deployed' %}selected{% endif %}>Deployed synthetic target</option>
+        </select>
+      </label>
+      <label>Category
+        <select name="category" id="campaign-category">
+          <option value="">Automatic — Orchestrator chooses</option>
+          {% for category in taxonomy_options %}
+          <option value="{{ category.id }}" {% if launch_values.category == category.id %}selected{% endif %}>{{ category.id | replace('_', ' ') | title }}</option>
+          {% endfor %}
+          {% if launch_values.category and launch_values.category not in taxonomy_options | map(attribute='id') | list %}
+          <option value="{{ launch_values.category }}" selected>Invalid selection: {{ launch_values.category }}</option>
+          {% endif %}
+        </select>
+      </label>
+      <label>Maximum attempts
+        <input name="max_attempts" type="number" min="1" max="100" required value="{{ launch_values.max_attempts }}">
+      </label>
+      <label>Maximum model cost (USD)
+        <input name="max_cost_usd" type="number" min="0.000001" max="{{ campaign_ceiling_usd }}" step="0.01" required value="{{ launch_values.max_cost_usd }}">
+      </label>
+    </div>
+    <details>
+      <summary>Advanced limits</summary>
+      <div class="form-grid">
+        <label>Subcategory
+          <select name="subcategory" id="campaign-subcategory" data-selected="{{ launch_values.subcategory }}">
+            <option value="">Automatic within category</option>
+          </select>
+        </label>
+        <label>Maximum duration (seconds)
+          <input name="max_duration_seconds" type="number" min="30" max="86400" value="{{ launch_values.max_duration_seconds }}">
+        </label>
+        <label>Queue priority
+          <input name="priority" type="number" min="-100" max="100" value="{{ launch_values.priority }}">
+        </label>
+      </div>
+    </details>
+    <label class="checkbox-row" id="deployed-confirmation">
+      <input type="checkbox" name="confirm_authorized" value="yes" {% if launch_values.confirm_authorized == 'yes' %}checked{% endif %}>
+      I confirm the deployed target is authorized and contains synthetic data only.
+    </label>
+    <div class="launcher-footer">
+      <p>
+        Campaign ceiling ${{ campaign_ceiling_usd }} · global ceiling ${{ global_ceiling_usd }} ·
+        {{ queue.depth }} queued · {{ queue.running }} running
+      </p>
+      <button type="submit">Launch campaign</button>
+    </div>
+  </form>
+</section>
 <section class="panel"><div class="table-wrap"><table>
   <thead><tr><th>Status</th><th>ID / type</th><th>Trigger</th><th>Target</th><th>Attempts</th><th>Cost</th><th>Worker</th><th>Created</th><th>Started</th><th>Completed</th></tr></thead>
   <tbody>
@@ -26,4 +95,38 @@
   </tbody>
 </table></div></section>
 {% include "pagination.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const categories = {{ taxonomy_options | tojson }};
+  const category = document.getElementById("campaign-category");
+  const subcategory = document.getElementById("campaign-subcategory");
+  const target = document.getElementById("target-alias");
+  const confirmation = document.getElementById("deployed-confirmation");
+  const renderSubcategories = () => {
+    const selected = subcategory.dataset.selected || subcategory.value;
+    const match = categories.find((item) => item.id === category.value);
+    subcategory.replaceChildren(new Option("Automatic within category", ""));
+    for (const item of match?.subcategories || []) {
+      subcategory.add(new Option(item.id.replaceAll("_", " "), item.id));
+    }
+    subcategory.disabled = !match;
+    if (selected && ![...subcategory.options].some((option) => option.value === selected)) {
+      subcategory.add(new Option(`Invalid selection: ${selected}`, selected));
+    }
+    if ([...subcategory.options].some((option) => option.value === selected)) {
+      subcategory.value = selected;
+    }
+    subcategory.dataset.selected = "";
+  };
+  const renderConfirmation = () => {
+    confirmation.hidden = target.value !== "deployed";
+  };
+  category.addEventListener("change", renderSubcategories);
+  target.addEventListener("change", renderConfirmation);
+  renderSubcategories();
+  renderConfirmation();
+})();
+</script>
 {% endblock %}

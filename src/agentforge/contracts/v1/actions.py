@@ -90,6 +90,8 @@ class InvokeApprovedApiRequestActionV1(ActionBaseV1):
     action_type: Literal[ActionTypeV1.INVOKE_APPROVED_API_REQUEST]
     endpoint_id: Identifier
     method: ApprovedHttpMethodV1
+    credential_mode: Literal["endpoint_default", "missing", "invalid", "valid"] = "endpoint_default"
+    correlation_mode: Literal["valid", "missing", "invalid", "mismatch"] = "valid"
     query: dict[str, JsonValue] = Field(default_factory=dict, max_length=25)
     body: dict[str, JsonValue] = Field(default_factory=dict)
 

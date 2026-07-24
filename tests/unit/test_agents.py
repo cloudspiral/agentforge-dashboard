@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 import pytest
-from agents import Agent, RunConfig
+from agents import Agent, AgentOutputSchema, RunConfig
 from agents.exceptions import ModelBehaviorError, ModelRefusalError
 from agents.usage import Usage
 from openai import APIStatusError
@@ -27,8 +27,8 @@ from agentforge.agents import (
 )
 from agentforge.contracts.v1 import (
     AgentErrorCodeV1,
-    CampaignObjectiveV1,
     JudgeVerdictV1,
+    OrchestratorDecisionV2,
     ProposedAttackV1,
     VulnerabilityReportV1,
 )
@@ -136,12 +136,47 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    ("agent_type", "output_type", "model", "max_tokens"),
+    (
+        "agent_type",
+        "output_type",
+        "model",
+        "max_tokens",
+        "prompt_version",
+        "strict_json_schema",
+    ),
     [
-        (OrchestratorAgent, CampaignObjectiveV1, "gpt-5.6-terra", 900),
-        (AttackGeneratorAgent, ProposedAttackV1, "gpt-5.6-terra", 1200),
-        (JudgeAgent, JudgeVerdictV1, "gpt-5.6-terra", 1000),
-        (DocumentationAgent, VulnerabilityReportV1, "gpt-5.6-luna", 1800),
+        (
+            OrchestratorAgent,
+            OrchestratorDecisionV2,
+            "gpt-5.6-terra",
+            900,
+            "orchestrator-v4-2026-07-24",
+            False,
+        ),
+        (
+            AttackGeneratorAgent,
+            ProposedAttackV1,
+            "gpt-5.6-terra",
+            1200,
+            "attack-generator-v4-2026-07-24",
+            False,
+        ),
+        (
+            JudgeAgent,
+            JudgeVerdictV1,
+            "gpt-5.6-terra",
+            1000,
+            "judge-v3-2026-07-24",
+            True,
+        ),
+        (
+            DocumentationAgent,
+            VulnerabilityReportV1,
+            "gpt-5.6-luna",
+            1800,
+            "documentation-v4-2026-07-24",
+            False,
+        ),
     ],
 )
 @pytest.mark.asyncio
@@ -150,6 +185,8 @@ async def test_roles_use_one_turn_typed_agents_without_tools_or_handoffs(
     output_type: type[Any],
     model: str,
     max_tokens: int,
+    prompt_version: str,
+    strict_json_schema: bool,
 ) -> None:
     expected = _output(output_type)
     runner = FakeRunner(_usage_result(expected))
@@ -164,14 +201,16 @@ async def test_roles_use_one_turn_typed_agents_without_tools_or_handoffs(
     assert outcome.succeeded is True
     assert outcome.output is expected
     assert outcome.model == model
-    assert outcome.prompt_version.endswith("v1-2026-07-21")
+    assert outcome.prompt_version == prompt_version
     assert len(outcome.prompt_sha256) == 64
     assert outcome.sdk_attempts == 1
 
     call = runner.calls[0]
     assert call.max_turns == 1
     assert call.agent.model == model
-    assert call.agent.output_type is output_type
+    assert isinstance(call.agent.output_type, AgentOutputSchema)
+    assert call.agent.output_type.output_type is output_type
+    assert call.agent.output_type.is_strict_json_schema() is strict_json_schema
     assert call.agent.tools == []
     assert call.agent.handoffs == []
     assert call.agent.mcp_servers == []
@@ -302,7 +341,7 @@ async def test_credentialless_run_returns_typed_failure_without_calling_runner()
 
 @pytest.mark.asyncio
 async def test_only_429_and_5xx_are_retried_with_bounded_backoff() -> None:
-    output = _output(CampaignObjectiveV1)
+    output = _output(OrchestratorDecisionV2)
     runner = FakeRunner(
         _status_error(429),
         _status_error(503),
@@ -382,6 +421,23 @@ async def test_invalid_fake_runner_output_is_a_nonretryable_contract_failure() -
 
 
 @pytest.mark.asyncio
+async def test_unexpected_sdk_failure_records_only_the_safe_exception_type() -> None:
+    runner = FakeRunner(RuntimeError("private provider payload must not cross the boundary"))
+    adapter = AttackGeneratorAgent(**_agent_options(runner))
+
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.error is not None
+    assert outcome.error.code == AgentErrorCodeV1.UNEXPECTED_INTERNAL_ERROR
+    assert outcome.error.sanitized_details["exception_type"] == "RuntimeError"
+    assert "private provider payload" not in json.dumps(outcome.error.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
 async def test_judge_uses_terra_unless_controller_explicitly_selects_sol() -> None:
     output = _output(JudgeVerdictV1)
     runner = FakeRunner(_usage_result(output), _usage_result(output))
@@ -409,7 +465,7 @@ async def test_judge_uses_terra_unless_controller_explicitly_selects_sol() -> No
 
 @pytest.mark.asyncio
 async def test_langfuse_and_sdk_trace_scopes_receive_hashes_not_payloads() -> None:
-    output = _output(CampaignObjectiveV1)
+    output = _output(OrchestratorDecisionV2)
     runner = FakeRunner(_usage_result(output))
     telemetry = FakeTelemetry()
     traces: list[dict[str, Any]] = []
@@ -451,6 +507,26 @@ def test_pricing_catalog_rejects_unknown_models() -> None:
 
     with pytest.raises(ValueError, match="no verified pricing"):
         catalog.price_for("unpriced-model")
+
+
+def test_adapter_exposes_conservative_pre_call_budget_reservation() -> None:
+    adapter = OrchestratorAgent(
+        **_agent_options(
+            FakeRunner(),
+            settings=_settings(),
+        )
+    )
+
+    reservation = adapter.maximum_invocation_cost_usd
+
+    assert reservation > 0
+    assert reservation == adapter.pricing.maximum_invocation_cost(
+        adapter.model,
+        max_input_characters=32_000,
+        max_output_tokens=900,
+        max_turns=1,
+        provider_attempts=3,
+    )
 
 
 @pytest.mark.asyncio

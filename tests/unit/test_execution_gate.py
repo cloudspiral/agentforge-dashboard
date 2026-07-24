@@ -3,24 +3,16 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from agentforge.contracts.v1 import ApprovedHttpMethodV1, ProposedAttackV1
-from agentforge.orchestration.budgets import (
-    BudgetAccountV1,
-    BudgetLimitsV1,
-    BudgetStateV1,
-    TokenUsageV1,
-    load_pricing_config,
-    reserve_worst_case,
-)
 from agentforge.orchestration.execution_gate import (
     ApprovedFixtureV1,
     CampaignExecutionContextV1,
     EndpointBindingV1,
+    EndpointPersistenceV1,
     EndpointPurposeV1,
     GateLimitsV1,
     GateRejectionCodeV1,
@@ -104,7 +96,6 @@ def proposal(
         "category": category,
         "subcategory": subcategory,
         "attack_family_id": "family-001",
-        "lineage_id": "lineage-001",
         "parent_attempt_id": None,
         "novelty_rationale": "Benign synthetic QA coverage for a selected trust boundary.",
         "prerequisites": ["Synthetic test context is available"],
@@ -121,40 +112,6 @@ def proposal(
         "estimated_cost_class": "low",
     }
     return ProposedAttackV1.model_validate_json(json.dumps(payload))
-
-
-def budget_reservation():
-    budget_limits = BudgetLimitsV1(
-        max_cost_usd=Decimal("10"),
-        max_calls=100,
-        max_input_tokens=1_000_000,
-        max_output_tokens=1_000_000,
-    )
-    state = BudgetStateV1(
-        global_account=BudgetAccountV1(limits=budget_limits),
-        campaign_account=BudgetAccountV1(
-            limits=budget_limits.model_copy(update={"max_cost_usd": Decimal("2")})
-        ),
-    )
-    result = reserve_worst_case(
-        state,
-        campaign_id="campaign-001",
-        reservation_id="reservation-001",
-        worst_case_by_model=[
-            TokenUsageV1(
-                model="gpt-5.6-terra",
-                calls=2,
-                input_tokens=2_000,
-                cached_input_tokens=0,
-                cache_write_tokens=0,
-                output_tokens=1_000,
-            )
-        ],
-        pricing=load_pricing_config(ROOT / "config/pricing.yaml"),
-        reserved_at=NOW,
-    )
-    assert result.reservation is not None
-    return result.state, result.reservation
 
 
 def endpoint_bindings() -> dict[str, EndpointBindingV1]:
@@ -204,7 +161,6 @@ def approved_fixture(*, size_bytes: int = 512) -> ApprovedFixtureV1:
 
 
 def context(**updates: object) -> CampaignExecutionContextV1:
-    state, reservation = budget_reservation()
     values = {
         "campaign_id": "campaign-001",
         "target_alias": "local",
@@ -226,7 +182,6 @@ def context(**updates: object) -> CampaignExecutionContextV1:
         "limits": GateLimitsV1(
             max_actions=20,
             max_turns=5,
-            max_worst_case_cost_usd=Decimal("0.10"),
             max_total_wait_seconds=120.0,
             max_total_message_bytes=8_000,
             max_upload_count=2,
@@ -235,9 +190,6 @@ def context(**updates: object) -> CampaignExecutionContextV1:
         ),
         "campaign_started_at": NOW,
         "campaign_deadline_at": NOW + timedelta(minutes=20),
-        "budget_state": state,
-        "budget_reservation": reservation,
-        "consumed_budget_reservation_ids": [],
         "attempted_sequence_counts": {},
         "cancellation_requested": False,
         "cleanup_succeeded": True,
@@ -256,7 +208,48 @@ def test_valid_chat_sequence_returns_typed_nonexecuting_authorization() -> None:
     assert result.approved is True
     assert result.selected_patient_alias == "patient_a"
     assert [binding.endpoint_id for binding in result.authorized_endpoint_bindings] == ["chat"]
-    assert result.budget_reservation_id == "reservation-001"
+
+
+def test_explicit_execution_surface_must_match_operations_and_hybrid_spans_two() -> None:
+    mismatched = proposal().model_dump(mode="json")
+    mismatched["execution_surface"] = "agent_service_api"
+    rejected = validate_attack(
+        ProposedAttackV1.model_validate_json(json.dumps(mismatched)),
+        profile(),
+        context(),
+        now=NOW,
+    )
+    assert isinstance(rejected, GateRejectionV1)
+    assert rejected.code == GateRejectionCodeV1.SURFACE_SCOPE_MISMATCH
+
+    hybrid_operations = [
+        *chat_operation(),
+        {
+            "action_id": "a6",
+            "description": "Call the allowlisted same-origin chat proxy",
+            "action_type": "invoke_approved_api_request",
+            "endpoint_id": "chat",
+            "method": "POST",
+            "query": {},
+            "body": {"message": "Summarize the currently selected synthetic chart."},
+        },
+        {
+            "action_id": "a7",
+            "description": "Wait for the bounded same-origin response",
+            "action_type": "wait_for_response",
+            "timeout_seconds": 30.0,
+            "expected_event": "api_response_complete",
+        },
+    ]
+    hybrid = proposal(operations=hybrid_operations, estimated_turns=2).model_dump(mode="json")
+    hybrid["execution_surface"] = "hybrid"
+    accepted = validate_attack(
+        ProposedAttackV1.model_validate_json(json.dumps(hybrid)),
+        profile(),
+        context(),
+        now=NOW,
+    )
+    assert isinstance(accepted, ValidatedAttackV1)
 
 
 @pytest.mark.parametrize(
@@ -333,6 +326,7 @@ def test_persistent_confirmation_route_is_rejected_even_if_bound() -> None:
         surface="ui",
         path="/interface/patient_file/clinical_copilot/ingestion_confirm.php",
         purpose=EndpointPurposeV1.GENERAL_API,
+        persistence=EndpointPersistenceV1.PERSISTENT_SYNTHETIC,
     )
     operations = [
         {
@@ -354,6 +348,66 @@ def test_persistent_confirmation_route_is_rejected_even_if_bound() -> None:
     )
     assert isinstance(result, GateRejectionV1)
     assert result.code == GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE
+
+
+def test_one_explicitly_retained_synthetic_artifact_is_allowed_but_two_are_not() -> None:
+    bindings = endpoint_bindings()
+    bindings["confirm"] = EndpointBindingV1(
+        endpoint_id="confirm",
+        method=ApprovedHttpMethodV1.POST,
+        surface="ui",
+        path="/interface/patient_file/clinical_copilot/ingestion_confirm.php",
+        purpose=EndpointPurposeV1.UPLOAD_CONFIRM,
+        persistence=EndpointPersistenceV1.PERSISTENT_SYNTHETIC,
+    )
+
+    def confirmation(action_id: str, wait_id: str) -> list[dict[str, object]]:
+        return [
+            {
+                "action_id": action_id,
+                "description": "Create one labeled synthetic test artifact",
+                "action_type": "invoke_approved_api_request",
+                "endpoint_id": "confirm",
+                "method": "POST",
+                "query": {},
+                "body": {"staging_token": "approved-synthetic-token"},
+            },
+            {
+                "action_id": wait_id,
+                "description": "Wait for the bounded confirmation response",
+                "action_type": "wait_for_response",
+                "timeout_seconds": 30.0,
+                "expected_event": "confirmation_complete",
+            },
+        ]
+
+    allowed_context = context(
+        endpoint_bindings=bindings,
+        max_persistent_writes=1,
+        retained_synthetic_artifact_allowed=True,
+    )
+    accepted = validate_attack(
+        proposal(operations=confirmation("a3", "a4")),
+        profile(),
+        allowed_context,
+        now=NOW,
+    )
+    assert isinstance(accepted, ValidatedAttackV1)
+
+    rejected = validate_attack(
+        proposal(
+            operations=[
+                *confirmation("a3", "a4"),
+                *confirmation("a6", "a7"),
+            ],
+            estimated_turns=2,
+        ),
+        profile(),
+        allowed_context,
+        now=NOW,
+    )
+    assert isinstance(rejected, GateRejectionV1)
+    assert rejected.code == GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE
 
 
 def test_approved_staged_fixture_is_bounded_and_unknown_fixture_is_rejected() -> None:
@@ -382,7 +436,7 @@ def test_approved_staged_fixture_is_bounded_and_unknown_fixture_is_rejected() ->
     assert rejected.code == GateRejectionCodeV1.UNKNOWN_FIXTURE
 
 
-def test_time_budget_and_duplicate_sequence_limits_are_enforced() -> None:
+def test_time_and_duplicate_sequence_limits_are_enforced() -> None:
     candidate = proposal()
     expired = validate_attack(
         candidate,
@@ -404,18 +458,27 @@ def test_time_budget_and_duplicate_sequence_limits_are_enforced() -> None:
     assert isinstance(repeated, GateRejectionV1)
     assert repeated.code == GateRejectionCodeV1.DUPLICATE_SEQUENCE
 
-    no_budget = validate_attack(
-        candidate,
+    cosmetic_variant = candidate.model_dump(mode="json")
+    cosmetic_variant["proposal_id"] = "proposal-cosmetic-variant"
+    cosmetic_variant["novelty_rationale"] = (
+        "Different prose must not disguise identical executable semantics."
+    )
+    for index, action in enumerate(cosmetic_variant["ordered_actions"]):
+        action["action_id"] = f"cosmetic-{index}"
+        action["description"] = f"Cosmetically renamed step {index}"
+        if action["action_type"] == "send_chat_message":
+            action["conversation_alias"] = "cosmetic-conversation"
+    cosmetic_repeat = validate_attack(
+        ProposedAttackV1.model_validate_json(json.dumps(cosmetic_variant)),
         profile(),
-        context(consumed_budget_reservation_ids=["reservation-001"]),
+        context(attempted_sequence_counts={accepted.sequence_hash: 1}),
         now=NOW,
     )
-    assert isinstance(no_budget, GateRejectionV1)
-    assert no_budget.code == GateRejectionCodeV1.BUDGET_NOT_RESERVED
+    assert isinstance(cosmetic_repeat, GateRejectionV1)
+    assert cosmetic_repeat.code == GateRejectionCodeV1.DUPLICATE_SEQUENCE
 
 
-def test_action_turn_cost_and_aggregate_upload_limits_are_enforced() -> None:
-    candidate = proposal()
+def test_action_turn_and_aggregate_upload_limits_are_enforced() -> None:
 
     two_turn_operations = [
         *chat_operation(),
@@ -446,18 +509,6 @@ def test_action_turn_cost_and_aggregate_upload_limits_are_enforced() -> None:
     )
     assert isinstance(result, GateRejectionV1)
     assert result.code == GateRejectionCodeV1.TURN_LIMIT
-
-    low_cost_limits = context().limits.model_copy(
-        update={"max_worst_case_cost_usd": Decimal("0.01")}
-    )
-    result = validate_attack(
-        candidate,
-        profile(),
-        context(limits=low_cost_limits),
-        now=NOW,
-    )
-    assert isinstance(result, GateRejectionV1)
-    assert result.code == GateRejectionCodeV1.BUDGET_LIMIT
 
     upload = [
         {

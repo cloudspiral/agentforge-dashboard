@@ -1,5 +1,5 @@
 schema_version: "1.0"
-updated_at: "2026-07-21"
+updated_at: "2026-07-24"
 roles:
   orchestrator:
     env: OPENAI_ORCHESTRATOR_MODEL
@@ -22,7 +22,7 @@ roles:
     escalation:
       env: OPENAI_JUDGE_ESCALATION_MODEL
       model: gpt-5.6-sol
-      only_when: deterministic_checks_are_ambiguous
+      only_when: explicit_budgeted_judge_recheck
       requires_budget_reservation: true
   documentation:
     env: OPENAI_DOCUMENTATION_MODEL
@@ -34,4 +34,3 @@ common:
   store: false
   automatic_retries: 0
   trace_include_sensitive_data: false
-

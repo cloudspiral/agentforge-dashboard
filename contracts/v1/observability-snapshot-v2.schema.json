@@ -1,0 +1,681 @@
+{
+  "$defs": {
+    "CampaignCostProjectionV2": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Actual Cost Usd"
+        },
+        "campaign_id": {
+          "title": "Campaign Id",
+          "type": "string"
+        },
+        "completed_attempts": {
+          "minimum": 0,
+          "title": "Completed Attempts",
+          "type": "integer"
+        },
+        "projected_remaining_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Projected Remaining Cost Usd"
+        },
+        "remaining_attempts": {
+          "minimum": 0,
+          "title": "Remaining Attempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "campaign_id",
+        "actual_cost_usd",
+        "completed_attempts",
+        "remaining_attempts",
+        "projected_remaining_cost_usd"
+      ],
+      "title": "CampaignCostProjectionV2",
+      "type": "object"
+    },
+    "CostFactV2": {
+      "additionalProperties": false,
+      "properties": {
+        "calls": {
+          "minimum": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "dimension": {
+          "title": "Dimension",
+          "type": "string"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "model_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Model Cost Usd"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dimension",
+        "key",
+        "model_cost_usd",
+        "calls",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "title": "CostFactV2",
+      "type": "object"
+    },
+    "CostSummaryV2": {
+      "additionalProperties": false,
+      "properties": {
+        "active_campaign_projections": {
+          "items": {
+            "$ref": "#/$defs/CampaignCostProjectionV2"
+          },
+          "title": "Active Campaign Projections",
+          "type": "array"
+        },
+        "completed_attempts": {
+          "minimum": 0,
+          "title": "Completed Attempts",
+          "type": "integer"
+        },
+        "cost_per_completed_attempt_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Cost Per Completed Attempt Usd"
+        },
+        "recent_marginal_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Recent Marginal Cost Usd"
+        },
+        "total_model_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Total Model Cost Usd"
+        }
+      },
+      "required": [
+        "total_model_cost_usd",
+        "completed_attempts",
+        "cost_per_completed_attempt_usd",
+        "recent_marginal_cost_usd",
+        "active_campaign_projections"
+      ],
+      "title": "CostSummaryV2",
+      "type": "object"
+    },
+    "CoverageRowV2": {
+      "additionalProperties": false,
+      "properties": {
+        "attempted": {
+          "minimum": 0,
+          "title": "Attempted",
+          "type": "integer"
+        },
+        "by_provenance": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Provenance",
+          "type": "object"
+        },
+        "by_surface": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Surface",
+          "type": "object"
+        },
+        "by_target_version": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Target Version",
+          "type": "object"
+        },
+        "by_technique": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Technique",
+          "type": "object"
+        },
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "discovery_attempts": {
+          "minimum": 0,
+          "title": "Discovery Attempts",
+          "type": "integer"
+        },
+        "executed": {
+          "minimum": 0,
+          "title": "Executed",
+          "type": "integer"
+        },
+        "fuzz_variants": {
+          "minimum": 0,
+          "title": "Fuzz Variants",
+          "type": "integer"
+        },
+        "outcomes": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Outcomes",
+          "type": "object"
+        },
+        "regression_cases": {
+          "minimum": 0,
+          "title": "Regression Cases",
+          "type": "integer"
+        },
+        "regression_replays": {
+          "minimum": 0,
+          "title": "Regression Replays",
+          "type": "integer"
+        },
+        "seed_cases": {
+          "minimum": 0,
+          "title": "Seed Cases",
+          "type": "integer"
+        },
+        "subcategory": {
+          "title": "Subcategory",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "subcategory",
+        "description",
+        "seed_cases",
+        "discovery_attempts",
+        "fuzz_variants",
+        "regression_cases",
+        "regression_replays",
+        "attempted",
+        "executed",
+        "outcomes",
+        "by_target_version",
+        "by_surface",
+        "by_technique",
+        "by_provenance"
+      ],
+      "title": "CoverageRowV2",
+      "type": "object"
+    },
+    "ExecutionSurfaceV2": {
+      "description": "Controller-owned execution surfaces available to planning agents.",
+      "enum": [
+        "openemr_ui",
+        "openemr_same_origin_api",
+        "agent_service_api",
+        "staged_document",
+        "hybrid"
+      ],
+      "title": "ExecutionSurfaceV2",
+      "type": "string"
+    },
+    "OutcomeLaneV2": {
+      "additionalProperties": false,
+      "properties": {
+        "attempted": {
+          "minimum": 0,
+          "title": "Attempted",
+          "type": "integer"
+        },
+        "errors": {
+          "minimum": 0,
+          "title": "Errors",
+          "type": "integer"
+        },
+        "executed": {
+          "minimum": 0,
+          "title": "Executed",
+          "type": "integer"
+        },
+        "lane": {
+          "title": "Lane",
+          "type": "string"
+        },
+        "no_verdict": {
+          "minimum": 0,
+          "title": "No Verdict",
+          "type": "integer"
+        },
+        "outcomes": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Outcomes",
+          "type": "object"
+        }
+      },
+      "required": [
+        "lane",
+        "attempted",
+        "executed",
+        "outcomes",
+        "no_verdict",
+        "errors"
+      ],
+      "title": "OutcomeLaneV2",
+      "type": "object"
+    },
+    "ResilienceTransitionV2": {
+      "additionalProperties": false,
+      "properties": {
+        "cross_category_regression": {
+          "title": "Cross Category Regression",
+          "type": "boolean"
+        },
+        "improved": {
+          "minimum": 0,
+          "title": "Improved",
+          "type": "integer"
+        },
+        "inconclusive_or_error": {
+          "minimum": 0,
+          "title": "Inconclusive Or Error",
+          "type": "integer"
+        },
+        "matched_case_count": {
+          "minimum": 0,
+          "title": "Matched Case Count",
+          "type": "integer"
+        },
+        "previous_target_version": {
+          "title": "Previous Target Version",
+          "type": "string"
+        },
+        "regressed": {
+          "minimum": 0,
+          "title": "Regressed",
+          "type": "integer"
+        },
+        "target_version": {
+          "title": "Target Version",
+          "type": "string"
+        },
+        "unchanged_reproduced": {
+          "minimum": 0,
+          "title": "Unchanged Reproduced",
+          "type": "integer"
+        },
+        "unchanged_secure": {
+          "minimum": 0,
+          "title": "Unchanged Secure",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "previous_target_version",
+        "target_version",
+        "matched_case_count",
+        "improved",
+        "regressed",
+        "unchanged_secure",
+        "unchanged_reproduced",
+        "inconclusive_or_error",
+        "cross_category_regression"
+      ],
+      "title": "ResilienceTransitionV2",
+      "type": "object"
+    },
+    "SurfaceCapabilityFactV2": {
+      "additionalProperties": false,
+      "properties": {
+        "blocked_reason": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Blocked Reason"
+        },
+        "endpoint_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Endpoint Ids",
+          "type": "array"
+        },
+        "supported": {
+          "title": "Supported",
+          "type": "boolean"
+        },
+        "surface": {
+          "$ref": "#/$defs/ExecutionSurfaceV2"
+        }
+      },
+      "required": [
+        "surface",
+        "supported"
+      ],
+      "title": "SurfaceCapabilityFactV2",
+      "type": "object"
+    },
+    "TimelineFactV2": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "title": "Actor",
+          "type": "string"
+        },
+        "attempt_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Attempt Id"
+        },
+        "campaign_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Campaign Id"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Cost Usd"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_type": {
+          "title": "Event Type",
+          "type": "string"
+        },
+        "finding_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Finding Id"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latency Ms"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Prompt Version"
+        },
+        "regression_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Regression Run Id"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Role"
+        },
+        "trace_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Trace Id"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "event_type",
+        "actor",
+        "campaign_id",
+        "attempt_id",
+        "finding_id",
+        "regression_run_id",
+        "role",
+        "model",
+        "prompt_version",
+        "trace_id",
+        "latency_ms",
+        "cost_usd",
+        "details"
+      ],
+      "title": "TimelineFactV2",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cost_facts": {
+      "items": {
+        "$ref": "#/$defs/CostFactV2"
+      },
+      "title": "Cost Facts",
+      "type": "array"
+    },
+    "cost_summary": {
+      "$ref": "#/$defs/CostSummaryV2"
+    },
+    "coverage": {
+      "items": {
+        "$ref": "#/$defs/CoverageRowV2"
+      },
+      "title": "Coverage",
+      "type": "array"
+    },
+    "finding_lifecycle": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Finding Lifecycle",
+      "type": "object"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "outcome_lanes": {
+      "items": {
+        "$ref": "#/$defs/OutcomeLaneV2"
+      },
+      "title": "Outcome Lanes",
+      "type": "array"
+    },
+    "resilience_transitions": {
+      "items": {
+        "$ref": "#/$defs/ResilienceTransitionV2"
+      },
+      "title": "Resilience Transitions",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "v2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "surface_capabilities": {
+      "items": {
+        "$ref": "#/$defs/SurfaceCapabilityFactV2"
+      },
+      "title": "Surface Capabilities",
+      "type": "array"
+    },
+    "taxonomy_version": {
+      "title": "Taxonomy Version",
+      "type": "string"
+    },
+    "timeline": {
+      "items": {
+        "$ref": "#/$defs/TimelineFactV2"
+      },
+      "title": "Timeline",
+      "type": "array"
+    }
+  },
+  "required": [
+    "generated_at",
+    "taxonomy_version",
+    "surface_capabilities",
+    "coverage",
+    "outcome_lanes",
+    "finding_lifecycle",
+    "resilience_transitions",
+    "cost_summary",
+    "cost_facts",
+    "timeline"
+  ],
+  "title": "PlatformObservabilitySnapshotV2",
+  "type": "object"
+}

@@ -10,12 +10,32 @@
       "title": "AttackSurfaceV1",
       "type": "string"
     },
+    "AttackTechniqueV2": {
+      "enum": [
+        "scenario",
+        "fuzzing"
+      ],
+      "title": "AttackTechniqueV2",
+      "type": "string"
+    },
     "CampaignTypeV1": {
       "enum": [
         "discovery",
         "regression"
       ],
       "title": "CampaignTypeV1",
+      "type": "string"
+    },
+    "ExecutionSurfaceV2": {
+      "description": "Controller-owned execution surfaces available to planning agents.",
+      "enum": [
+        "openemr_ui",
+        "openemr_same_origin_api",
+        "agent_service_api",
+        "staged_document",
+        "hybrid"
+      ],
+      "title": "ExecutionSurfaceV2",
       "type": "string"
     },
     "JsonValue": {},
@@ -108,21 +128,23 @@
           "default": null,
           "title": "Evidence Hash"
         },
-        "lineage_id": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-          "title": "Lineage Id",
-          "type": "string"
-        },
-        "mutation_generation": {
-          "maximum": 20,
-          "minimum": 0,
-          "title": "Mutation Generation",
-          "type": "integer"
-        },
         "outcome": {
           "$ref": "#/$defs/PriorAttemptOutcomeV1"
+        },
+        "parent_attempt_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Attempt Id"
         },
         "sequence_hash": {
           "pattern": "^[0-9a-f]{64}$",
@@ -139,8 +161,6 @@
       "required": [
         "attempt_id",
         "attack_family_id",
-        "lineage_id",
-        "mutation_generation",
         "outcome",
         "summary",
         "sequence_hash"
@@ -151,18 +171,6 @@
     "RemainingBudgetAndLimitsV1": {
       "additionalProperties": false,
       "properties": {
-        "max_consecutive_no_signal": {
-          "maximum": 100,
-          "minimum": 1,
-          "title": "Max Consecutive No Signal",
-          "type": "integer"
-        },
-        "max_mutations_per_lineage": {
-          "maximum": 20,
-          "minimum": 0,
-          "title": "Max Mutations Per Lineage",
-          "type": "integer"
-        },
         "remaining_attempts": {
           "maximum": 10000,
           "minimum": 0,
@@ -210,9 +218,7 @@
         "remaining_duration_seconds",
         "remaining_model_calls",
         "remaining_input_tokens",
-        "remaining_output_tokens",
-        "max_mutations_per_lineage",
-        "max_consecutive_no_signal"
+        "remaining_output_tokens"
       ],
       "title": "RemainingBudgetAndLimitsV1",
       "type": "object"
@@ -220,7 +226,8 @@
     "RequestedActionV1": {
       "enum": [
         "new_attack",
-        "mutation"
+        "mutation",
+        "stop"
       ],
       "title": "RequestedActionV1",
       "type": "string"
@@ -240,6 +247,10 @@
     },
     "campaign_type": {
       "$ref": "#/$defs/CampaignTypeV1"
+    },
+    "execution_surface": {
+      "$ref": "#/$defs/ExecutionSurfaceV2",
+      "default": "openemr_ui"
     },
     "mutation_source_attempt_id": {
       "anyOf": [
@@ -311,6 +322,10 @@
       "minLength": 1,
       "title": "Target Version",
       "type": "string"
+    },
+    "technique": {
+      "$ref": "#/$defs/AttackTechniqueV2",
+      "default": "scenario"
     }
   },
   "required": [

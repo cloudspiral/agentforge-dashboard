@@ -14,7 +14,8 @@ flowchart TD
     Runner --> W1["Synthetic OpenEMR target"]
     Controller -.-> LF["Langfuse optional"]
     Controller -.-> Prom["Prometheus metrics"]
-    Controller --> Art["Local reports/artifacts"]
+    Controller --> PG
+    PG -. "derive only after commit" .-> Art["Local reports/artifacts"]
 ```
 
 | Dependency | Owner/config | Required? | Failure semantics |
@@ -25,7 +26,7 @@ flowchart TD
 | Prometheus scraper | metrics endpoint/deployment | No for correctness | Loss affects monitoring, not verdict; avoid sensitive labels |
 | W1 OpenEMR | exact target-profile alias and version | Required for live attempt | Fail closed on host/version/session/patient/cleanup uncertainty |
 | Browser binary | Playwright-matched Chromium | Required for UI runner | Attempt error/inconclusive; no HTTP shortcut for chat |
-| Reports/artifacts filesystem | configured bounded directories | Required for export/artifacts | Store typed error; do not claim publication or complete evidence |
+| Reports/artifacts filesystem | configured bounded directories | Required for verified derived exports, never canonical state | Preserve PostgreSQL evidence/report, store typed failure, and regenerate only from a matching record |
 | Railway/Compose | deployment configuration | Optional runtime choices | Railway automatic deployment and Compose configuration verified; readiness fails closed on database/worker configuration |
 
 The platform must not depend on the target database, Docker socket, arbitrary web access, model-chosen URLs, saved browser state, or Langfuse for evidence recovery.

@@ -135,7 +135,7 @@ class UploadProfileV1(ProfileModel):
 
 class EndpointRuleV1(ProfileModel):
     method: Literal["GET", "HEAD", "POST"]
-    surface: Literal["status", "ui"]
+    surface: Literal["status", "ui", "agent_service"]
     path: str
 
     @field_validator("path")

@@ -3,8 +3,11 @@ from __future__ import annotations
 import hmac
 import uuid
 from collections.abc import Generator
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from agentforge.api.schemas import (
@@ -31,7 +34,22 @@ from agentforge.api.schemas import (
     TargetDeploymentHookRequest,
 )
 from agentforge.api.services import ApplicationService
-from agentforge.persistence.models import AgentRun, AttackAttempt, Campaign, Finding, RegressionRun
+from agentforge.evaluation import load_seed_cases
+from agentforge.evidence import (
+    EvidenceArtifactError,
+    EvidenceArtifactMissing,
+    EvidenceArtifactStore,
+)
+from agentforge.observability import PlatformObservabilityService
+from agentforge.orchestration.objectives import surface_capability_facts
+from agentforge.persistence.models import (
+    AgentRun,
+    AttackAttempt,
+    Campaign,
+    Finding,
+    RegressionResult,
+    RegressionRun,
+)
 from agentforge.persistence.repositories import (
     AgentRunRepository,
     CampaignNotFound,
@@ -41,6 +59,7 @@ from agentforge.persistence.repositories import (
     RegressionRunRepository,
     ReportRepository,
 )
+from agentforge.reports import create_report_lifecycle_version, export_stored_report
 
 router = APIRouter(prefix="/api/v1")
 ERROR_RESPONSES = {
@@ -142,17 +161,35 @@ def _campaign(entity: Campaign) -> CampaignResponse:
 def _attempt_summary(entity: AttackAttempt) -> dict[str, object]:
     return {
         "id": str(entity.id),
-        "status": entity.status,
+        "state": entity.state,
+        "failure": entity.failure,
         "category": entity.category,
         "subcategory": entity.subcategory,
         "attack_family_id": entity.attack_family_id,
-        "mutation_generation": entity.mutation_generation,
+        "parent_attempt_id": (
+            str(entity.parent_attempt_id) if entity.parent_attempt_id is not None else None
+        ),
+        "proposal_source": entity.proposal_source,
+        "objective_source": entity.objective_source,
+        "sequence_hash": entity.sequence_hash,
         "evidence_hash": entity.evidence_hash,
+        "evidence_download_url": (
+            f"/api/v1/campaigns/{entity.campaign_id}/attempts/{entity.id}/evidence"
+            if entity.evidence_payload is not None
+            else None
+        ),
         "estimated_cost_usd": str(entity.estimated_cost_usd),
         "latency_ms": entity.latency_ms,
         "langfuse_trace_id": entity.langfuse_trace_id,
         "created_at": entity.created_at.isoformat(),
     }
+
+
+def _evidence_store(request: Request) -> EvidenceArtifactStore:
+    root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+    configured = Path(getattr(request.app.state.settings, "artifacts_dir", "artifacts"))
+    artifacts = configured if configured.is_absolute() else root / configured
+    return EvidenceArtifactStore(artifacts / "evidence")
 
 
 def _finding(entity: Finding) -> FindingResponse:
@@ -197,8 +234,8 @@ def _regression(entity: RegressionRun) -> RegressionRunResponse:
                 case_id=result.case_id,
                 case_version=result.case_version,
                 outcome=result.outcome,
-                deterministic_results=result.deterministic_results,
-                evidence_references=result.evidence_references,
+                judge_result=result.judge_result,
+                evidence_hash=result.evidence_hash,
                 estimated_cost_usd=result.estimated_cost_usd,
                 latency_ms=result.latency_ms,
                 trace_id=result.trace_id,
@@ -223,6 +260,7 @@ def _agent_run(entity: AgentRun) -> AgentRunResponse:
         estimated_cost_usd=entity.estimated_cost_usd,
         latency_ms=entity.latency_ms,
         langfuse_trace_id=entity.langfuse_trace_id,
+        output_payload=entity.output_payload,
         typed_error=entity.typed_error,
         created_at=entity.created_at,
     )
@@ -330,6 +368,58 @@ def get_campaign(
             )
             for event in entity.events
         ],
+    )
+
+
+@router.get(
+    "/campaigns/{campaign_id}/attempts/{attempt_id}/evidence",
+    response_class=Response,
+    responses={**ERROR_RESPONSES, 409: {"model": ErrorResponse}},
+    dependencies=[Depends(require_api_read_token)],
+)
+def download_attempt_evidence(
+    request: Request,
+    campaign_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+    session: Session = Depends(get_session),
+) -> Response:
+    attempt = session.get(AttackAttempt, attempt_id)
+    if (
+        attempt is None
+        or attempt.campaign_id != campaign_id
+        or not isinstance(attempt.evidence_payload, dict)
+    ):
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            "evidence_not_found",
+            "durable evidence is unavailable for this campaign attempt",
+        )
+    try:
+        content = _evidence_store(request).load_verified(
+            campaign_id=campaign_id,
+            attempt_id=attempt_id,
+            database_payload=attempt.evidence_payload,
+        )
+    except EvidenceArtifactMissing as exc:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            "evidence_artifact_unavailable",
+            "the database evidence exists but its verified export is unavailable",
+        ) from exc
+    except EvidenceArtifactError as exc:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            "evidence_artifact_corrupt",
+            "the evidence export does not match its PostgreSQL source record",
+        ) from exc
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": (f'attachment; filename="{attempt_id}.evidence.json"'),
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -457,12 +547,67 @@ def get_finding(finding_id: uuid.UUID, session: Session = Depends(get_session)) 
 def update_finding_status(
     finding_id: uuid.UUID,
     body: FindingStatusUpdate,
+    request: Request,
     session: Session = Depends(get_session),
 ) -> FindingResponse:
     try:
-        return _finding(FindingRepository(session).set_status(finding_id, body.status))
+        evidence = (
+            session.get(RegressionResult, body.regression_result_id)
+            if body.regression_result_id is not None
+            else None
+        )
+        if body.regression_result_id is not None and evidence is None:
+            raise ValueError("regression result evidence was not found")
+        finding = FindingRepository(session).transition(
+            finding_id,
+            action=body.action,
+            actor="api:platform-token",
+            reason=body.reason,
+            evidence_reference=(
+                str(body.regression_result_id) if body.regression_result_id is not None else None
+            ),
+            secure_evidence_on_changed_version=bool(
+                evidence is not None
+                and evidence.outcome == "secure_pass"
+                and evidence.changed_target_version
+            ),
+            manual_override=body.manual_override,
+        )
+        root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+        version = create_report_lifecycle_version(
+            session,
+            finding=finding,
+            template_path=root / "config" / "report-template.md",
+            event_details={
+                "action": body.action,
+                "actor": "api:platform-token",
+                "reason": body.reason,
+                "evidence_reference": (
+                    str(body.regression_result_id)
+                    if body.regression_result_id is not None
+                    else None
+                ),
+                "manual_override": body.manual_override,
+            },
+        )
+        session.commit()
+        if version is not None:
+            configured = Path(request.app.state.settings.reports_dir)
+            reports_dir = configured if configured.is_absolute() else root / configured
+            version.markdown_path = str(
+                export_stored_report(
+                    version,
+                    vulnerability_id=finding.vulnerability_id,
+                    reports_dir=reports_dir,
+                )
+            )
+            session.commit()
+        session.refresh(finding)
+        return _finding(finding)
     except LookupError as exc:
         raise ApiError(status.HTTP_404_NOT_FOUND, "finding_not_found", "finding not found") from exc
+    except ValueError as exc:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, "invalid_lifecycle_action", str(exc)) from exc
 
 
 @router.get(
@@ -511,8 +656,36 @@ def export_report(
     response_model=CoverageResponse,
     dependencies=[Depends(require_api_read_token)],
 )
-def get_coverage(service: ApplicationService = Depends(get_service)) -> CoverageResponse:
-    return CoverageResponse(rows=service.coverage())
+def get_coverage(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> CoverageResponse:
+    root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+    rows = PlatformObservabilityService(
+        session,
+        taxonomy=request.app.state.taxonomy,
+        seed_cases=load_seed_cases(root / "evals" / "seed-cases"),
+    ).coverage_rows()
+    return CoverageResponse(rows=[item.model_dump(mode="json") for item in rows])
+
+
+@router.get(
+    "/observability",
+    response_model=dict[str, Any],
+    dependencies=[Depends(require_api_read_token)],
+)
+def get_observability(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+    snapshot = PlatformObservabilityService(
+        session,
+        taxonomy=request.app.state.taxonomy,
+        seed_cases=load_seed_cases(root / "evals" / "seed-cases"),
+        surface_capabilities=surface_capability_facts(request.app.state.target_profile.profile),
+    ).snapshot()
+    return snapshot.model_dump(mode="json")
 
 
 @router.get(

@@ -12,7 +12,6 @@ from .common import (
     SCHEMA_VERSION_V1,
     Confidence,
     ContractModel,
-    EvidenceReferenceV1,
     FindingStatusV1,
     Identifier,
     LongText,
@@ -21,14 +20,15 @@ from .common import (
     Sha256Hex,
     ShortText,
 )
-from .evidence import DeterministicAssertionResultV1, TranscriptTurnV1
+from .evidence import AttackEvidenceV1, TranscriptTurnV1
+from .judge import JudgeVerdictV1
 
 
 class ConfirmedFindingSnapshotV1(ContractModel):
     finding_id: Identifier
     vulnerability_id: Identifier
     source_attempt_id: Identifier
-    deduplication_fingerprint: Sha256Hex
+    source_fingerprint: Sha256Hex
     title: ShortText
     severity: SeverityV1
     status: FindingStatusV1
@@ -44,18 +44,6 @@ class ConfirmedFindingSnapshotV1(ContractModel):
     frozen_at: AwareDatetime
 
 
-class MinimalEvidencePackageV1(ContractModel):
-    evidence_hash: Sha256Hex
-    target_version: ShortText
-    exact_action_sequence: list[AttackActionV1] = Field(min_length=1, max_length=30)
-    transcript_excerpts: list[TranscriptTurnV1] = Field(default_factory=list, max_length=30)
-    deterministic_assertion_results: list[DeterministicAssertionResultV1] = Field(
-        default_factory=list,
-        max_length=50,
-    )
-    evidence_references: list[EvidenceReferenceV1] = Field(min_length=1, max_length=50)
-
-
 class ValidationOutcomeV1(StrEnum):
     SECURE_PASS = "secure_pass"  # noqa: S105 - regression outcome, not a credential
     VULNERABILITY_REPRODUCED = "vulnerability_reproduced"
@@ -68,15 +56,16 @@ class FixValidationResultV1(ContractModel):
     outcome: ValidationOutcomeV1
     validated_at: AwareDatetime
     regression_run_id: Identifier | None = None
-    evidence_references: list[EvidenceReferenceV1] = Field(default_factory=list, max_length=50)
+    evidence_hash: Sha256Hex | None = None
     summary: ShortText
 
 
 class DocumentationRequestV1(ContractModel):
     schema_version: Literal[SCHEMA_VERSION_V1]
     confirmed_finding_snapshot: ConfirmedFindingSnapshotV1
-    minimal_evidence_package: MinimalEvidencePackageV1
-    reproduction_result_count: int = Field(ge=1, le=100)
+    exact_action_sequence: list[AttackActionV1] = Field(min_length=1, max_length=30)
+    evidence: AttackEvidenceV1
+    judge_verdict: JudgeVerdictV1
     target_versions: list[ShortText] = Field(min_length=1, max_length=50)
     existing_validation_history: list[FixValidationResultV1] = Field(
         default_factory=list,
@@ -87,8 +76,7 @@ class DocumentationRequestV1(ContractModel):
     @model_validator(mode="after")
     def request_references_one_frozen_finding(self) -> DocumentationRequestV1:
         snapshot = self.confirmed_finding_snapshot
-        evidence = self.minimal_evidence_package
-        if evidence.target_version not in self.target_versions:
+        if self.evidence.target_version not in self.target_versions:
             raise ValueError("evidence target version must be included in target_versions")
         if snapshot.last_seen_target_version not in self.target_versions:
             raise ValueError("last-seen target version must be included in target_versions")
@@ -116,9 +104,10 @@ class VulnerabilityReportV1(ContractModel):
     )
     observed_behavior: LongText
     expected_behavior: LongText
-    evidence_references: list[EvidenceReferenceV1] = Field(min_length=1, max_length=100)
+    source_attempt_id: Identifier
+    evidence_hash: Sha256Hex
+    exact_transcript: list[TranscriptTurnV1] = Field(default_factory=list, max_length=100)
     recommended_remediation_approach: LongText
-    regression_case_id: Identifier
     current_fix_validation_results: list[FixValidationResultV1] = Field(
         default_factory=list,
         max_length=100,
@@ -138,7 +127,6 @@ __all__ = [
     "ConfirmedFindingSnapshotV1",
     "DocumentationRequestV1",
     "FixValidationResultV1",
-    "MinimalEvidencePackageV1",
     "ValidationOutcomeV1",
     "VulnerabilityReportV1",
 ]

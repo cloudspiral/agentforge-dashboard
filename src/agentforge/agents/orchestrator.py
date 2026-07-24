@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from agentforge.contracts.v1 import CampaignObjectiveV1
+from agentforge.contracts.v1 import OrchestratorDecisionV2
 from agentforge.settings import Settings, get_settings
 
 from .base import BaseAgentAdapter
 
 
-class OrchestratorAgent(BaseAgentAdapter[CampaignObjectiveV1]):
-    """Recommend one bounded objective; the controller remains authoritative."""
+class OrchestratorAgent(BaseAgentAdapter[OrchestratorDecisionV2]):
+    """Choose the next objective or stop within controller-supplied bounds."""
 
     def __init__(
         self,
@@ -25,11 +25,12 @@ class OrchestratorAgent(BaseAgentAdapter[CampaignObjectiveV1]):
         super().__init__(
             role="orchestrator",
             agent_name="AgentForge Orchestrator",
-            output_type=CampaignObjectiveV1,
+            output_type=OrchestratorDecisionV2,
             model=configured.openai_orchestrator_model,
             prompt_path=prompt_path,
             max_output_tokens=900,
             max_turns=1,
+            strict_json_schema=False,
             settings=configured,
             **adapter_options,
         )

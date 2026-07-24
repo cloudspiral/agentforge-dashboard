@@ -17,6 +17,7 @@ from agentforge.contracts.v1 import (
     ApprovedHttpMethodV1,
     AuthenticateActionV1,
     CollectEvidenceActionV1,
+    ExecutionSurfaceV2,
     InvokeApprovedApiRequestActionV1,
     ProposedAttackV1,
     ResetSessionActionV1,
@@ -26,8 +27,6 @@ from agentforge.contracts.v1 import (
     WaitForResponseActionV1,
 )
 from agentforge.target.profile import TargetProfileV1
-
-from .budgets import BudgetReservationV1, BudgetStateV1, Money
 
 _PATIENT_PARAMETER_KEYS = {
     "external_id",
@@ -60,17 +59,43 @@ class GateModel(BaseModel):
 class EndpointPurposeV1(StrEnum):
     CHAT = "chat"
     STATUS = "status"
+    METRICS = "metrics"
+    OPENAPI = "openapi"
     GENERAL_API = "general_api"
+    EVIDENCE_RETRIEVE = "evidence_retrieve"
+    DOCUMENT_EXTRACT = "document_extract"
+    DOCUMENT_VALIDATE = "document_validate"
+    DOCUMENT_OUTCOME = "document_outcome"
+    SOURCE_RESOLVE = "source_resolve"
+    EVIDENCE_REGION = "evidence_region"
     UPLOAD_STAGE = "upload_stage"
+    UPLOAD_STATUS = "upload_status"
     UPLOAD_REJECT = "upload_reject"
+    UPLOAD_CONFIRM = "upload_confirm"
+    STAGED_DOCUMENT = "staged_document"
+
+
+class EndpointAuthenticationV1(StrEnum):
+    NONE = "none"
+    SHARED_SECRET = "shared_secret"  # noqa: S105 - authentication mode, not a credential
+    BROWSER_SESSION_CSRF = "browser_session_csrf"
+
+
+class EndpointPersistenceV1(StrEnum):
+    READ_ONLY = "read_only"
+    EPHEMERAL = "ephemeral"
+    PERSISTENT_SYNTHETIC = "persistent_synthetic"
 
 
 class EndpointBindingV1(GateModel):
     endpoint_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     method: ApprovedHttpMethodV1
-    surface: Literal["status", "ui"]
+    surface: Literal["status", "ui", "agent_service"]
     path: str = Field(min_length=1, max_length=512)
     purpose: EndpointPurposeV1
+    authentication: EndpointAuthenticationV1 = EndpointAuthenticationV1.NONE
+    persistence: EndpointPersistenceV1 = EndpointPersistenceV1.READ_ONLY
+    request_encoding: Literal["none", "json", "multipart"] = "none"
 
     @field_validator("path")
     @classmethod
@@ -106,7 +131,6 @@ class ApprovedFixtureV1(GateModel):
 class GateLimitsV1(GateModel):
     max_actions: int = Field(ge=5, le=30)
     max_turns: int = Field(ge=1, le=20)
-    max_worst_case_cost_usd: Money
     max_total_wait_seconds: float = Field(gt=0, le=1_200, allow_inf_nan=False)
     max_total_message_bytes: int = Field(gt=0, le=100_000)
     max_upload_count: int = Field(ge=0, le=20)
@@ -129,12 +153,11 @@ class CampaignExecutionContextV1(GateModel):
     upload_stage_endpoint_id: str = Field(min_length=1, max_length=128)
     upload_reject_endpoint_id: str = Field(min_length=1, max_length=128)
     approved_fixtures: dict[str, ApprovedFixtureV1] = Field(default_factory=dict)
+    max_persistent_writes: int = Field(default=0, ge=0, le=1)
+    retained_synthetic_artifact_allowed: bool = False
     limits: GateLimitsV1
     campaign_started_at: AwareDatetime
     campaign_deadline_at: AwareDatetime
-    budget_state: BudgetStateV1
-    budget_reservation: BudgetReservationV1
-    consumed_budget_reservation_ids: list[str] = Field(default_factory=list, max_length=100)
     attempted_sequence_counts: dict[str, int] = Field(default_factory=dict, max_length=1_000)
     cancellation_requested: bool = False
     cleanup_succeeded: bool = True
@@ -170,6 +193,7 @@ class GateRejectionCodeV1(StrEnum):
     RESET_SCOPE_MISMATCH = "reset_scope_mismatch"
     AUTHENTICATION_SCOPE_MISMATCH = "authentication_scope_mismatch"
     PATIENT_SCOPE_MISMATCH = "patient_scope_mismatch"
+    SURFACE_SCOPE_MISMATCH = "surface_scope_mismatch"
     UNKNOWN_ENDPOINT = "unknown_endpoint"
     ENDPOINT_NOT_ALLOWLISTED = "endpoint_not_allowlisted"
     METHOD_NOT_ALLOWLISTED = "method_not_allowlisted"
@@ -182,8 +206,6 @@ class GateRejectionCodeV1(StrEnum):
     MESSAGE_SIZE_LIMIT = "message_size_limit"
     UPLOAD_SIZE_LIMIT = "upload_size_limit"
     TIME_LIMIT = "time_limit"
-    BUDGET_NOT_RESERVED = "budget_not_reserved"
-    BUDGET_LIMIT = "budget_limit"
     DUPLICATE_SEQUENCE = "duplicate_sequence"
 
 
@@ -209,7 +231,6 @@ class ValidatedAttackV1(GateModel):
     sequence_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     authorized_at: AwareDatetime
     expires_at: AwareDatetime
-    budget_reservation_id: str
 
 
 ExecutionGateResultV1 = ValidatedAttackV1 | GateRejectionV1
@@ -234,9 +255,22 @@ def _reject(
     )
 
 
-def _sequence_hash(proposal: ProposedAttackV1) -> str:
+def proposal_sequence_hash(proposal: ProposedAttackV1) -> str:
+    """Hash executable semantics, excluding model-controlled cosmetic identifiers."""
+
+    actions = []
+    for action in proposal.ordered_actions:
+        payload = action.model_dump(mode="json")
+        payload.pop("action_id", None)
+        payload.pop("description", None)
+        payload.pop("conversation_alias", None)
+        actions.append(payload)
     canonical = json.dumps(
-        proposal.model_dump(mode="json"),
+        {
+            "category": proposal.category,
+            "subcategory": proposal.subcategory,
+            "ordered_actions": actions,
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -289,32 +323,6 @@ def _parameter_authority_violation(
         if ".." in PurePosixPath(value).parts:
             return f"request parameter {parent_key!r} contains path traversal"
     return None
-
-
-def _budget_is_reserved(context: CampaignExecutionContextV1) -> bool:
-    reservation = context.budget_reservation
-    if reservation.campaign_id != context.campaign_id:
-        return False
-    if reservation.reservation_id in context.consumed_budget_reservation_ids:
-        return False
-    if reservation.reservation_id not in context.budget_state.active_reservation_ids:
-        return False
-    total = reservation.worst_case_total
-    for account in (
-        context.budget_state.global_account,
-        context.budget_state.campaign_account,
-    ):
-        reserved = account.reserved
-        if (
-            reserved.calls < total.calls
-            or reserved.input_tokens < total.input_tokens
-            or reserved.cached_input_tokens < total.cached_input_tokens
-            or reserved.cache_write_tokens < total.cache_write_tokens
-            or reserved.output_tokens < total.output_tokens
-            or reserved.cost_usd < total.cost_usd
-        ):
-            return False
-    return True
 
 
 def validate_attack(
@@ -592,12 +600,12 @@ def validate_attack(
                 "endpoint purpose does not match the proposed action",
                 action_id=action_id,
             )
-        if binding.path in prohibited_paths or _is_persistent_confirm_route(binding.path):
+        if binding.path in prohibited_paths:
             return _reject(
                 context,
                 proposal,
                 GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE,
-                "persistent confirmation and other prohibited target routes cannot be executed",
+                "the target route is prohibited by the loaded target profile",
                 action_id=action_id,
                 retryable=False,
             )
@@ -612,13 +620,18 @@ def validate_attack(
         authorized_bindings[binding.endpoint_id] = binding
         return None
 
-    current_patient = _profile_patient(target_profile, context.current_patient_alias)
-    allowed_patient_values = {context.current_patient_alias, current_patient.external_id}
+    allowed_patient_values = {
+        "patient_a",
+        "patient_b",
+        target_profile.patients.patient_a.external_id,
+        target_profile.patients.patient_b.external_id,
+    }
     approved_fixtures: dict[str, ApprovedFixtureV1] = {}
     total_message_bytes = 0
     total_wait_seconds = 0.0
     total_upload_bytes = 0
     upload_count = 0
+    persistent_write_count = 0
     for action in actions[3:-1]:
         if isinstance(action, SendChatMessageActionV1):
             size = len(action.message.encode("utf-8"))
@@ -657,6 +670,28 @@ def validate_attack(
                     "GET actions cannot carry a request body",
                     action_id=action.action_id,
                 )
+            if (
+                binding.authentication == EndpointAuthenticationV1.NONE
+                and action.credential_mode != "endpoint_default"
+            ):
+                return _reject(
+                    context,
+                    proposal,
+                    GateRejectionCodeV1.AUTHENTICATION_SCOPE_MISMATCH,
+                    "unauthenticated endpoints cannot receive credential test modes",
+                    action_id=action.action_id,
+                )
+            if (
+                binding.authentication == EndpointAuthenticationV1.BROWSER_SESSION_CSRF
+                and action.credential_mode != "endpoint_default"
+            ):
+                return _reject(
+                    context,
+                    proposal,
+                    GateRejectionCodeV1.AUTHENTICATION_SCOPE_MISMATCH,
+                    "same-origin endpoints use only the ephemeral browser session",
+                    action_id=action.action_id,
+                )
             violation = _parameter_authority_violation(
                 {"query_parameters": action.query, "body_parameters": action.body},
                 allowed_patient_values=allowed_patient_values,
@@ -679,10 +714,27 @@ def validate_attack(
                 action.endpoint_id,
                 action_id=action.action_id,
                 required_method=action.method,
-                required_purpose={EndpointPurposeV1.GENERAL_API, EndpointPurposeV1.STATUS},
+                required_purpose=set(EndpointPurposeV1),
             )
             if rejection:
                 return rejection
+            if binding.persistence == EndpointPersistenceV1.PERSISTENT_SYNTHETIC:
+                persistent_write_count += 1
+                if (
+                    persistent_write_count > context.max_persistent_writes
+                    or not context.retained_synthetic_artifact_allowed
+                ):
+                    return _reject(
+                        context,
+                        proposal,
+                        GateRejectionCodeV1.PROHIBITED_PERSISTENT_ROUTE,
+                        (
+                            "persistent synthetic execution requires an explicit one-artifact "
+                            "controller allowance"
+                        ),
+                        action_id=action.action_id,
+                        retryable=False,
+                    )
         elif isinstance(action, UploadApprovedFixtureActionV1):
             if (
                 not target_profile.upload.enabled
@@ -754,6 +806,50 @@ def validate_attack(
         elif isinstance(action, WaitForResponseActionV1):
             total_wait_seconds += action.timeout_seconds
 
+    operation_surfaces: set[ExecutionSurfaceV2] = set()
+    document_purposes = {
+        EndpointPurposeV1.DOCUMENT_EXTRACT,
+        EndpointPurposeV1.DOCUMENT_VALIDATE,
+        EndpointPurposeV1.DOCUMENT_OUTCOME,
+        EndpointPurposeV1.UPLOAD_STAGE,
+        EndpointPurposeV1.UPLOAD_STATUS,
+        EndpointPurposeV1.UPLOAD_REJECT,
+        EndpointPurposeV1.UPLOAD_CONFIRM,
+        EndpointPurposeV1.STAGED_DOCUMENT,
+    }
+    for action in actions[3:-1]:
+        if isinstance(action, SendChatMessageActionV1):
+            operation_surfaces.add(ExecutionSurfaceV2.OPENEMR_UI)
+        elif isinstance(action, UploadApprovedFixtureActionV1):
+            operation_surfaces.add(ExecutionSurfaceV2.STAGED_DOCUMENT)
+        elif isinstance(action, InvokeApprovedApiRequestActionV1):
+            binding = authorized_bindings[action.endpoint_id]
+            if binding.purpose in document_purposes:
+                operation_surfaces.add(ExecutionSurfaceV2.STAGED_DOCUMENT)
+            elif binding.surface == "ui":
+                operation_surfaces.add(ExecutionSurfaceV2.OPENEMR_SAME_ORIGIN_API)
+            else:
+                operation_surfaces.add(ExecutionSurfaceV2.AGENT_SERVICE_API)
+    # V1 callers omitted this newly additive field. V2 controller paths always
+    # supply it and independently verify it against the Orchestrator decision.
+    if "execution_surface" in proposal.model_fields_set:
+        selected_surface = proposal.execution_surface
+        if selected_surface == ExecutionSurfaceV2.HYBRID:
+            if len(operation_surfaces) < 2:
+                return _reject(
+                    context,
+                    proposal,
+                    GateRejectionCodeV1.SURFACE_SCOPE_MISMATCH,
+                    "hybrid proposals must span at least two approved execution surfaces",
+                )
+        elif operation_surfaces != {selected_surface}:
+            return _reject(
+                context,
+                proposal,
+                GateRejectionCodeV1.SURFACE_SCOPE_MISMATCH,
+                "proposal actions do not match the Orchestrator-selected execution surface",
+            )
+
     if total_message_bytes > context.limits.max_total_message_bytes:
         return _reject(
             context,
@@ -783,54 +879,7 @@ def validate_attack(
             "bounded response waits exceed the campaign's remaining time",
         )
 
-    reservation = context.budget_reservation
-    if not _budget_is_reserved(context):
-        return _reject(
-            context,
-            proposal,
-            GateRejectionCodeV1.BUDGET_NOT_RESERVED,
-            "worst-case model calls/tokens/cost were not reserved for this campaign",
-            retryable=False,
-        )
-    if (
-        reservation.reserved_at > checked_at
-        or reservation.worst_case_total.cost_usd > context.limits.max_worst_case_cost_usd
-    ):
-        return _reject(
-            context,
-            proposal,
-            GateRejectionCodeV1.BUDGET_LIMIT,
-            "worst-case reservation exceeds the per-attack gate limit",
-            retryable=False,
-        )
-    for account in (
-        context.budget_state.global_account,
-        context.budget_state.campaign_account,
-    ):
-        actual_and_reserved_input = (
-            account.actual.input_tokens
-            + account.actual.cached_input_tokens
-            + account.actual.cache_write_tokens
-            + account.reserved.input_tokens
-            + account.reserved.cached_input_tokens
-            + account.reserved.cache_write_tokens
-        )
-        if (
-            account.actual.cost_usd + account.reserved.cost_usd > account.limits.max_cost_usd
-            or account.actual.calls + account.reserved.calls > account.limits.max_calls
-            or actual_and_reserved_input > account.limits.max_input_tokens
-            or account.actual.output_tokens + account.reserved.output_tokens
-            > account.limits.max_output_tokens
-        ):
-            return _reject(
-                context,
-                proposal,
-                GateRejectionCodeV1.BUDGET_LIMIT,
-                "global or campaign cost ceiling is already exceeded",
-                retryable=False,
-            )
-
-    sequence_hash = _sequence_hash(proposal)
+    sequence_hash = proposal_sequence_hash(proposal)
     if (
         context.attempted_sequence_counts.get(sequence_hash, 0)
         >= context.limits.max_sequence_repetitions
@@ -853,19 +902,21 @@ def validate_attack(
         sequence_hash=sequence_hash,
         authorized_at=checked_at,
         expires_at=context.campaign_deadline_at,
-        budget_reservation_id=reservation.reservation_id,
     )
 
 
 __all__ = [
     "ApprovedFixtureV1",
     "CampaignExecutionContextV1",
+    "EndpointAuthenticationV1",
     "EndpointBindingV1",
+    "EndpointPersistenceV1",
     "EndpointPurposeV1",
     "ExecutionGateResultV1",
     "GateLimitsV1",
     "GateRejectionCodeV1",
     "GateRejectionV1",
     "ValidatedAttackV1",
+    "proposal_sequence_hash",
     "validate_attack",
 ]

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ case.case_id }} · AgentForge{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">Regression case v{{ case.case_version }}</p>
+  <h1>{{ case.case_id }}</h1>
+  <p><a href="/dashboard/findings/{{ finding.id }}">{{ finding.vulnerability_id }}</a> · {{ case.category }} / {{ case.subcategory }}</p>
+</section>
+<section class="stat-grid">
+  <article><span>Active</span><strong class="text">{{ 'yes' if case.active else 'no' }}</strong></article>
+  <article><span>Required replays</span><strong>{{ case.required_replays }}</strong></article>
+  <article><span>Source version</span><strong class="text mono">{{ case.source_target_version }}</strong></article>
+  <article><span>Provenance</span><strong class="text">{{ case.source_provenance | replace('_', ' ') }}</strong></article>
+</section>
+<section class="panel">
+  <h2>Expected secure behavior</h2><p>{{ case.expected_behavior }}</p>
+  <h3>Finding key</h3><p class="mono">{{ case.finding_key }}</p>
+  <h3>Original Judge confirmation and execution evidence</h3><pre>{{ case.judge_context }}</pre>
+  <h3>Exact deterministic sequence</h3><pre>{{ case.ordered_sequence }}</pre>
+  <dl class="summary-list">
+    <div><dt>Sequence hash</dt><dd class="mono">{{ case.sequence_hash }}</dd></div>
+    <div><dt>Source evidence hash</dt><dd class="mono">{{ case.created_from_evidence_hash }}</dd></div>
+    <div><dt>Fingerprint</dt><dd class="mono">{{ case.fingerprint }}</dd></div>
+  </dl>
+</section>
+{% endblock %}

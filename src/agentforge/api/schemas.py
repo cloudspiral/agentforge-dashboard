@@ -32,8 +32,6 @@ class CampaignCreateRequest(ApiModel):
     max_cost_usd: Decimal | None = Field(default=None, gt=0, decimal_places=6)
     max_attempts: int | None = Field(default=None, ge=1, le=100)
     max_duration_seconds: int | None = Field(default=None, ge=30, le=86_400)
-    max_mutations: int | None = Field(default=None, ge=0, le=20)
-    no_signal_limit: int | None = Field(default=None, ge=1, le=20)
     priority: int = Field(default=0, ge=-100, le=100)
     idempotency_key: SafeKey | None = None
 
@@ -113,8 +111,8 @@ class RegressionResultResponse(ApiModel):
     case_id: uuid.UUID
     case_version: int
     outcome: str
-    deterministic_results: list[dict[str, Any]]
-    evidence_references: list[str]
+    judge_result: dict[str, Any] | None
+    evidence_hash: str | None
     estimated_cost_usd: Decimal
     latency_ms: int | None
     trace_id: str | None
@@ -177,7 +175,10 @@ class FindingPage(ApiModel):
 
 
 class FindingStatusUpdate(ApiModel):
-    status: Literal["open", "in_progress", "resolved", "reopened", "false_positive"]
+    action: Literal["confirm", "begin_work", "dismiss", "resolve"]
+    reason: str | None = Field(default=None, max_length=2_000)
+    regression_result_id: uuid.UUID | None = None
+    manual_override: bool = False
 
 
 class ReportResponse(ApiModel):
@@ -216,6 +217,7 @@ class AgentRunResponse(ApiModel):
     estimated_cost_usd: Decimal
     latency_ms: int | None
     langfuse_trace_id: str | None
+    output_payload: dict[str, Any] | None
     typed_error: dict[str, Any] | None
     created_at: datetime
 

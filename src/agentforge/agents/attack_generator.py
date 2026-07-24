@@ -30,6 +30,7 @@ class AttackGeneratorAgent(BaseAgentAdapter[ProposedAttackV1]):
             prompt_path=prompt_path,
             max_output_tokens=1200,
             max_turns=1,
+            strict_json_schema=False,
             settings=configured,
             **adapter_options,
         )
