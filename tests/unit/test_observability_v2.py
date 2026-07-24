@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 import yaml
 
 from agentforge.contracts.v1 import RemainingBudgetAndLimitsV1
@@ -14,7 +15,9 @@ from agentforge.evaluation import load_seed_cases, load_taxonomy
 from agentforge.observability import PlatformObservabilityService
 from agentforge.observability.cost_analysis import (
     collect_cost_evidence,
+    evidence_digest,
     load_cost_assumptions,
+    load_cost_evidence_snapshot,
     merge_cost_evidence,
     project_costs,
     render_cost_analysis,
@@ -235,6 +238,19 @@ def test_cost_evidence_is_redacted_deduplicated_and_projects_full_workload(
         merged = merge_cost_evidence([evidence, duplicate])
         assert len(merged.agent_calls) == 2
         assert merged.total_agentforge_model_cost_usd == Decimal("0.015000")
+
+        snapshot_path = tmp_path / "cost-evidence.json"
+        snapshot_payload = evidence.model_dump(mode="json")
+        snapshot_payload["evidence_digest"] = evidence_digest(evidence)
+        snapshot_path.write_text(
+            json.dumps(snapshot_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        assert load_cost_evidence_snapshot(snapshot_path) == evidence
+        snapshot_payload["counts"]["attempts"] += 1
+        snapshot_path.write_text(json.dumps(snapshot_payload), encoding="utf-8")
+        with pytest.raises(ValueError, match="cost evidence digest mismatch"):
+            load_cost_evidence_snapshot(snapshot_path)
 
         assumptions = load_cost_assumptions(ROOT / "config" / "cost-model-assumptions.yaml")
         projections = project_costs(assumptions)

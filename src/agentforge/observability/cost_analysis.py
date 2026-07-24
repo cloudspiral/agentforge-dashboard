@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
@@ -759,12 +760,27 @@ def evidence_digest(snapshot: CostEvidenceSnapshotV1) -> str:
     ).hexdigest()
 
 
+def load_cost_evidence_snapshot(path: Path) -> CostEvidenceSnapshotV1:
+    """Load a generated snapshot and verify its optional integrity digest."""
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    supplied_digest = payload.pop("evidence_digest", None)
+    snapshot = CostEvidenceSnapshotV1.model_validate(payload)
+    if supplied_digest is not None and (
+        not isinstance(supplied_digest, str)
+        or not hmac.compare_digest(supplied_digest, evidence_digest(snapshot))
+    ):
+        raise ValueError(f"cost evidence digest mismatch: {path}")
+    return snapshot
+
+
 __all__ = [
     "CostEvidenceSnapshotV1",
     "CostModelAssumptionsV1",
     "CostProjectionV1",
     "collect_cost_evidence",
     "evidence_digest",
+    "load_cost_evidence_snapshot",
     "load_cost_assumptions",
     "merge_cost_evidence",
     "project_costs",
