@@ -344,10 +344,10 @@ async def test_credentialless_run_returns_typed_failure_without_calling_runner()
 
 
 @pytest.mark.asyncio
-async def test_only_429_and_5xx_are_retried_with_bounded_backoff() -> None:
+async def test_5xx_are_retried_with_bounded_jittered_backoff() -> None:
     output = _output(OrchestratorDecisionV2)
     runner = FakeRunner(
-        _status_error(429),
+        _status_error(503),
         _status_error(503),
         _usage_result(output),
     )
@@ -375,6 +375,39 @@ async def test_only_429_and_5xx_are_retried_with_bounded_backoff() -> None:
     assert outcome.sdk_attempts == 3
     assert len(runner.calls) == 3
     assert delays == [0.25, 0.5]
+
+
+@pytest.mark.asyncio
+async def test_headerless_rate_limit_uses_a_bounded_exponential_floor() -> None:
+    output = _output(OrchestratorDecisionV2)
+    runner = FakeRunner(
+        _status_error(429),
+        _status_error(429),
+        _usage_result(output),
+    )
+    delays: list[float] = []
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+
+    adapter = OrchestratorAgent(
+        **_agent_options(
+            runner,
+            sleeper=record_delay,
+            jitter=lambda: 0.0,
+            max_retries=2,
+        )
+    )
+
+    outcome = await adapter.run(
+        {"bounded": "input"},
+        campaign_id="campaign-1",
+        attempt_id="attempt-1",
+    )
+
+    assert outcome.succeeded is True
+    assert outcome.sdk_attempts == 3
+    assert delays == [10.0, 20.0]
 
 
 @pytest.mark.asyncio

@@ -51,6 +51,7 @@ DEFAULT_MAX_INPUT_CHARACTERS = 32_000
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_BASE_BACKOFF_SECONDS = 0.25
 DEFAULT_MAX_BACKOFF_SECONDS = 2.0
+DEFAULT_RATE_LIMIT_BACKOFF_SECONDS = 10.0
 DEFAULT_MAX_RATE_LIMIT_BACKOFF_SECONDS = 30.0
 
 _FRONT_MATTER_BOUNDARY = "---"
@@ -335,6 +336,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         max_retries: int = DEFAULT_MAX_RETRIES,
         base_backoff_seconds: float = DEFAULT_BASE_BACKOFF_SECONDS,
         max_backoff_seconds: float = DEFAULT_MAX_BACKOFF_SECONDS,
+        rate_limit_backoff_seconds: float = DEFAULT_RATE_LIMIT_BACKOFF_SECONDS,
         max_rate_limit_backoff_seconds: float = DEFAULT_MAX_RATE_LIMIT_BACKOFF_SECONDS,
         max_input_characters: int = DEFAULT_MAX_INPUT_CHARACTERS,
         strict_json_schema: bool = True,
@@ -347,8 +349,10 @@ class BaseAgentAdapter[OutputT: BaseModel]:
             raise ValueError("max_retries must be between zero and five")
         if base_backoff_seconds < 0 or max_backoff_seconds < base_backoff_seconds:
             raise ValueError("retry backoff bounds are invalid")
-        if max_rate_limit_backoff_seconds < max_backoff_seconds:
-            raise ValueError("rate-limit backoff must cover the ordinary backoff ceiling")
+        if rate_limit_backoff_seconds < 0 or max_rate_limit_backoff_seconds < max(
+            max_backoff_seconds, rate_limit_backoff_seconds
+        ):
+            raise ValueError("rate-limit retry backoff bounds are invalid")
         if max_input_characters < 1:
             raise ValueError("max_input_characters must be positive")
 
@@ -384,6 +388,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         self._max_retries = max_retries
         self._base_backoff_seconds = base_backoff_seconds
         self._max_backoff_seconds = max_backoff_seconds
+        self._rate_limit_backoff_seconds = rate_limit_backoff_seconds
         self._max_rate_limit_backoff_seconds = max_rate_limit_backoff_seconds
         self._max_input_characters = max_input_characters
         self._model_provider = self._create_model_provider()
@@ -581,6 +586,7 @@ class BaseAgentAdapter[OutputT: BaseModel]:
                         if exc.status_code == 429:
                             delay = max(
                                 delay,
+                                self._rate_limit_retry_delay(sdk_attempts),
                                 _numeric_retry_after_seconds(
                                     exc,
                                     ceiling=self._max_rate_limit_backoff_seconds,
@@ -835,6 +841,12 @@ class BaseAgentAdapter[OutputT: BaseModel]:
         )
         jitter = min(1.0, max(0.0, float(self._jitter()))) * min(base, 1.0)
         return min(self._max_backoff_seconds, base + jitter)
+
+    def _rate_limit_retry_delay(self, sdk_attempts: int) -> float:
+        return min(
+            self._max_rate_limit_backoff_seconds,
+            self._rate_limit_backoff_seconds * (2 ** max(0, sdk_attempts - 1)),
+        )
 
     def _timeout_code(self) -> AgentErrorCodeV1:
         return (
