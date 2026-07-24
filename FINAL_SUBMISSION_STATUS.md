@@ -13,24 +13,24 @@ same-origin API, direct agent-service API, and staged-document coverage. Three
 distinct Judge-confirmed Findings have canonical PostgreSQL reports and active
 regression cases.
 
-One live limitation remains intentionally visible: all four production regression
-suites completed, but the Judge provider rate-limited all 12 replay verdict calls.
-The harness therefore stored `error`, not a security pass or vulnerability
-reproduction. The target version also did not change during this release, so there is
-no honest live resilience transition to report. Conservative regression semantics,
-changed-version comparison, reopening, and cross-category detection are covered by
-the protected test suite.
+Earlier regression suites retain their Judge-provider rate-limit errors as visible
+operational evidence. After credits were added, a later exact-version suite completed
+successfully and the Judge reconfirmed all three saved vulnerabilities. The target
+version did not change during this release, so there is still no honest live
+resilience transition to report. Conservative regression semantics, changed-version
+comparison, reopening, and cross-category detection are covered by the protected
+test suite.
 
 ## Exact release evidence
 
 | Item | Verified value |
 | --- | --- |
-| Application runtime evidence SHA | `e552300912734ae4c491d3db0bca35de948f5b30` |
-| GitLab / GitHub parity at runtime verification | both `e552300912734ae4c491d3db0bca35de948f5b30` |
-| Railway runtime deployment | `72f153c1-1f64-448d-8e40-4295c7daa4d5` · `SUCCESS` |
-| Railway image | `sha256:3232ae3437699fc5e54f2bb1145d2a1c02cdd8abbf47cefe1c133f7ad8b1d7bb` |
+| Application code baseline SHA | `942a461e8b84b1d3759f323b7b6425c9f1ce67c1` |
+| GitLab / GitHub parity at code verification | both `942a461e8b84b1d3759f323b7b6425c9f1ce67c1` |
+| Railway code-baseline deployment | `59f482bb-db8c-498f-b849-17386f74e5ff` · `SUCCESS` |
+| Railway image | `sha256:021f788f7480605cff600121e2074733b0724d132b62071c80a3d7b08bc9b82b` |
 | Database migration | `d94e7b3a21c8 (head)` |
-| Protected runtime pipeline | `16807` · job `57342` · 234 passed, 1 opt-in browser skip |
+| Protected code-baseline pipeline | `16845` · 244 passed, 1 opt-in browser skip |
 | Dashboard | <https://agentforge-dashboard-production.up.railway.app> |
 | Authorized target | <https://openemr-web-production.up.railway.app> |
 | Authorized agent service | <https://agent-service-production-52e5.up.railway.app> |
@@ -58,13 +58,13 @@ Seed lane total: 9 attempted, 9 executed, 6 `attack_blocked`, 3
 ## Coverage and agent discovery
 
 - All 17 taxonomy subcategories have at least one executed case.
-- Durable attempt coverage by surface is: 26 `openemr_ui`, 2
-  `openemr_same_origin_api`, 2 `agent_service_api`, and 4 `staged_document`.
+- Durable attempt coverage by surface is: 39 `openemr_ui`, 2
+  `openemr_same_origin_api`, 2 `agent_service_api`, and 6 `staged_document`.
   Eleven older rows remain visibly labeled `legacy_unknown`; `hybrid` is supported
   but was not needed to close a taxonomy gap in this run.
-- Technique coverage is 43 scenario attempts and 2 deterministic fuzz variants.
-- The separate discovery lane records 22 attempted, 19 target-executed, 9
-  `attack_blocked`, 1 `exploit_confirmed`, 6 `inconclusive`, 1 `partial_signal`,
+- Technique coverage is 58 scenario attempts and 2 deterministic fuzz variants.
+- The separate discovery lane records 24 attempted, 21 target-executed, 9
+  `attack_blocked`, 1 `exploit_confirmed`, 8 `inconclusive`, 1 `partial_signal`,
   and 5 operational errors.
 - The separate fuzz lane records 2 target-executed direct-sidecar variants, both
   `inconclusive`; fuzz strategy and deterministic expansion remain visible in the
@@ -84,11 +84,11 @@ technique, fuzz strategy, and redacted decision/error data.
 
 | Finding | Taxonomy | Severity | Current lifecycle | Current report |
 | --- | --- | --- | --- | --- |
-| `AF-24F032E46E4A` | tool misuse / unintended invocation | medium | `pending_review` | version 5 |
-| `AF-C29D26B2B508` | state corruption / context poisoning | critical | `pending_review` | version 5 |
-| `AF-0F2C8E9E19D8` | prompt injection / multi turn | medium | `pending_review` | version 5 |
+| `AF-24F032E46E4A` | tool misuse / unintended invocation | medium | `pending_review` | [version 8](reports/submission/AF-24F032E46E4A.md) |
+| `AF-C29D26B2B508` | state corruption / context poisoning | critical | `pending_review` | [version 8](reports/submission/AF-C29D26B2B508.md) |
+| `AF-0F2C8E9E19D8` | prompt injection / multi turn | medium | `pending_review` | [version 8](reports/submission/AF-0F2C8E9E19D8.md) |
 
-There are three Findings, three current reports, 15 immutable report versions, and
+There are three Findings, three current reports, 24 immutable report versions, and
 three active regression cases. PostgreSQL Markdown is canonical. The Documentation
 Agent created each initial report; later regression/lifecycle events created
 deterministic versions. Rediscovery appends evidence to the semantic Finding rather
@@ -105,8 +105,9 @@ and audited. Regression reproduction reopens resolved or dismissed Findings.
 
 ## Regression evidence
 
-Four full active-cohort suites were launched manually from the production workflow.
-Each contains all three active cases and reached a terminal aggregate:
+Seven full active-cohort suites were launched from the production workflow. The
+demo-relevant runs below each contain all three active cases and reached a terminal
+aggregate:
 
 | Run | Target version | Aggregate | Judge route |
 | --- | --- | --- | --- |
@@ -114,13 +115,14 @@ Each contains all three active cases and reached a terminal aggregate:
 | `501121d7-e35b-4962-bfca-e9383719af68` | exact deployed build | 3 `error` | Terra |
 | `cdaf2fc9-fec4-4b25-b45a-e5339dc606aa` | exact deployed build | 3 `error` | Terra with bounded 10s/20s retry |
 | `bd89264d-132a-44fd-a94a-34eb0160f334` | exact deployed build | 3 `error` | Sol with bounded 10s/20s retry |
+| `b5d6c81f-5dad-4c4e-b509-56393a74e5a6` | exact deployed build | 3 `vulnerability_reproduced` | Judge succeeded after credits were added |
 
-All 12 target replays stored evidence. Provider `429` responses prevented the Judge
-from issuing semantic verdicts, so none were projected to `secure_pass` or
-`vulnerability_reproduced`. Placeholder and same-version runs are excluded from
-adjacent-version resilience comparison; the production transition list is correctly
-empty. The terminal run page visibly labels its historical `local-unknown` value as
-an unresolved legacy placeholder excluded from resilience calculations.
+All 21 regression attempts stored target evidence. The current aggregate is 6
+`vulnerability_reproduced` replay verdicts and 15 earlier operational errors. The
+latest manual suite completed in 50.3 seconds, cost `$0.078036`, and reconfirmed all
+three active cases. Same-version and placeholder runs are excluded from
+adjacent-version resilience comparison, so the production transition list is
+correctly empty.
 
 OpenEMR deployment-webhook integration is deferred as requested. The dashboard
 manual full-suite path and internal atomic campaign/`RegressionRun` creation path are
@@ -130,10 +132,10 @@ live.
 
 The shared typed observability snapshot exposes all 17 coverage rows, separated
 outcome lanes, finding lifecycle, surface capability facts, matched-version
-resilience transitions, dimensional cost, and a 127-event ordered timeline.
-Production measured 80 AgentForge calls, 920,931 input tokens, 67,529 output tokens,
-and `$3.820690` configured model cost. The digest-verified combined local and
-production evidence contains 83 unique calls and `$3.872759` total configured cost.
+resilience transitions, dimensional cost, and an ordered platform timeline.
+Production measured 109 AgentForge calls, 1,032,419 input tokens, 81,483 output
+tokens, and `$4.526458` configured model cost. The digest-verified combined local and
+production evidence contains 112 unique calls and `$4.578527` total configured cost.
 
 See [AI_COST_ANALYSIS.md](AI_COST_ANALYSIS.md) for observed unit economics and
 low/base/high production projections at 100, 1K, 10K, and 100K runs. Its redacted,
@@ -151,8 +153,9 @@ digest-verified inputs are
 
 - No live target-version change occurred, so “more or less resilient over time” is
   not yet measurable from production matched cohorts.
-- Live regression Judge verdicts were provider-rate-limited; the terminal errors are
-  retained and no security conclusion is inferred.
+- Earlier regression Judge calls were provider-rate-limited; those terminal errors
+  remain visible, while the latest full suite has valid Judge verdicts for all three
+  reproduced vulnerabilities.
 - Target OpenEMR inference, provider billing, infrastructure invoices, Codex usage,
   and developer labor are explicitly `UNMEASURED`.
 - Only synthetic patients/documents were used. No direct OpenEMR database access or

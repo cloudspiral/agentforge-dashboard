@@ -61,6 +61,36 @@
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
     },
     {
+      "agent_run_id": "04791ee4-1fa3-4810-8510-b20c5077bda1",
+      "attempt_id": null,
+      "campaign_id": "43778196-261e-46e9-b5de-c2d002e5f447",
+      "estimated_cost_usd": "0.024549",
+      "input_tokens": 4218,
+      "latency_ms": 6507,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 758,
+      "role": "attack_generator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "rejected",
+      "trace_id": "160f18f7034d504e37a43deea5fa6384"
+    },
+    {
+      "agent_run_id": "07837e8f-5e50-4e61-89c2-9fe3b2edee6a",
+      "attempt_id": null,
+      "campaign_id": "3fcbc111-ef20-49e8-a074-45573b02c455",
+      "estimated_cost_usd": "0.008907",
+      "input_tokens": 1742,
+      "latency_ms": 3209,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 231,
+      "role": "orchestrator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "d758e3761c2a80e58b851d0cb0a185b2"
+    },
+    {
       "agent_run_id": "09f3d776-5478-4fa5-9583-4e95d5aca2dc",
       "attempt_id": null,
       "campaign_id": "cfaf4d62-aeb9-4bfd-b56e-b5953f542651",
@@ -166,6 +196,21 @@
       "trace_id": "2b124f1dbbf6dc0d084fad4e27c34d8f"
     },
     {
+      "agent_run_id": "1f73f891-6c68-4d5d-8553-22e6681fd353",
+      "attempt_id": "25bc69f9-2855-43ab-9248-0c91bee00ae1",
+      "campaign_id": "f18976e0-8d29-4484-964e-15f41d7a99cc",
+      "estimated_cost_usd": "0.082780",
+      "input_tokens": 10556,
+      "latency_ms": 1229,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 1000,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "failed",
+      "trace_id": "f4afe8822d308554b5bc9d9a8282e24d"
+    },
+    {
       "agent_run_id": "20ff760c-5fef-4a38-9af5-e039432ba94f",
       "attempt_id": null,
       "campaign_id": "511b1f45-e2d6-4a55-b0a1-59e94e8a8f8e",
@@ -179,6 +224,21 @@
       "source_label": "production-final-2026-07-24",
       "status": "succeeded",
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
+    },
+    {
+      "agent_run_id": "2108e855-4b50-480c-a38e-c85351656311",
+      "attempt_id": "a4ed5a0a-7ad8-4ac2-b59b-fb9b44c76115",
+      "campaign_id": "56c62061-842a-47a2-9f27-bc4280051b78",
+      "estimated_cost_usd": "0.014316",
+      "input_tokens": 4219,
+      "latency_ms": 5586,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 595,
+      "role": "attack_generator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b87a02b37654079c24cb4ad2f2643a2d"
     },
     {
       "agent_run_id": "2dec1bd5-2694-4471-bf22-896bf9fc372a",
@@ -256,6 +316,21 @@
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
     },
     {
+      "agent_run_id": "34c710b6-929e-4438-bff0-c4bb602f0cc5",
+      "attempt_id": null,
+      "campaign_id": "43778196-261e-46e9-b5de-c2d002e5f447",
+      "estimated_cost_usd": "0.008683",
+      "input_tokens": 1651,
+      "latency_ms": 3618,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 235,
+      "role": "orchestrator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "160f18f7034d504e37a43deea5fa6384"
+    },
+    {
       "agent_run_id": "389a2d10-4f09-4f2f-93f3-b32b6a9ea2b8",
       "attempt_id": null,
       "campaign_id": "511b1f45-e2d6-4a55-b0a1-59e94e8a8f8e",
@@ -316,6 +391,21 @@
       "trace_id": "eaa9b49a3de842d2268c6cfd2ff203ac"
     },
     {
+      "agent_run_id": "3d5d9e76-45b7-4e31-b104-c20f8701f41c",
+      "attempt_id": "10b7df24-439c-4301-99b3-3cf24a83f0b3",
+      "campaign_id": "688ed226-ebf6-4a74-aa34-9647f607931a",
+      "estimated_cost_usd": "0.025969",
+      "input_tokens": 3162,
+      "latency_ms": 3729,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 207,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b74d6a207a6922b04e9c7efcd01b5b1c"
+    },
+    {
       "agent_run_id": "3e6286db-063b-4b2c-9ec6-e6650fdef7c8",
       "attempt_id": "855fe226-ab45-4a22-b910-b355dca3f115",
       "campaign_id": "2942704d-4219-4d24-869e-1e29d0dbda1b",
@@ -346,6 +436,51 @@
       "trace_id": "6bea144c2471716d3231d2f39a909147"
     },
     {
+      "agent_run_id": "41949e94-97db-4990-b195-bf57960900bf",
+      "attempt_id": "b584d986-55f2-4b15-a2ca-15b06d1b88da",
+      "campaign_id": "3fcbc111-ef20-49e8-a074-45573b02c455",
+      "estimated_cost_usd": "0.013634",
+      "input_tokens": 3394,
+      "latency_ms": 2255,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 202,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "d758e3761c2a80e58b851d0cb0a185b2"
+    },
+    {
+      "agent_run_id": "42a54d8d-b4e5-4e28-86d2-0208c064aa4f",
+      "attempt_id": "9dec3305-0855-4073-8d4a-684826873693",
+      "campaign_id": "f18976e0-8d29-4484-964e-15f41d7a99cc",
+      "estimated_cost_usd": "0.084160",
+      "input_tokens": 10832,
+      "latency_ms": 641,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 1000,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "failed",
+      "trace_id": "f4afe8822d308554b5bc9d9a8282e24d"
+    },
+    {
+      "agent_run_id": "441e0288-bece-49c5-9e26-620278f7389a",
+      "attempt_id": null,
+      "campaign_id": "3fcbc111-ef20-49e8-a074-45573b02c455",
+      "estimated_cost_usd": "0.028819",
+      "input_tokens": 4461,
+      "latency_ms": 10158,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 992,
+      "role": "attack_generator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "rejected",
+      "trace_id": "d758e3761c2a80e58b851d0cb0a185b2"
+    },
+    {
       "agent_run_id": "449958b4-46ad-47e4-9110-d70d8d45b798",
       "attempt_id": null,
       "campaign_id": "511b1f45-e2d6-4a55-b0a1-59e94e8a8f8e",
@@ -359,6 +494,21 @@
       "source_label": "production-final-2026-07-24",
       "status": "succeeded",
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
+    },
+    {
+      "agent_run_id": "4896a080-c342-444e-ab9b-25c17ce89853",
+      "attempt_id": "3b5f922e-5893-4455-ad50-daabee2fe77d",
+      "campaign_id": "688ed226-ebf6-4a74-aa34-9647f607931a",
+      "estimated_cost_usd": "0.025271",
+      "input_tokens": 2988,
+      "latency_ms": 2975,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 220,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b74d6a207a6922b04e9c7efcd01b5b1c"
     },
     {
       "agent_run_id": "4dab8078-9cb8-4c9a-a5a0-088ccbc4b622",
@@ -404,6 +554,36 @@
       "source_label": "production-final-2026-07-24",
       "status": "succeeded",
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
+    },
+    {
+      "agent_run_id": "4fef16bc-8ce9-4bba-bddb-ed69ae342abf",
+      "attempt_id": null,
+      "campaign_id": "56c62061-842a-47a2-9f27-bc4280051b78",
+      "estimated_cost_usd": "0.017589",
+      "input_tokens": 4237,
+      "latency_ms": 4006,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 290,
+      "role": "orchestrator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b87a02b37654079c24cb4ad2f2643a2d"
+    },
+    {
+      "agent_run_id": "5088e18a-1b25-43bb-bf5a-51473675cc01",
+      "attempt_id": null,
+      "campaign_id": "43778196-261e-46e9-b5de-c2d002e5f447",
+      "estimated_cost_usd": "0.019195",
+      "input_tokens": 4225,
+      "latency_ms": 9040,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 919,
+      "role": "attack_generator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "rejected",
+      "trace_id": "160f18f7034d504e37a43deea5fa6384"
     },
     {
       "agent_run_id": "53bac633-68b0-4efe-92e7-61ea18aef58d",
@@ -496,6 +676,21 @@
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
     },
     {
+      "agent_run_id": "61018b34-9165-4d01-b863-b2deb140055f",
+      "attempt_id": "50d80a51-bf50-4a43-92d2-1d1872105dee",
+      "campaign_id": "39c609a4-fc42-4f6c-9e94-dee3eb188205",
+      "estimated_cost_usd": "0.026723",
+      "input_tokens": 3201,
+      "latency_ms": 3071,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 224,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "dedfde35d5f569820741b09cb4c13293"
+    },
+    {
       "agent_run_id": "662dac5c-e163-4de1-98cb-51956818fc3e",
       "attempt_id": null,
       "campaign_id": "cfaf4d62-aeb9-4bfd-b56e-b5953f542651",
@@ -509,6 +704,36 @@
       "source_label": "production-final-2026-07-24",
       "status": "rejected",
       "trace_id": "eaa9b49a3de842d2268c6cfd2ff203ac"
+    },
+    {
+      "agent_run_id": "6f88aa49-e55d-484c-a164-d9e572ca35e4",
+      "attempt_id": "a4ed5a0a-7ad8-4ac2-b59b-fb9b44c76115",
+      "campaign_id": "56c62061-842a-47a2-9f27-bc4280051b78",
+      "estimated_cost_usd": "0.011404",
+      "input_tokens": 2733,
+      "latency_ms": 2100,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 191,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b87a02b37654079c24cb4ad2f2643a2d"
+    },
+    {
+      "agent_run_id": "705f5f54-3f26-44cc-9185-18938533125f",
+      "attempt_id": "a6448de1-dc33-4741-862c-65a5de63e1b1",
+      "campaign_id": "29f2c41c-4232-4968-92fd-26bb9431295d",
+      "estimated_cost_usd": "0.009826",
+      "input_tokens": 2377,
+      "latency_ms": 2616,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 160,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "bf5b22665dfaa47d888690600f6720b0"
     },
     {
       "agent_run_id": "745ae316-e9e3-42c7-a0e3-d5bf0c1da930",
@@ -569,6 +794,21 @@
       "source_label": "production-final-2026-07-24",
       "status": "succeeded",
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
+    },
+    {
+      "agent_run_id": "7d88fee8-4f4d-4589-92a4-fc657cf72921",
+      "attempt_id": "745704c8-9ee2-4b92-af47-58a4244fc7fa",
+      "campaign_id": "f18976e0-8d29-4484-964e-15f41d7a99cc",
+      "estimated_cost_usd": "0.074555",
+      "input_tokens": 8911,
+      "latency_ms": 362,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 1000,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "failed",
+      "trace_id": "f4afe8822d308554b5bc9d9a8282e24d"
     },
     {
       "agent_run_id": "804aa7c8-9deb-4f30-bc76-f8c3a2cf6da1",
@@ -721,6 +961,21 @@
       "trace_id": "e4ac48aa75342ec674ca38ebea64d49b"
     },
     {
+      "agent_run_id": "9f790141-f964-40e1-94fe-2a7c8e979703",
+      "attempt_id": null,
+      "campaign_id": "3fcbc111-ef20-49e8-a074-45573b02c455",
+      "estimated_cost_usd": "0.013154",
+      "input_tokens": 1714,
+      "latency_ms": 8957,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 520,
+      "role": "orchestrator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "d758e3761c2a80e58b851d0cb0a185b2"
+    },
+    {
       "agent_run_id": "a6167b2c-0959-4f63-90b3-b1aebca1a735",
       "attempt_id": "977623c1-2f60-4af0-ae8f-83e8f06f0697",
       "campaign_id": "8d6bfbe6-e094-41cb-b87b-55ffbbb6b89f",
@@ -734,6 +989,36 @@
       "source_label": "production-final-2026-07-24",
       "status": "failed",
       "trace_id": "1f2c291310ebf414637bc281cbb1947f"
+    },
+    {
+      "agent_run_id": "a7285bfd-d1aa-4acf-b9da-f0cbe03bdb2a",
+      "attempt_id": "7d98822c-0006-4013-98f4-12014d7d7618",
+      "campaign_id": "39c609a4-fc42-4f6c-9e94-dee3eb188205",
+      "estimated_cost_usd": "0.026060",
+      "input_tokens": 3167,
+      "latency_ms": 2927,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 209,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "dedfde35d5f569820741b09cb4c13293"
+    },
+    {
+      "agent_run_id": "a8d4a078-2dc8-41de-a37f-0e9ead486ad0",
+      "attempt_id": "addc5d17-613b-45c0-a9d6-19ac5620beb5",
+      "campaign_id": "fa31bf74-d028-4746-9e95-d1f7fb37796d",
+      "estimated_cost_usd": "0.009802",
+      "input_tokens": 2350,
+      "latency_ms": 1991,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 164,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "16e189d8071bae602e0b4aa90443da14"
     },
     {
       "agent_run_id": "aabadc49-53ec-4706-ba43-855158756784",
@@ -796,6 +1081,21 @@
       "trace_id": "c4e62ffe60e8c0475bc6f5c41fa08548"
     },
     {
+      "agent_run_id": "b299c6cc-f5cd-4d4d-b5bf-7f523ba9aefc",
+      "attempt_id": "449a3ba9-6051-4839-9db3-dfa507064ef9",
+      "campaign_id": "39c609a4-fc42-4f6c-9e94-dee3eb188205",
+      "estimated_cost_usd": "0.025253",
+      "input_tokens": 2985,
+      "latency_ms": 3715,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 220,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "dedfde35d5f569820741b09cb4c13293"
+    },
+    {
       "agent_run_id": "b31614fc-de53-4ea9-97b9-323af1be0f6d",
       "attempt_id": null,
       "campaign_id": "511b1f45-e2d6-4a55-b0a1-59e94e8a8f8e",
@@ -809,6 +1109,21 @@
       "source_label": "production-final-2026-07-24",
       "status": "rejected",
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
+    },
+    {
+      "agent_run_id": "b484fedc-c4eb-4cd8-a694-8be8318ae68c",
+      "attempt_id": "b584d986-55f2-4b15-a2ca-15b06d1b88da",
+      "campaign_id": "3fcbc111-ef20-49e8-a074-45573b02c455",
+      "estimated_cost_usd": "0.018828",
+      "input_tokens": 4488,
+      "latency_ms": 7217,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 862,
+      "role": "attack_generator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "d758e3761c2a80e58b851d0cb0a185b2"
     },
     {
       "agent_run_id": "b496a4f9-8cfd-4c70-af4b-ac906465ae9d",
@@ -976,6 +1291,21 @@
       "trace_id": "eaa9b49a3de842d2268c6cfd2ff203ac"
     },
     {
+      "agent_run_id": "d0719c57-62da-4242-9d7f-ecad15830233",
+      "attempt_id": "3942c1d2-d46b-42fd-88cd-6ab9943d20c6",
+      "campaign_id": "688ed226-ebf6-4a74-aa34-9647f607931a",
+      "estimated_cost_usd": "0.026311",
+      "input_tokens": 3164,
+      "latency_ms": 5015,
+      "model": "gpt-5.6-sol",
+      "output_tokens": 218,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b74d6a207a6922b04e9c7efcd01b5b1c"
+    },
+    {
       "agent_run_id": "d08a1ed7-2eb4-4f02-9704-107f25cf26ee",
       "attempt_id": "8d3afd3b-bda4-4a30-ad88-e946d7fb6966",
       "campaign_id": "d0c67f8f-338c-474c-a546-089707fdcb93",
@@ -991,6 +1321,51 @@
       "trace_id": "5d85565787e3e9f08dc3b8793227ded6"
     },
     {
+      "agent_run_id": "d35d8e75-ef3d-4f7a-8f3b-2fb89d19e2db",
+      "attempt_id": null,
+      "campaign_id": "56c62061-842a-47a2-9f27-bc4280051b78",
+      "estimated_cost_usd": "0.017619",
+      "input_tokens": 4237,
+      "latency_ms": 4261,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 292,
+      "role": "orchestrator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b87a02b37654079c24cb4ad2f2643a2d"
+    },
+    {
+      "agent_run_id": "d36e0e87-4c5d-49ad-b349-b44c8e90d566",
+      "attempt_id": null,
+      "campaign_id": "43778196-261e-46e9-b5de-c2d002e5f447",
+      "estimated_cost_usd": "0.010966",
+      "input_tokens": 1652,
+      "latency_ms": 4953,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 387,
+      "role": "orchestrator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "160f18f7034d504e37a43deea5fa6384"
+    },
+    {
+      "agent_run_id": "d696b7aa-b739-431c-87fa-314d9f97af21",
+      "attempt_id": null,
+      "campaign_id": "56c62061-842a-47a2-9f27-bc4280051b78",
+      "estimated_cost_usd": "0.027025",
+      "input_tokens": 4223,
+      "latency_ms": 9691,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 922,
+      "role": "attack_generator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "rejected",
+      "trace_id": "b87a02b37654079c24cb4ad2f2643a2d"
+    },
+    {
       "agent_run_id": "d87b2d70-76a2-463a-a95b-faa807bc5735",
       "attempt_id": "76aee11e-e574-4c5c-b6ec-5348999ccc2c",
       "campaign_id": "28aac1b5-8d4d-483d-9e6d-daee0da83e7e",
@@ -1004,6 +1379,21 @@
       "source_label": "production-final-2026-07-24",
       "status": "succeeded",
       "trace_id": "fe959028edb2f57e543ef8c5f15cdb11"
+    },
+    {
+      "agent_run_id": "d90c7877-d321-412c-9ed5-fb6832367fd1",
+      "attempt_id": "84e7e967-d439-41b0-a83c-c25c324eae6b",
+      "campaign_id": "1b331be9-757e-4c6d-bcc3-438ee95d4284",
+      "estimated_cost_usd": "0.009814",
+      "input_tokens": 2354,
+      "latency_ms": 1785,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 164,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "b68652009258d2ed25ba1881c0e3d28f"
     },
     {
       "agent_run_id": "d9f5473b-0555-4446-93aa-5bf7bab3d1d3",
@@ -1079,6 +1469,21 @@
       "source_label": "production-final-2026-07-24",
       "status": "failed",
       "trace_id": "1f2c291310ebf414637bc281cbb1947f"
+    },
+    {
+      "agent_run_id": "e187f8ec-9a3d-47c7-88be-cf318321430d",
+      "attempt_id": "eb83be3f-11eb-4b22-969c-a96b6032bd7a",
+      "campaign_id": "ac2cde40-90fc-4f09-9fc1-0c6f215e7b95",
+      "estimated_cost_usd": "0.010062",
+      "input_tokens": 2366,
+      "latency_ms": 2383,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 178,
+      "role": "judge",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "5e6bbf4d63be3b38d8b3e5637d8c67e2"
     },
     {
       "agent_run_id": "e300c420-95ee-49ff-b7a6-423c7ad4e75d",
@@ -1171,6 +1576,21 @@
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
     },
     {
+      "agent_run_id": "f0eb7ba1-8329-46dc-860d-162033fb19ac",
+      "attempt_id": null,
+      "campaign_id": "43778196-261e-46e9-b5de-c2d002e5f447",
+      "estimated_cost_usd": "0.012256",
+      "input_tokens": 1652,
+      "latency_ms": 6327,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 473,
+      "role": "orchestrator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "succeeded",
+      "trace_id": "160f18f7034d504e37a43deea5fa6384"
+    },
+    {
       "agent_run_id": "f260ec79-bef8-41ae-bce6-c1cb87424ae6",
       "attempt_id": null,
       "campaign_id": "511b1f45-e2d6-4a55-b0a1-59e94e8a8f8e",
@@ -1216,6 +1636,21 @@
       "trace_id": "7a78c33980e6d06dbfe42ee1816de10c"
     },
     {
+      "agent_run_id": "f6595f1c-9a0b-411d-883d-596d3d36e86a",
+      "attempt_id": null,
+      "campaign_id": "43778196-261e-46e9-b5de-c2d002e5f447",
+      "estimated_cost_usd": "0.022238",
+      "input_tokens": 4229,
+      "latency_ms": 11647,
+      "model": "gpt-5.6-terra",
+      "output_tokens": 1121,
+      "role": "attack_generator",
+      "sdk_attempts": 1,
+      "source_label": "production-final-2026-07-24",
+      "status": "rejected",
+      "trace_id": "160f18f7034d504e37a43deea5fa6384"
+    },
+    {
       "agent_run_id": "fb9c0635-5239-4fcc-ba0c-15e39abfa89b",
       "attempt_id": "415386c3-9281-4d78-84c4-23db507d859b",
       "campaign_id": "34894017-b621-47ef-99a6-dbaec511a270",
@@ -1247,33 +1682,35 @@
     }
   ],
   "artifact_bytes": 0,
-  "average_target_latency_ms": "17333.88095238095238095238095",
-  "browser_seconds": "609.37",
+  "average_target_latency_ms": "16240.96491228070175438596491",
+  "browser_seconds": "807.082",
   "codex_subscription_status": "UNMEASURED: Codex subscription usage is outside AgentRun.",
   "counts": {
-    "agent_calls": 80,
-    "attempts": 45,
+    "agent_calls": 109,
+    "attempts": 60,
     "confirmed_observations": 3,
     "findings": 3,
     "fuzz_variant": 2,
     "human_reviewed_findings": 0,
-    "ordinary_discovery": 22,
-    "regression_replay": 12,
-    "regression_replays": 12,
-    "seed_evaluation": 9,
-    "target_executions": 42
+    "ordinary_discovery": 24,
+    "regression_replay": 21,
+    "regression_replays": 21,
+    "seed_evaluation": 13,
+    "target_executions": 57
   },
-  "database_evidence_bytes": 596072,
+  "database_evidence_bytes": 1234700,
   "developer_labor_status": "UNMEASURED: developer labor was not time-tracked.",
-  "evidence_digest": "58541284f931abeee04f804aba91261ea72d24e3ab84e50b4a2c4a11eb2d44b2",
-  "generated_at": "2026-07-24T10:20:42.740410Z",
+  "evidence_digest": "334938741803c211c5419208dca4740fd66c0ebc1c6ffb1e71a82657e0a84755",
+  "generated_at": "2026-07-24T15:37:21.576835Z",
   "human_review_rate": "0",
   "infrastructure_invoice_status": "UNMEASURED: Railway, PostgreSQL, and Langfuse invoices were not available.",
-  "overnight_campaign_cost_usd": "3.767034",
+  "overnight_campaign_cost_usd": "3.928412",
   "overnight_campaign_ids": [
     "28aac1b5-8d4d-483d-9e6d-daee0da83e7e",
     "2942704d-4219-4d24-869e-1e29d0dbda1b",
     "34894017-b621-47ef-99a6-dbaec511a270",
+    "39c609a4-fc42-4f6c-9e94-dee3eb188205",
+    "3fcbc111-ef20-49e8-a074-45573b02c455",
     "4912c47b-9eb4-4ad6-bc6a-a6d559ab041e",
     "511b1f45-e2d6-4a55-b0a1-59e94e8a8f8e",
     "7090e598-2450-4071-87c4-e6f092fac3f6",
@@ -1292,7 +1729,7 @@
   "pricing_source": "https://developers.openai.com/api/docs/pricing",
   "pricing_verified_at": "2026-07-24",
   "provider_billing_reconciliation_status": "UNMEASURED: no project-scoped provider billing export was available.",
-  "retry_rate": "0.2524271844660194174757281553",
+  "retry_rate": "0.1969696969696969696969696970",
   "schema_version": "v1",
   "source_labels": [
     "local-development",
@@ -1307,16 +1744,16 @@
       "source_label": "local-development"
     },
     {
-      "calls": 80,
-      "estimated_cost_usd": "3.820690",
-      "input_tokens": 920931,
-      "output_tokens": 67529,
+      "calls": 109,
+      "estimated_cost_usd": "4.526458",
+      "input_tokens": 1032419,
+      "output_tokens": 81483,
       "source_label": "production-final-2026-07-24"
     }
   ],
-  "target_executions": 42,
-  "target_inference_cost_status": "UNMEASURED: 42 target executions observed without target-provider usage.",
-  "total_agentforge_model_cost_usd": "3.872759",
+  "target_executions": 57,
+  "target_inference_cost_status": "UNMEASURED: 57 target executions observed without target-provider usage.",
+  "total_agentforge_model_cost_usd": "4.578527",
   "unit_economics": [
     {
       "measured_cost_usd": "0.02703666666666666666666666667",
@@ -1337,9 +1774,9 @@
       "unit": "fuzz_variant"
     },
     {
-      "measured_cost_usd": "0.03002640909090909090909090909",
+      "measured_cost_usd": "0.0299485",
       "note": "Mean model cost stored on the completed/gated attempt.",
-      "samples": 22,
+      "samples": 24,
       "unit": "ordinary_discovery"
     },
     {
@@ -1349,9 +1786,9 @@
       "unit": "regression_case_two_replays"
     },
     {
-      "measured_cost_usd": "0.01590688888888888888888888889",
+      "measured_cost_usd": "0.01405123076923076923076923077",
       "note": "Mean model cost stored on the completed/gated attempt.",
-      "samples": 9,
+      "samples": 13,
       "unit": "seed_evaluation"
     }
   ]
