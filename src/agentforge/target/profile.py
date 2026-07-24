@@ -116,8 +116,10 @@ class UploadProfileV1(ProfileModel):
     file_selector: str
     submit_selector: str
     review_selector: str
+    error_selector: str
     reject_selector: str
     confirm_selector: str
+    processing_timeout_seconds: int = Field(ge=30, le=180)
     allowed_document_types: list[str]
     allowed_extensions: list[str]
     max_bytes: int = Field(gt=0, le=10_485_760)

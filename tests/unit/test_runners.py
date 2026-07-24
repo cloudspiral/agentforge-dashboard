@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from contextlib import AbstractAsyncContextManager
@@ -27,7 +28,7 @@ from agentforge.orchestration.execution_gate import (
     ValidatedAttackV1,
     proposal_sequence_hash,
 )
-from agentforge.runners.base import RunnerActionRejected, TargetExecutionContext
+from agentforge.runners.base import RunnerActionRejected, RunnerFailure, TargetExecutionContext
 from agentforge.runners.composite import CompositeAttackRunner
 from agentforge.runners.http_runner import HttpAttackRunner
 from agentforge.runners.playwright_runner import (
@@ -38,11 +39,16 @@ from agentforge.runners.playwright_runner import (
     SelectedPatient,
     _extract_target_visible_tool_calls,
     _LivePlaywrightSession,
+    _wait_for_upload_outcome,
 )
 from agentforge.security.allowlist import TargetRejected
 from agentforge.settings import Settings
 from agentforge.target.auth import TargetCredentials, credentials_from_settings
-from agentforge.target.fixtures import ApprovedFixtureAuthorization, resolve_approved_fixture
+from agentforge.target.fixtures import (
+    ApprovedFixture,
+    ApprovedFixtureAuthorization,
+    resolve_approved_fixture,
+)
 from agentforge.target.profile import load_target_profile
 from agentforge.target.version import (
     approved_browser_url,
@@ -879,6 +885,120 @@ async def test_playwright_upload_uses_authorized_fixture_and_only_stage_rejects(
     assert "stage-reject:bounded-upload" in fake.events
     assert all("confirm" not in event for event in fake.events)
     assert evidence.errors == []
+
+
+class _UploadLocator:
+    def __init__(self, name: str, events: list[str], *, visible: bool = False) -> None:
+        self.name = name
+        self.events = events
+        self.visible = visible
+
+    async def click(self) -> None:
+        self.events.append(f"click:{self.name}")
+
+    async def select_option(self, value: str) -> None:
+        self.events.append(f"select:{self.name}:{value}")
+
+    async def set_input_files(self, value: str) -> None:
+        self.events.append(f"file:{self.name}:{Path(value).name}")
+
+    async def wait_for(self, *, state: str, timeout: float) -> None:
+        self.events.append(f"wait:{self.name}:{state}:{timeout}")
+        if state == "hidden" or self.visible:
+            return
+        await asyncio.Future()
+
+    async def inner_text(self) -> str:
+        return "Synthetic staged review"
+
+
+class _UploadFrame:
+    def __init__(self, events: list[str], *, outcome: str) -> None:
+        self.events = events
+        self.review = _UploadLocator("review", events, visible=outcome == "review")
+        self.error = _UploadLocator("error", events, visible=outcome == "error")
+        self.reject = _UploadLocator("reject", events)
+
+    def locator(self, selector: str) -> _UploadLocator:
+        if selector.endswith(":not(:empty)"):
+            return self.error
+        if selector == ".clinical-copilot-review":
+            return self.review
+        if selector == ".clinical-copilot-stage-reject":
+            return self.reject
+        return _UploadLocator(selector, self.events)
+
+
+def _approved_upload_fixture(tmp_path: Path) -> ApprovedFixture:
+    path = tmp_path / "synthetic.pdf"
+    path.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    return ApprovedFixture(
+        fixture_id="synthetic",
+        path=path,
+        media_type="application/pdf",
+        document_type="lab_pdf",
+        size_bytes=path.stat().st_size,
+        pages=1,
+        sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_upload_rejects_only_after_review_is_visible(tmp_path: Path) -> None:
+    events: list[str] = []
+    frame = _UploadFrame(events, outcome="review")
+    session = _LivePlaywrightSession(_context(tmp_path, credentials=True), False)
+    session._page = SimpleNamespace(frame_locator=lambda _selector: frame)
+
+    async def validate_card(*, first_binding: bool) -> None:
+        events.append(f"bind:{first_binding}")
+
+    session._bind_and_validate_card = validate_card  # type: ignore[method-assign]
+
+    result = await session.stage_and_reject(_approved_upload_fixture(tmp_path), 7)
+
+    assert result.review_text == "Synthetic staged review"
+    assert events.count("click:reject") == 1
+    assert events[-1] == "bind:False"
+
+
+@pytest.mark.asyncio
+async def test_live_upload_target_error_never_clicks_hidden_reject(tmp_path: Path) -> None:
+    events: list[str] = []
+    frame = _UploadFrame(events, outcome="error")
+    session = _LivePlaywrightSession(_context(tmp_path, credentials=True), False)
+    session._page = SimpleNamespace(frame_locator=lambda _selector: frame)
+
+    async def validate_card(*, first_binding: bool) -> None:
+        events.append(f"bind:{first_binding}")
+
+    session._bind_and_validate_card = validate_card  # type: ignore[method-assign]
+
+    with pytest.raises(RunnerFailure) as captured:
+        await session.stage_and_reject(_approved_upload_fixture(tmp_path), 7)
+
+    assert captured.value.code == AgentErrorCodeV1.INVALID_CONTRACT
+    assert captured.value.details == {"phase": "upload_review", "error_visible": True}
+    assert "click:reject" not in events
+
+
+@pytest.mark.asyncio
+async def test_live_upload_timeout_is_typed_and_single_bounded_wait() -> None:
+    events: list[str] = []
+    review = _UploadLocator("review", events)
+    error = _UploadLocator("error", events)
+
+    with pytest.raises(RunnerFailure) as captured:
+        await _wait_for_upload_outcome(
+            review=review,  # type: ignore[arg-type]
+            error=error,  # type: ignore[arg-type]
+            timeout_seconds=0.001,
+        )
+
+    assert captured.value.code == AgentErrorCodeV1.AGENT_TIMEOUT
+    assert captured.value.status == ActionExecutionStatusV1.TIMED_OUT
+    assert captured.value.details == {"phase": "upload_review"}
+    assert events == ["wait:review:visible:0", "wait:error:visible:0"]
 
 
 @pytest.mark.asyncio

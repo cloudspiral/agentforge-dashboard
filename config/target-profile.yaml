@@ -71,8 +71,10 @@ upload:
   file_selector: "#clinical-copilot-document-file"
   submit_selector: ".clinical-copilot-upload-submit"
   review_selector: ".clinical-copilot-review"
+  error_selector: ".clinical-copilot-upload-error"
   reject_selector: ".clinical-copilot-stage-reject"
   confirm_selector: ".clinical-copilot-stage-confirm"
+  processing_timeout_seconds: 180
   allowed_document_types: [lab_pdf, intake_form, medication_list]
   allowed_extensions: [.pdf]
   max_bytes: 1048576

@@ -439,6 +439,40 @@ def test_queue_aggregates_and_operational_api_are_database_backed(
     assert 'event_type="claimed"' in prometheus.text
 
 
+def test_campaign_launcher_default_is_browser_valid_and_nav_has_no_dead_docs_link(
+    client: TestClient,
+) -> None:
+    response = client.get("/dashboard/campaigns")
+
+    assert response.status_code == 200
+    assert (
+        'name="max_cost_usd" type="number" min="0.000001" '
+        'max="8" step="0.000001" required value="0.25"'
+    ) in response.text
+    assert 'href="/docs"' not in response.text
+
+
+def test_finding_report_download_uses_canonical_postgres_markdown(
+    database: Database,
+    client: TestClient,
+) -> None:
+    finding_id = _create_pending_finding(database, suffix="download3")
+
+    detail = client.get(f"/dashboard/findings/{finding_id}")
+    download = client.get(f"/dashboard/findings/{finding_id}/report.md")
+
+    assert detail.status_code == 200
+    assert "Download canonical Markdown" in detail.text
+    assert download.status_code == 200
+    assert download.content == b"# Unit lifecycle finding\n"
+    assert download.headers["content-type"].startswith("text/markdown")
+    assert download.headers["cache-control"] == "no-store"
+    assert download.headers["x-content-type-options"] == "nosniff"
+    assert download.headers["content-disposition"] == (
+        'attachment; filename="AF-UNIT-DOWNLOAD3.md"'
+    )
+
+
 def test_pagination_parameters_are_bounded(client: TestClient) -> None:
     assert client.get("/dashboard/campaigns?offset=0&limit=200").status_code == 200
     assert client.get("/dashboard/campaigns?limit=201").status_code == 422
@@ -597,6 +631,8 @@ def test_campaign_page_polls_and_renders_persisted_evaluation_result(
     )
     assert "openemr ui" in running.text
     assert "Planning provenance" in running.text
+    assert 'class="agent-timeline-table"' in running.text
+    assert 'class="attempt-results-table"' in running.text
     assert status.json()["terminal"] is False
 
     with database.session_factory() as session:
