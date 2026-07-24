@@ -17,10 +17,10 @@ if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
 from agentforge.observability.cost_analysis import (  # noqa: E402
-    CostEvidenceSnapshotV1,
     collect_cost_evidence,
     evidence_digest,
     load_cost_assumptions,
+    load_cost_evidence_snapshot,
     merge_cost_evidence,
     render_cost_analysis,
 )
@@ -82,10 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             )
     finally:
         database.dispose()
-    previous = [
-        CostEvidenceSnapshotV1.model_validate_json(path.read_text(encoding="utf-8"))
-        for path in args.merge_evidence
-    ]
+    previous = [load_cost_evidence_snapshot(path) for path in args.merge_evidence]
     evidence = merge_cost_evidence([*previous, current]) if previous else current
     evidence_payload = evidence.model_dump(mode="json")
     evidence_payload["evidence_digest"] = evidence_digest(evidence)
