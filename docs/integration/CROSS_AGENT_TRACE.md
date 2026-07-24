@@ -51,10 +51,11 @@ The target answered an arithmetic question by unnecessarily reading selected-pat
 vitals. The historical controller failed to promote the Judge result because it
 contained an extra reproduction policy. That mismatch motivated this refactor.
 
-The new controller does **not** reinterpret or backfill this row. For a new equivalent
-attempt, one Judge `exploit_confirmed` verdict would immediately create one Finding,
-invoke the Documentation Agent, and create a regression case. PostgreSQL integration
-tests prove that behavior.
+The new controller does **not** reinterpret or backfill this row. A new equivalent
+attempt with a Judge `exploit_confirmed` verdict immediately enters semantic
+promotion: it creates and documents a Finding if the fingerprint is new, or appends
+an immutable observation if that semantic Finding already exists. PostgreSQL
+integration tests prove both paths.
 
 ## Post-refactor four-agent finding trace
 

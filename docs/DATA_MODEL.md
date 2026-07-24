@@ -9,13 +9,16 @@ portable exports; they do not replace database records.
 | --- | --- | --- |
 | `campaigns` | Target, taxonomy scope, `max_attempts`, maximum cost, duration, priority, state, cancellation, idempotency | One campaign has many attempts and AgentRuns |
 | `campaign_events` | Timestamped mechanical lifecycle events | Append-only history |
-| `attack_attempts` | Lifecycle `state`, optional structured failure, parent attempt, trusted provenance, sequence hash, objective, proposed/executed sequence, target/profile/prompt/taxonomy versions, raw evidence, evidence hash, usage/cost/latency/trace | Created only after an agent proposal passes authorization |
+| `attack_attempts` | Lifecycle `state`, optional structured failure, parent attempt, trusted provenance, sequence hash, objective, proposed/executed sequence, target/profile/prompt/taxonomy versions, raw evidence, evidence hash, usage/cost/latency/trace | Many per campaign across seed, discovery, fuzz, and regression lanes; `target_executed` distinguishes target contact |
 | `judge_verdicts` | Verdict, confidence, severity, exploitability, violated invariants, observed/expected behavior, rubric version/hash | Zero or one per executed attempt |
 | `agent_runs` | Role, model, prompt version, input/output metadata, usage, cost, latency, trace ID, typed failure | Persists successful and rejected/invalid role calls |
-| `findings` | One confirmed attempt, attempt/evidence fingerprint, status | Exactly one new Finding per `exploit_confirmed` attempt |
-| `vulnerability_reports` | Documentation Agent structured output, controller-anchored exact transcript, and rendered canonical report | Exactly one per successfully documented Finding |
-| `regression_cases` | Saved sequence, target requirements, original Judge context, expected secure behavior, taxonomy metadata, source evidence hash | Created mechanically after report persistence |
-| `regression_runs` | New target/evidence/verdict and mapped regression outcome | Many runs per regression case |
+| `findings` | Semantic fingerprint, finding key, source attempt, first/last target version, severity, human lifecycle, rediscovery count, current regression case | Exactly one per semantic fingerprint |
+| `finding_observations` | Finding/attempt link, target version, provenance, evidence hash, exact Judge verdict, observation kind | One immutable observation per promoted attempt |
+| `finding_lifecycle_events` | Actor, transition, reason, evidence reference, timestamp, details | Append-only human and regression audit history |
+| `vulnerability_reports` | Versioned structured report, controller-anchored exact transcript, canonical Markdown body, validation summary | Many immutable versions per Finding; unique by Finding and report version |
+| `regression_cases` | Versioned saved sequence, target requirements, original Judge context, expected secure behavior, taxonomy metadata, source evidence hash | Versioned per Finding; one current active case is referenced by the Finding |
+| `regression_runs` | Cohort, current/previous target version, trigger, state, aggregate outcomes, cost | One run contains many case results |
+| `regression_results` / `regression_replays` | Per-case aggregate plus each replay's target version, evidence, Judge verdict/error, cost, latency, and trace | Many results per run; multiple replay records may support one conservative result |
 
 ## Attempt lifecycle and outcome
 
@@ -77,18 +80,24 @@ files are unavailable; orphan files are never imported or rendered.
 
 Discovery does not persist deterministic assertion summaries or authorization-result
 fields. Fixed-case assertions are stored only with fixed-case evaluation records and
-cannot become discovery Findings or change Judge rows.
+cannot themselves create or suppress Findings or change Judge rows. Raw seed evidence
+receives an independent Judge verdict, and a Judge-confirmed seed uses the same
+promotion service as discovery.
 
 ## Findings and reports
 
-One `exploit_confirmed` verdict creates a new Finding immediately. Its unique
-fingerprint is derived from the attempt ID and evidence hash, so even identical attack
-sequences in separate attempts create separate Findings. There is no reproduction
-counter, semantic deduplication, finding upsert, or target-version reopening rule.
+Every `exploit_confirmed` verdict enters promotion immediately, without a reproduction
+gate. The semantic fingerprint is derived from the Judge finding key, taxonomy scope,
+and sorted violated invariants. A new fingerprint creates one pending-review Finding
+and its first immutable observation. Rediscovery upserts no new Finding: it appends a
+new attempt-bound observation, increments `rediscovery_count`, and updates
+`last_seen_target_version`. Regression reproduction can reopen a resolved or
+false-positive Finding through an audited lifecycle event.
 
-The Documentation Agent runs immediately for that Finding. If report or regression
-creation fails, the Finding and evidence remain durable and the campaign ends
-visibly.
+The Documentation Agent runs for a new Finding, after which the controller creates
+its initial regression case. Human lifecycle changes and regression validation create
+new deterministic report versions. If initial report or regression creation fails,
+the Finding and evidence remain durable and the campaign ends visibly.
 
 The controller replaces any model-supplied report transcript with the committed
 source-evidence transcript. Structured report data and rendered `markdown_body` are

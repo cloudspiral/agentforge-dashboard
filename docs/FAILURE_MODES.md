@@ -71,8 +71,10 @@ Rejected proposals remain auditable through `AgentRun` and do not become
 
 ## Findings, reports, and regressions
 
-One `exploit_confirmed` verdict creates one Finding immediately. There is no
-reproduction gate or semantic deduplication.
+Every `exploit_confirmed` verdict enters promotion immediately; there is no
+reproduction gate. A new semantic fingerprint creates a Finding, report, and
+regression case, while rediscovery appends an immutable observation to the existing
+Finding.
 
 | Failure | Containment | Recovery |
 | --- | --- | --- |
