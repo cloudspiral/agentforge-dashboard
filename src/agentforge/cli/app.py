@@ -17,15 +17,28 @@ from typing import Annotated, Any
 import typer
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from agentforge.api.schemas import CampaignCreateRequest, RegressionRunCreateRequest
 from agentforge.api.services import ApplicationService
 from agentforge.evaluation import TaxonomyV1, load_seed_cases, load_taxonomy
 from agentforge.evaluation.live_local import LiveLocalEvaluationResultV1, run_live_local_case
+from agentforge.evidence import (
+    EvidenceArtifactError,
+    EvidenceArtifactMissing,
+    EvidenceArtifactStore,
+)
 from agentforge.persistence import Database
-from agentforge.persistence.models import Campaign, RegressionRun
+from agentforge.persistence.models import (
+    AttackAttempt,
+    Campaign,
+    Finding,
+    RegressionRun,
+    VulnerabilityReport,
+)
 from agentforge.persistence.repositories import CampaignRepository
+from agentforge.reports import stored_report_export_path, verify_stored_report_export
 from agentforge.runners.playwright_runner import UISmokeResult, run_ui_smoke
 from agentforge.settings import Settings, get_settings
 from agentforge.target import (
@@ -71,6 +84,10 @@ regression_app = typer.Typer(help="Trigger saved regression campaigns.", no_args
 eval_app = typer.Typer(help="Queue versioned defensive seed evaluations.", no_args_is_help=True)
 reports_app = typer.Typer(help="Export controller-approved finding reports.", no_args_is_help=True)
 contracts_app = typer.Typer(help="Export versioned public JSON schemas.", no_args_is_help=True)
+artifacts_app = typer.Typer(
+    help="Reconcile and regenerate PostgreSQL-anchored derived exports.",
+    no_args_is_help=True,
+)
 worker_app = typer.Typer(help="Run the durable campaign queue worker.", no_args_is_help=True)
 target_app = typer.Typer(help="Inspect approved target connectivity.", no_args_is_help=True)
 
@@ -80,6 +97,7 @@ app.add_typer(regression_app, name="regression")
 app.add_typer(eval_app, name="eval")
 app.add_typer(reports_app, name="reports")
 app.add_typer(contracts_app, name="contracts")
+app.add_typer(artifacts_app, name="artifacts")
 app.add_typer(worker_app, name="worker")
 app.add_typer(target_app, name="target")
 
@@ -242,6 +260,10 @@ def _contract_exporter() -> Any:
     module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(module)
     return module.export_schemas
+
+
+def _evidence_store(runtime: CliRuntime) -> EvidenceArtifactStore:
+    return EvidenceArtifactStore(_project_path(runtime.settings.artifacts_dir) / "evidence")
 
 
 @target_app.command("probe")
@@ -640,6 +662,172 @@ def contracts_export(
     except (AttributeError, OSError):
         _abort("contract schema export failed")
     _emit({"count": len(paths), "paths": [str(path) for path in paths]})
+
+
+@artifacts_app.command("reconcile")
+def evidence_reconcile() -> None:
+    """Classify database records and derived exports without changing either."""
+
+    with _runtime() as runtime, runtime.database.session_factory() as session:
+        store = _evidence_store(runtime)
+        attempts = list(
+            session.scalars(
+                select(AttackAttempt)
+                .where(AttackAttempt.evidence_payload.is_not(None))
+                .order_by(AttackAttempt.created_at, AttackAttempt.id)
+            )
+        )
+        database_keys: set[tuple[uuid.UUID, uuid.UUID]] = set()
+        expected_paths: set[Path] = set()
+        rows: list[dict[str, str]] = []
+        counts: dict[str, int] = {
+            "database_valid_export": 0,
+            "database_missing_export": 0,
+            "database_corrupt_export": 0,
+            "orphan_file": 0,
+            "stale_temporary_file": 0,
+        }
+        for attempt in attempts:
+            key = (attempt.campaign_id, attempt.id)
+            database_keys.add(key)
+            try:
+                store.load_verified(
+                    campaign_id=attempt.campaign_id,
+                    attempt_id=attempt.id,
+                    database_payload=attempt.evidence_payload,
+                )
+                classification = "database_valid_export"
+            except EvidenceArtifactMissing:
+                classification = "database_missing_export"
+            except EvidenceArtifactError:
+                classification = "database_corrupt_export"
+            counts[classification] += 1
+            rows.append(
+                {
+                    "artifact_type": "evidence_json",
+                    "classification": classification,
+                    "campaign_id": str(attempt.campaign_id),
+                    "attempt_id": str(attempt.id),
+                }
+            )
+            expected_paths.add(store.path_for(attempt.campaign_id, attempt.id))
+        for path in store.json_paths():
+            key = store.parse_path_ids(path)
+            if key is None or key not in database_keys:
+                counts["orphan_file"] += 1
+                rows.append(
+                    {
+                        "artifact_type": "evidence_json",
+                        "classification": "orphan_file",
+                        "path": str(path),
+                    }
+                )
+        for path in store.stale_temporary_paths():
+            counts["stale_temporary_file"] += 1
+            rows.append(
+                {
+                    "artifact_type": "evidence_json",
+                    "classification": "stale_temporary_file",
+                    "path": str(path),
+                }
+            )
+        latest_reports: dict[uuid.UUID, tuple[VulnerabilityReport, Finding]] = {}
+        for report, finding in session.execute(
+            select(VulnerabilityReport, Finding)
+            .join(Finding, VulnerabilityReport.finding_id == Finding.id)
+            .order_by(
+                VulnerabilityReport.finding_id,
+                VulnerabilityReport.report_version.desc(),
+            )
+        ):
+            latest_reports.setdefault(finding.id, (report, finding))
+        reports_root = _project_path(runtime.settings.reports_dir).resolve()
+        for report, finding in latest_reports.values():
+            path = stored_report_export_path(
+                vulnerability_id=finding.vulnerability_id,
+                reports_dir=reports_root,
+            )
+            expected_paths.add(path)
+            try:
+                verify_stored_report_export(
+                    report,
+                    vulnerability_id=finding.vulnerability_id,
+                    reports_dir=reports_root,
+                )
+                classification = "database_valid_export"
+            except FileNotFoundError:
+                classification = "database_missing_export"
+            except (OSError, UnicodeError, ValueError):
+                classification = "database_corrupt_export"
+            counts[classification] += 1
+            rows.append(
+                {
+                    "artifact_type": "generated_markdown",
+                    "classification": classification,
+                    "finding_id": str(finding.id),
+                    "report_id": str(report.id),
+                }
+            )
+        if reports_root.exists():
+            for path in sorted(reports_root.glob("*.md")):
+                if path.resolve() not in expected_paths:
+                    counts["orphan_file"] += 1
+                    rows.append(
+                        {
+                            "artifact_type": "generated_markdown",
+                            "classification": "orphan_file",
+                            "path": str(path.resolve()),
+                        }
+                    )
+            for path in sorted(reports_root.glob(".agentforge-report-*.tmp")):
+                counts["stale_temporary_file"] += 1
+                rows.append(
+                    {
+                        "artifact_type": "generated_markdown",
+                        "classification": "stale_temporary_file",
+                        "path": str(path.resolve()),
+                    }
+                )
+        _emit({"counts": counts, "records": rows})
+
+
+@artifacts_app.command("regenerate-evidence")
+def evidence_regenerate(
+    campaign_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+) -> None:
+    """Regenerate one missing JSON export from its matching PostgreSQL record."""
+
+    with _runtime() as runtime, runtime.database.session_factory() as session:
+        attempt = session.get(AttackAttempt, attempt_id)
+        if (
+            attempt is None
+            or attempt.campaign_id != campaign_id
+            or not isinstance(attempt.evidence_payload, dict)
+        ):
+            _abort("matching database evidence record was not found")
+        store = _evidence_store(runtime)
+        try:
+            store.load_verified(
+                campaign_id=campaign_id,
+                attempt_id=attempt_id,
+                database_payload=attempt.evidence_payload,
+            )
+        except EvidenceArtifactMissing:
+            prepared = store.prepare_payload(attempt.evidence_payload)
+            path = store.export(prepared)
+            _emit(
+                {
+                    "campaign_id": str(campaign_id),
+                    "attempt_id": str(attempt_id),
+                    "path": str(path),
+                    "status": "regenerated_from_database",
+                }
+            )
+            return
+        except EvidenceArtifactError:
+            _abort("existing artifact is corrupt; regeneration will not overwrite it")
+        _abort("a valid artifact already exists")
 
 
 @worker_app.command("run")

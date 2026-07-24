@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -12,8 +13,10 @@ from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 
 from agentforge.api import router as api_router
+from agentforge.contracts.v1 import AttackEvidenceV1
 from agentforge.dashboard import router as dashboard_router
 from agentforge.dashboard.evaluations import DashboardEvaluationSnapshot
+from agentforge.evidence import EvidenceArtifactStore, with_computed_evidence_hash
 from agentforge.observability import AgentForgeMetrics
 from agentforge.persistence import Base, Database
 from agentforge.persistence.models import AttackAttempt, Campaign, JudgeVerdict
@@ -50,12 +53,13 @@ def database(tmp_path: Path) -> Database:
 
 
 @pytest.fixture
-def client(database: Database) -> TestClient:
+def client(database: Database, tmp_path: Path) -> TestClient:
     application = FastAPI()
     application.state.database = database
     application.state.settings = SimpleNamespace(
         worker_stale_after_seconds=30,
         worker_enabled=False,
+        artifacts_dir=tmp_path / "artifacts",
     )
     application.state.metrics = AgentForgeMetrics(CollectorRegistry())
     application.state.repository_root = PROJECT_ROOT
@@ -64,6 +68,67 @@ def client(database: Database) -> TestClient:
     application.include_router(api_router)
     application.include_router(dashboard_router)
     return TestClient(application)
+
+
+def _evidence(
+    *,
+    campaign_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+) -> AttackEvidenceV1:
+    timestamp = "2026-07-23T12:00:00Z"
+    draft = AttackEvidenceV1.model_validate_json(
+        json.dumps(
+            {
+                "schema_version": "v1",
+                "target_id": "synthetic-copilot",
+                "campaign_id": str(campaign_id),
+                "attempt_id": str(attempt_id),
+                "target_version": "fixture-v1",
+                "executed_action_sequence": [
+                    {
+                        "sequence_index": 0,
+                        "action": {
+                            "action_type": "reset_session",
+                            "action_id": "reset-1",
+                            "description": "Create a clean context.",
+                            "reset_strategy_id": "fresh-context",
+                            "require_clean_context": True,
+                        },
+                        "status": "succeeded",
+                        "started_at": timestamp,
+                        "completed_at": timestamp,
+                        "sanitized_result_summary": "Context ready.",
+                    }
+                ],
+                "transcript": [
+                    {
+                        "turn_index": index,
+                        "role": role,
+                        "content": content,
+                        "observed_at": timestamp,
+                    }
+                    for index, (role, content) in enumerate(
+                        (
+                            ("system", "Synthetic system context."),
+                            ("user", "<script>authorized prompt</script>"),
+                            ("assistant", "Exact assistant response."),
+                            ("tool", "Exact synthetic tool output."),
+                        )
+                    )
+                ],
+                "sanitized_http_metadata": [],
+                "target_visible_tool_calls": [],
+                "side_effects": [],
+                "started_at": timestamp,
+                "completed_at": timestamp,
+                "total_latency_ms": 0,
+                "errors": [],
+                "langfuse_trace_id": "trace-1",
+                "evidence_hash": "a" * 64,
+            }
+        )
+    )
+    return with_computed_evidence_hash(draft)
 
 
 def _create(database: Database, *, key: str) -> Campaign:
@@ -340,6 +405,98 @@ def test_campaign_page_polls_and_renders_persisted_evaluation_result(
     assert "Hidden instructions remain confidential." in completed.text
     assert "window.setTimeout(poll, 2000)" not in completed.text
     assert status.json()["terminal"] is True
+
+
+def test_exact_transcript_and_verified_evidence_downloads_are_database_anchored(
+    database: Database,
+    client: TestClient,
+) -> None:
+    campaign = _create(database, key="dashboard-evidence-download")
+    attempt_id = uuid.uuid4()
+    evidence = _evidence(campaign_id=campaign.id, attempt_id=attempt_id)
+    prepared = EvidenceArtifactStore.prepare(evidence)
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        assert stored is not None
+        stored.status = "completed"
+        stored.completed_at = datetime.now(UTC)
+        stored.attempts.append(
+            AttackAttempt(
+                id=attempt_id,
+                attack_family_id="AF-TRANSCRIPT-001",
+                proposal_source="agent_generated",
+                objective_source="orchestrator_selected",
+                category="prompt_injection",
+                subcategory="direct",
+                owasp_mappings=[],
+                objective="Render every exact transcript role.",
+                proposed_sequence={},
+                executed_sequence={"actions": prepared.payload["executed_action_sequence"]},
+                taxonomy_version="unit-taxonomy",
+                profile_version="unit-profile",
+                prompt_version="unit-prompt",
+                state="completed",
+                evidence_payload=prepared.payload,
+                evidence_hash=evidence.evidence_hash,
+                started_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+    store = EvidenceArtifactStore(client.app.state.settings.artifacts_dir / "evidence")
+    artifact = store.export(prepared)
+
+    detail = client.get(f"/dashboard/campaigns/{campaign.id}")
+    dashboard_download = client.get(
+        f"/dashboard/campaigns/{campaign.id}/attempts/{attempt_id}/evidence.json"
+    )
+    api_download = client.get(f"/api/v1/campaigns/{campaign.id}/attempts/{attempt_id}/evidence")
+    campaign_api = client.get(f"/api/v1/campaigns/{campaign.id}")
+
+    assert detail.status_code == 200
+    assert "Exact transcript" in detail.text
+    assert "Synthetic system context." in detail.text
+    assert "&lt;script&gt;authorized prompt&lt;/script&gt;" in detail.text
+    assert "Exact assistant response." in detail.text
+    assert "Exact synthetic tool output." in detail.text
+    assert evidence.evidence_hash in detail.text
+    assert "Download verified JSON" in detail.text
+    assert campaign_api.json()["attempts"][0]["evidence_download_url"] == (
+        f"/api/v1/campaigns/{campaign.id}/attempts/{attempt_id}/evidence"
+    )
+    for response in (dashboard_download, api_download):
+        assert response.status_code == 200
+        assert response.content == prepared.serialized
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["content-disposition"].endswith(f'"{attempt_id}.evidence.json"')
+
+    artifact.write_text('{"mismatched":true}', encoding="utf-8")
+    assert (
+        client.get(
+            f"/dashboard/campaigns/{campaign.id}/attempts/{attempt_id}/evidence.json"
+        ).status_code
+        == 409
+    )
+    artifact.unlink()
+    assert (
+        client.get(
+            f"/dashboard/campaigns/{campaign.id}/attempts/{attempt_id}/evidence.json"
+        ).status_code
+        == 404
+    )
+    assert "durable evidence unavailable" in client.get(f"/dashboard/campaigns/{campaign.id}").text
+    other = _create(database, key="dashboard-evidence-other-owner")
+    assert (
+        client.get(
+            f"/dashboard/campaigns/{other.id}/attempts/{attempt_id}/evidence.json"
+        ).status_code
+        == 404
+    )
+    traversal = client.get(
+        f"/dashboard/campaigns/{campaign.id}/attempts/%2E%2E%2Fsecrets/evidence.json"
+    )
+    assert traversal.status_code in {404, 422}
 
 
 def test_terminal_attempt_error_does_not_render_a_pending_verdict(

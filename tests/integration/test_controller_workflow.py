@@ -31,7 +31,9 @@ from agentforge.contracts.v1 import (
 )
 from agentforge.contracts.v1.common import utc_now
 from agentforge.evaluation import load_judge_rubric, load_taxonomy
+from agentforge.evidence import EvidenceArtifactExportFailed, EvidenceArtifactStore
 from agentforge.observability import AgentForgeMetrics
+from agentforge.orchestration import controller as controller_module
 from agentforge.orchestration.controller import CampaignController, build_campaign_controller
 from agentforge.orchestration.execution_gate import ValidatedAttackV1
 from agentforge.orchestration.worker import CampaignWorker
@@ -44,6 +46,7 @@ from agentforge.persistence.models import (
     JudgeVerdict,
     RegressionCase,
     RegressionResult,
+    RegressionRun,
     VulnerabilityReport,
 )
 from agentforge.persistence.repositories import (
@@ -214,6 +217,21 @@ class FixtureRunner:
         )
         payload["evidence_hash"] = hashlib.sha256(canonical.encode()).hexdigest()
         return AttackEvidenceV1.model_validate_json(json.dumps(payload))
+
+
+class InvalidHashRunner(FixtureRunner):
+    async def execute(
+        self,
+        attack: ValidatedAttackV1,
+        context: Any,
+    ) -> AttackEvidenceV1:
+        evidence = await super().execute(attack, context)
+        return evidence.model_copy(update={"evidence_hash": "b" * 64})
+
+
+class FailingEvidenceStore(EvidenceArtifactStore):
+    def export(self, prepared: Any) -> Path:
+        raise EvidenceArtifactExportFailed("injected evidence export failure")
 
 
 @pytest.fixture(scope="module")
@@ -424,6 +442,7 @@ def _controller(
     attack_factory: Callable[[Any, Any], Any] | None = None,
     judge_factory: Callable[[Any, Any], Any] | None = None,
     fail_role: str | None = None,
+    evidence_store: EvidenceArtifactStore | None = None,
 ) -> CampaignController:
     attack_calls = 0
     judge_calls = 0
@@ -466,6 +485,7 @@ def _controller(
         metric_registry=AgentForgeMetrics(CollectorRegistry()),
         version_discoverer=_discover,
         repository_root=tmp_path,
+        evidence_store=evidence_store,
     )
 
 
@@ -556,10 +576,66 @@ async def test_one_confirmed_attempt_immediately_creates_finding_report_and_regr
         assert session.scalar(select(func.count()).select_from(Finding)) == 1
         assert session.scalar(select(func.count()).select_from(VulnerabilityReport)) == 1
         assert session.scalar(select(func.count()).select_from(RegressionCase)) == 1
+        report = session.scalar(select(VulnerabilityReport))
+        assert (
+            report.structured_report["exact_transcript"] == attempt.evidence_payload["transcript"]
+        )
+        assert "## Exact transcript" in report.markdown_body
+        assert "Synthetic patient A remained isolated." in report.markdown_body
+        assert report.markdown_path is not None
+        assert Path(report.markdown_path).read_text(encoding="utf-8") == report.markdown_body
+        evidence_path = (
+            settings.artifacts_dir / "evidence" / str(campaign.id) / f"{attempt.id}.json"
+        )
+        assert json.loads(evidence_path.read_text(encoding="utf-8")) == (attempt.evidence_payload)
         roles = list(
             session.scalars(select(AgentRun.role).where(AgentRun.campaign_id == campaign.id))
         )
         assert roles == ["orchestrator", "attack_generator", "judge", "documentation"]
+
+
+@pytest.mark.asyncio
+async def test_report_export_failure_retains_database_report_and_stops_before_regression(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_export(*_args: Any, **_kwargs: Any) -> Path:
+        raise OSError("injected report export failure")
+
+    monkeypatch.setattr(controller_module, "export_stored_report", fail_export)
+    campaign = _campaign(database)
+    await _run(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            judge_factory=lambda *_args: _verdict("exploit_confirmed"),
+        ),
+    )
+
+    with database.session_factory() as session:
+        stored = session.get(Campaign, campaign.id)
+        attempt = session.scalar(
+            select(AttackAttempt).where(AttackAttempt.campaign_id == campaign.id)
+        )
+        report = session.scalar(select(VulnerabilityReport))
+        assert stored.status == "failed"
+        assert attempt.failure == {
+            "stage": "documentation",
+            "code": "report_export_failed",
+            "retryable": True,
+        }
+        assert session.scalar(select(func.count()).select_from(Finding)) == 1
+        assert report is not None
+        assert (
+            report.structured_report["exact_transcript"] == attempt.evidence_payload["transcript"]
+        )
+        assert report.markdown_path is None
+        assert session.scalar(select(func.count()).select_from(RegressionCase)) == 0
 
 
 @pytest.mark.asyncio
@@ -792,6 +868,38 @@ async def test_judge_failure_preserves_raw_evidence_without_finding(
 
 
 @pytest.mark.asyncio
+async def test_invalid_runner_evidence_hash_fails_before_persistence_export_or_judge(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    campaign = _campaign(database)
+    await _run(
+        database,
+        settings,
+        _controller(database, settings, tmp_path, runner=InvalidHashRunner()),
+    )
+    with database.session_factory() as session:
+        attempt = session.scalar(
+            select(AttackAttempt).where(AttackAttempt.campaign_id == campaign.id)
+        )
+        assert session.get(Campaign, campaign.id).status == "failed"
+        assert attempt.state == "failed"
+        assert attempt.failure == {
+            "stage": "evidence",
+            "code": "evidence_integrity_failed",
+            "retryable": False,
+        }
+        assert attempt.evidence_payload is None
+        assert attempt.evidence_hash is None
+        assert not list((settings.artifacts_dir / "evidence" / str(campaign.id)).glob("*.json"))
+        roles = list(
+            session.scalars(select(AgentRun.role).where(AgentRun.campaign_id == campaign.id))
+        )
+        assert roles == ["orchestrator", "attack_generator"]
+
+
+@pytest.mark.asyncio
 async def test_documentation_failure_preserves_confirmed_finding_and_stops_campaign(
     database: Database,
     settings: Settings,
@@ -855,6 +963,62 @@ async def test_saved_regression_outcome_is_mapped_only_from_judge(
         assert result.evidence_hash
         assert attempt.proposal_source == "fixed_regression_case"
         assert attempt.state == "completed"
+
+
+@pytest.mark.asyncio
+async def test_regression_evidence_export_failure_records_error_and_stops_campaign(
+    database: Database,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    _campaign(database)
+    await _run(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            judge_factory=lambda *_args: _verdict("exploit_confirmed"),
+        ),
+    )
+    regression = _campaign(database, campaign_type="regression", max_attempts=10)
+    with database.session_factory() as session:
+        run = RegressionRunRepository(session).create(
+            target_version="synthetic-build-v1",
+            trigger="integration_fixture",
+            campaign_id=regression.id,
+        )
+        run_id = run.id
+    await _run(
+        database,
+        settings,
+        _controller(
+            database,
+            settings,
+            tmp_path,
+            evidence_store=FailingEvidenceStore(tmp_path / "failed-evidence"),
+        ),
+    )
+    with database.session_factory() as session:
+        stored_campaign = session.get(Campaign, regression.id)
+        stored_run = session.get(RegressionRun, run_id)
+        attempt = session.scalar(
+            select(AttackAttempt).where(AttackAttempt.campaign_id == regression.id)
+        )
+        result = session.scalar(select(RegressionResult).where(RegressionResult.run_id == run_id))
+        assert stored_campaign.status == "failed"
+        assert stored_run.status == "failed"
+        assert stored_run.error_cases == 1
+        assert attempt.evidence_payload is not None
+        assert attempt.failure == {
+            "stage": "evidence",
+            "code": "evidence_export_failed",
+            "retryable": True,
+        }
+        assert result.outcome == "error"
+        assert result.judge_result["code"] == "evidence_export_failed"
+        assert result.evidence_hash == attempt.evidence_hash
 
 
 def test_default_controller_factory_constructs_without_external_calls(

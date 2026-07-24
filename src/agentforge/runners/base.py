@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -28,6 +26,7 @@ from agentforge.contracts.v1.evidence import (
     TranscriptRoleV1,
     TranscriptTurnV1,
 )
+from agentforge.evidence import with_computed_evidence_hash
 from agentforge.orchestration.execution_gate import (
     EndpointPurposeV1,
     ValidatedAttackV1,
@@ -381,15 +380,7 @@ class EvidenceRecorder:
             langfuse_trace_id=None,
             evidence_hash="0" * 64,
         )
-        canonical = json.dumps(
-            draft.model_dump(mode="json", exclude={"evidence_hash"}),
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-        digest = hashlib.sha256(canonical).hexdigest()
-        return AttackEvidenceV1.model_validate(
-            {**draft.model_dump(mode="python"), "evidence_hash": digest}
-        )
+        return with_computed_evidence_hash(draft)
 
 
 __all__ = [

@@ -23,6 +23,8 @@ flowchart LR
     A --> G["Authorization gate"]
     G --> R["Browser / HTTP runner"]
     R --> E["Typed raw evidence"]
+    E --> P[("PostgreSQL canonical record")]
+    P -.-> X["Verified JSON export"]
     E --> J{{"Judge"}}
     J -->|"exploit_confirmed"| F["Finding"]
     F --> D{{"Documentation Agent"}}
@@ -82,6 +84,14 @@ create discovery Findings.
 
 Portable result exports live under `evals/results/`; PostgreSQL remains the canonical
 operational record.
+
+For every executed discovery, regression, or fixed-case attempt, the complete bounded
+sanitized transcript and structured evidence are committed to
+`AttackAttempt.evidence_payload` before the Judge is invoked. A canonical JSON copy is
+then exported to `artifacts/evidence/<campaign-id>/<attempt-id>.json`. The dashboard
+and API load the PostgreSQL record first and serve the file only when its IDs, target
+version, evidence hash, and serialized contents match. Files are never imported as
+runtime state.
 
 ## Project structure
 
@@ -156,9 +166,23 @@ uv run agentforge campaign create \
   --max-cost-usd 0.25
 ```
 
-The campaign detail page polls durable state and shows lifecycle, raw evidence,
+The campaign detail page polls durable state and shows lifecycle, the exact ordered
+user/assistant/tool/system transcript, raw evidence,
 Judge verdicts, failure stage, parent/derived generation, provenance, Findings,
-reports, regression results, and the ordered AgentRun timeline.
+reports, regression results, and the ordered AgentRun timeline. Verified JSON can be
+downloaded from the attempt panel.
+
+Reconcile database records and local exports without modifying either:
+
+```bash
+uv run agentforge artifacts reconcile
+```
+
+Regenerate a missing export only from its matching PostgreSQL record:
+
+```bash
+uv run agentforge artifacts regenerate-evidence <campaign-id> <attempt-id>
+```
 
 ## Database and tests
 

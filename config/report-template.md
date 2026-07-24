@@ -39,6 +39,10 @@
 
 {{ evidence_references }}
 
+## Exact transcript
+
+{{ exact_transcript }}
+
 ## Remediation validation history
 
 {{ current_fix_validation_results }}

@@ -27,6 +27,8 @@ flowchart TB
     Gate -->|"ValidatedAttackV1"| Runner["HTTP / Playwright runner"]
     Runner --> Target["Synthetic Clinical Co-Pilot target"]
     Runner --> Evidence["AttackEvidenceV1"]
+    Evidence --> DB
+    DB -. "derived, verified" .-> Export["Evidence JSON / generated Markdown"]
     Evidence --> J{{"Judge Agent"}}
     J --> Controller
 
@@ -75,6 +77,7 @@ sequenceDiagram
     participant J as Judge
     participant D as Documentation Agent
     participant P as PostgreSQL
+    participant F as Derived filesystem exports
 
     H->>P: Queue bounded campaign
     loop until stop or campaign limit
@@ -100,7 +103,8 @@ sequenceDiagram
                         C->>P: Failed attempt with operational failure; no Judge
                     else raw evidence returned
                         R-->>C: AttackEvidenceV1
-                        C->>P: Persist evidence and its hash once
+                        C->>P: Verify bounds/hash; commit complete evidence
+                        C->>F: Derive verified JSON export from committed payload
                         C->>J: Raw evidence and rubric
                         J-->>C: JudgeVerdictV1
                         alt persistent Judge failure
@@ -136,8 +140,10 @@ attempt and consumes the same campaign `max_attempts` budget.
 
 The runner owns typed evidence construction. `AttackEvidenceV1` includes ordered
 actions, transcript, HTTP metadata, tool calls, side effects, errors, timestamps, and
-target version. The controller computes the canonical evidence hash once when it is
-persisted.
+target version. The runner computes the canonical content hash; the controller
+verifies that hash and a 5 MiB serialized ceiling before committing the full payload.
+Only after the commit does it atomically derive an evidence JSON export and invoke
+the Judge.
 
 There is no separate discovery evidence analyzer. A runner crash is an operational
 failure and skips the Judge. If the runner successfully returns partial or
@@ -168,6 +174,12 @@ different attempts intentionally create separate Findings and reports.
 Documentation or regression-case failure does not erase the confirmed Finding or
 evidence, but it ends the campaign visibly. After both succeed, discovery continues.
 
+The Documentation Agent receives the full evidence, but transcript provenance remains
+controller-owned: any model-supplied transcript is replaced with the exact committed
+turns. Structured report data and rendered Markdown are committed before a generated
+Markdown export is attempted. Export failure leaves the database report recoverable
+and prevents regression-case creation.
+
 ## Persistence model
 
 `AttackAttempt.state` is lifecycle-only:
@@ -188,6 +200,12 @@ objective: orchestrator_selected
 
 Historical records may contain retired fallback labels. They remain readable and are
 shown as historical on the dashboard but cannot be produced by the controller.
+
+Evidence JSON and generated Markdown are derived, ignored filesystem copies.
+Dashboard/API reads begin with PostgreSQL and serve an evidence artifact only after
+its expected path, IDs, target version, evidence hash, and bytes verify against the
+database payload. Submission Markdown is a separately reviewed Git artifact that
+retains source IDs and hash; no file is imported as operational state.
 
 ## Regression replay
 

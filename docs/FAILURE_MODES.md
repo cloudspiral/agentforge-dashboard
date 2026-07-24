@@ -60,6 +60,10 @@ Rejected proposals remain auditable through `AgentRun` and do not become
 | Failure | Containment | Recovery |
 | --- | --- | --- |
 | Evidence hash mismatch | Quarantine record from reports/regressions | Restore immutable source or rerun as a new attempt |
+| Evidence exceeds 5 MiB | Persist a typed operational failure; do not write an artifact or call Judge | Reduce the authorized sequence/evidence volume and run a new attempt |
+| Evidence export missing or write fails | Preserve canonical PostgreSQL evidence; stop before Judge | Repair storage and regenerate only from the matching database record |
+| Evidence export mismatches PostgreSQL | Refuse download/render and classify as corrupt | Preserve for investigation; do not overwrite, import, or trust it |
+| Orphan JSON or stale temporary file | Never render or import it | Classify with read-only reconciliation; handle only through reviewed cleanup |
 | Secret or real-patient data in evidence/artifact/trace | Stop campaign and external telemetry; restrict artifact | Rotate affected credentials, contain data, fix redaction, investigate |
 | Target text attempts to instruct Judge | Treat it as quoted evidence data | Strengthen Judge prompt/contract; no deterministic verdict override |
 | Suspected Judge false positive/negative | Preserve the Judge verdict and internal report state | Human reviews evidence/model calibration; code does not rewrite history |
@@ -74,6 +78,7 @@ reproduction gate or semantic deduplication.
 | --- | --- | --- |
 | Finding persistence failure | Roll back that mechanical transaction and fail campaign | Repair storage, then rerun a new authorized attempt |
 | Report contract/reference failure | Keep confirmed Finding; do not export invented report | Fix Documentation input/contract and explicitly rerun documentation |
+| Generated Markdown export failure | Keep Finding plus PostgreSQL structured report and `markdown_body`; leave `markdown_path` unset and fail campaign | Repair storage and regenerate from the matching report record |
 | Regression-case creation failure | Keep Finding and report; fail campaign | Repair case builder and create/link the case through reviewed recovery |
 | Regression runner/Judge failure | Store `error` | Diagnose operational cause; never record `secure_pass` |
 | Regression returns `partial_signal`/`inconclusive` | Store `inconclusive` | Investigate or rerun; target is not proven secure |

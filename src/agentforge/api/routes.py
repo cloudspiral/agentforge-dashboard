@@ -3,8 +3,10 @@ from __future__ import annotations
 import hmac
 import uuid
 from collections.abc import Generator
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from agentforge.api.schemas import (
@@ -31,6 +33,11 @@ from agentforge.api.schemas import (
     TargetDeploymentHookRequest,
 )
 from agentforge.api.services import ApplicationService
+from agentforge.evidence import (
+    EvidenceArtifactError,
+    EvidenceArtifactMissing,
+    EvidenceArtifactStore,
+)
 from agentforge.persistence.models import AgentRun, AttackAttempt, Campaign, Finding, RegressionRun
 from agentforge.persistence.repositories import (
     AgentRunRepository,
@@ -154,11 +161,23 @@ def _attempt_summary(entity: AttackAttempt) -> dict[str, object]:
         "objective_source": entity.objective_source,
         "sequence_hash": entity.sequence_hash,
         "evidence_hash": entity.evidence_hash,
+        "evidence_download_url": (
+            f"/api/v1/campaigns/{entity.campaign_id}/attempts/{entity.id}/evidence"
+            if entity.evidence_payload is not None
+            else None
+        ),
         "estimated_cost_usd": str(entity.estimated_cost_usd),
         "latency_ms": entity.latency_ms,
         "langfuse_trace_id": entity.langfuse_trace_id,
         "created_at": entity.created_at.isoformat(),
     }
+
+
+def _evidence_store(request: Request) -> EvidenceArtifactStore:
+    root = Path(getattr(request.app.state, "repository_root", Path.cwd())).resolve()
+    configured = Path(getattr(request.app.state.settings, "artifacts_dir", "artifacts"))
+    artifacts = configured if configured.is_absolute() else root / configured
+    return EvidenceArtifactStore(artifacts / "evidence")
 
 
 def _finding(entity: Finding) -> FindingResponse:
@@ -337,6 +356,58 @@ def get_campaign(
             )
             for event in entity.events
         ],
+    )
+
+
+@router.get(
+    "/campaigns/{campaign_id}/attempts/{attempt_id}/evidence",
+    response_class=Response,
+    responses={**ERROR_RESPONSES, 409: {"model": ErrorResponse}},
+    dependencies=[Depends(require_api_read_token)],
+)
+def download_attempt_evidence(
+    request: Request,
+    campaign_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+    session: Session = Depends(get_session),
+) -> Response:
+    attempt = session.get(AttackAttempt, attempt_id)
+    if (
+        attempt is None
+        or attempt.campaign_id != campaign_id
+        or not isinstance(attempt.evidence_payload, dict)
+    ):
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            "evidence_not_found",
+            "durable evidence is unavailable for this campaign attempt",
+        )
+    try:
+        content = _evidence_store(request).load_verified(
+            campaign_id=campaign_id,
+            attempt_id=attempt_id,
+            database_payload=attempt.evidence_payload,
+        )
+    except EvidenceArtifactMissing as exc:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            "evidence_artifact_unavailable",
+            "the database evidence exists but its verified export is unavailable",
+        ) from exc
+    except EvidenceArtifactError as exc:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            "evidence_artifact_corrupt",
+            "the evidence export does not match its PostgreSQL source record",
+        ) from exc
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": (f'attachment; filename="{attempt_id}.evidence.json"'),
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

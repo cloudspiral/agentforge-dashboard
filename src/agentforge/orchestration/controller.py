@@ -40,6 +40,11 @@ from agentforge.contracts.v1 import (
 )
 from agentforge.contracts.v1.common import utc_now
 from agentforge.evaluation import JudgeRubricV1, TaxonomyV1
+from agentforge.evidence import (
+    EvidenceArtifactError,
+    EvidenceArtifactStore,
+    EvidenceArtifactTooLarge,
+)
 from agentforge.observability import AgentForgeMetrics, LangfuseTelemetry, metrics
 from agentforge.orchestration.execution_gate import (
     CampaignExecutionContextV1,
@@ -101,6 +106,14 @@ class VersionDiscoverer(Protocol):
         loaded_profile: LoadedTargetProfile,
         target_alias: ResolvedTargetAlias,
     ) -> DiscoveredTargetVersion: ...
+
+
+class _EvidencePersistenceFailure(RuntimeError):
+    def __init__(self, *, code: str, message: str, retryable: bool) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.retryable = retryable
 
 
 def _project_path(path: Path) -> Path:
@@ -170,6 +183,7 @@ class CampaignController:
         metric_registry: AgentForgeMetrics | None = None,
         version_discoverer: VersionDiscoverer = _discover_version,
         repository_root: Path = PROJECT_ROOT,
+        evidence_store: EvidenceArtifactStore | None = None,
     ) -> None:
         self.database = database
         self.settings = settings
@@ -185,11 +199,79 @@ class CampaignController:
         self.metrics = metric_registry or metrics
         self.version_discoverer = version_discoverer
         self.repository_root = repository_root.resolve()
+        artifacts_dir = (
+            settings.artifacts_dir
+            if settings.artifacts_dir.is_absolute()
+            else self.repository_root / settings.artifacts_dir
+        )
+        self.evidence_store = evidence_store or EvidenceArtifactStore(artifacts_dir / "evidence")
         self.rubric_hash = canonical_hash(rubric.model_dump(mode="json"))
         self.allowed_categories = {
             category.id: [subcategory.id for subcategory in category.subcategories]
             for category in taxonomy.categories
         }
+
+    def _commit_and_export_evidence(
+        self,
+        session: Any,
+        *,
+        campaign: Campaign,
+        attempt: AttackAttempt,
+        evidence: AttackEvidenceV1,
+    ) -> None:
+        try:
+            prepared = self.evidence_store.prepare(evidence)
+        except EvidenceArtifactTooLarge as exc:
+            self._fail_attempt(
+                attempt,
+                stage="evidence",
+                code="evidence_too_large",
+                retryable=False,
+            )
+            session.commit()
+            raise _EvidencePersistenceFailure(
+                code="evidence_too_large",
+                message="runner evidence exceeded the 5 MiB persistence ceiling",
+                retryable=False,
+            ) from exc
+        except EvidenceArtifactError as exc:
+            self._fail_attempt(
+                attempt,
+                stage="evidence",
+                code="evidence_integrity_failed",
+                retryable=False,
+            )
+            session.commit()
+            raise _EvidencePersistenceFailure(
+                code="evidence_integrity_failed",
+                message="runner evidence failed canonical integrity validation",
+                retryable=False,
+            ) from exc
+
+        attempt.executed_sequence = {
+            "actions": [item.model_dump(mode="json") for item in evidence.executed_action_sequence]
+        }
+        attempt.evidence_payload = prepared.payload
+        attempt.evidence_hash = evidence.evidence_hash
+        attempt.latency_ms = round(evidence.total_latency_ms)
+        attempt.langfuse_trace_id = evidence.langfuse_trace_id
+        session.commit()
+
+        try:
+            self.evidence_store.export(prepared)
+        except Exception as exc:
+            self._fail_attempt(
+                attempt,
+                stage="evidence",
+                code="evidence_export_failed",
+                retryable=True,
+            )
+            session.commit()
+            raise _EvidencePersistenceFailure(
+                code="evidence_export_failed",
+                message="database evidence was saved but its verified JSON export failed",
+                retryable=True,
+            ) from exc
 
     async def process(self, campaign_id: uuid.UUID) -> CampaignProcessResult:
         with self.database.session_factory() as session:
@@ -857,6 +939,9 @@ class CampaignController:
                 retryable=False,
             )
 
+        # Transcript provenance is controller-owned. The documentation model may
+        # neither summarize nor replace the exact committed evidence turns.
+        report_output = report_output.model_copy(update={"exact_transcript": evidence.transcript})
         finding.title = report_output.title
         finding.severity = report_output.severity.value
         finding.description = report_output.description
@@ -874,11 +959,37 @@ class CampaignController:
             validation_summary=verdict.model_dump(mode="json"),
             prompt_version=documentation_result.prompt_version,
         )
-        report_path = export_stored_report(
-            stored_report,
-            vulnerability_id=finding.vulnerability_id,
-            reports_dir=self.settings.reports_dir,
-        )
+        # PostgreSQL is canonical: both structured output and rendered Markdown
+        # become durable before any filesystem export is attempted.
+        session.commit()
+        try:
+            report_path = export_stored_report(
+                stored_report,
+                vulnerability_id=finding.vulnerability_id,
+                reports_dir=(
+                    self.settings.reports_dir
+                    if self.settings.reports_dir.is_absolute()
+                    else self.repository_root / self.settings.reports_dir
+                ),
+            )
+        except Exception as exc:
+            self._fail_attempt(
+                attempt,
+                stage="documentation",
+                code="report_export_failed",
+                retryable=True,
+            )
+            session.commit()
+            self.metrics.report_generation_failures_total.labels(error_type="artifact_export").inc()
+            return self._failed_result(
+                campaign,
+                code="report_export_failed",
+                message=(
+                    "confirmed finding and report were saved, but generated Markdown export failed"
+                ),
+                error_type=type(exc).__name__,
+                retryable=True,
+            )
         stored_report.markdown_path = str(report_path)
         session.commit()
 
@@ -1334,16 +1445,20 @@ class CampaignController:
                         retryable=False,
                     )
 
-                attempt.executed_sequence = {
-                    "actions": [
-                        item.model_dump(mode="json") for item in evidence.executed_action_sequence
-                    ]
-                }
-                attempt.evidence_payload = evidence.model_dump(mode="json")
-                attempt.evidence_hash = evidence.evidence_hash
-                attempt.latency_ms = round(evidence.total_latency_ms)
-                attempt.langfuse_trace_id = evidence.langfuse_trace_id
-                session.commit()
+                try:
+                    self._commit_and_export_evidence(
+                        session,
+                        campaign=campaign,
+                        attempt=attempt,
+                        evidence=evidence,
+                    )
+                except _EvidencePersistenceFailure as exc:
+                    return self._failed_result(
+                        campaign,
+                        code=exc.code,
+                        message=exc.message,
+                        retryable=exc.retryable,
+                    )
 
                 verdict, judge_result = await self._judge_evidence(
                     campaign=campaign,
@@ -1559,15 +1674,12 @@ class CampaignController:
                         validated=validated,
                     ):
                         raise ValueError("regression evidence correlation failed")
-                    attempt.executed_sequence = {
-                        "actions": [
-                            item.model_dump(mode="json")
-                            for item in evidence.executed_action_sequence
-                        ]
-                    }
-                    attempt.evidence_payload = evidence.model_dump(mode="json")
-                    attempt.evidence_hash = evidence.evidence_hash
-                    attempt.latency_ms = round(evidence.total_latency_ms)
+                    self._commit_and_export_evidence(
+                        session,
+                        campaign=campaign,
+                        attempt=attempt,
+                        evidence=evidence,
+                    )
                     verdict, judge_result = await self._judge_evidence(
                         campaign=campaign,
                         attempt=attempt,
@@ -1627,6 +1739,47 @@ class CampaignController:
                         FindingRepository(session).reopen(finding.id)
                     outcomes[result.outcome.value] += 1
                     session.commit()
+                except _EvidencePersistenceFailure as exc:
+                    session.rollback()
+                    run = session.get(RegressionRun, run.id)
+                    campaign = session.get(Campaign, campaign.id)
+                    persisted_attempt = (
+                        session.get(AttackAttempt, attempt.id) if attempt is not None else None
+                    )
+                    RegressionRunRepository(session).add_result(
+                        run_id=run.id,
+                        case_id=row.id,
+                        case_version=row.case_version,
+                        outcome="error",
+                        judge_result={
+                            "code": exc.code,
+                            "message": exc.message,
+                        },
+                        evidence_hash=(
+                            persisted_attempt.evidence_hash
+                            if persisted_attempt is not None
+                            else None
+                        ),
+                        estimated_cost_usd=Decimal("0"),
+                        latency_ms=(
+                            persisted_attempt.latency_ms if persisted_attempt is not None else None
+                        ),
+                        trace_id=(
+                            persisted_attempt.langfuse_trace_id
+                            if persisted_attempt is not None
+                            else None
+                        ),
+                    )
+                    run.status = "failed"
+                    run.error_cases = outcomes["error"] + 1
+                    run.completed_at = utc_now()
+                    session.commit()
+                    return self._failed_result(
+                        campaign,
+                        code=exc.code,
+                        message=exc.message,
+                        retryable=exc.retryable,
+                    )
                 except Exception as exc:
                     session.rollback()
                     if attempt is not None:

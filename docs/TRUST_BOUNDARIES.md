@@ -60,9 +60,15 @@ errors, timestamps, and target version. Schema construction and correlation IDs 
 plumbing, not semantic validation.
 
 A runner crash produces an operational failure and no Judge call. Successfully
-returned partial or error-bearing evidence is frozen, hashed once, and sent unchanged
-to the Judge. Target text is quoted as evidence data and cannot issue instructions to
-the Judge.
+returned evidence is bounded to 5 MiB, hash-verified, and committed to PostgreSQL
+before an artifact is written or the Judge is invoked. Partial or error-bearing
+evidence is then sent unchanged to the Judge. Target text is quoted as evidence data
+and cannot issue instructions to the Judge.
+
+Evidence JSON and generated Markdown are derived exports. Every download first loads
+the corresponding PostgreSQL records and verifies the expected filesystem path,
+identifiers, evidence hash, and contents. Files are never imported as runtime state,
+and a database reset makes surviving exports untrusted archives.
 
 The fixed YAML harness may compute deterministic assertions for a selected case.
 Those assertions stay outside discovery evidence, are not sent to the Judge, cannot
@@ -75,9 +81,11 @@ does not reproduce, deduplicate, score, or reinterpret the issue. It mechanicall
 invokes the Documentation Agent and then creates a regression case from the saved
 sequence and Judge context.
 
-Documentation output must validate against its typed contract. Failure preserves the
-Finding and evidence, records an operational campaign failure, and does not fabricate
-a replacement report.
+Documentation output must validate against its typed contract. The controller
+mechanically replaces its transcript with the committed source-evidence transcript,
+then commits the structured report and rendered Markdown body before exporting a
+file. Failure preserves the Finding, evidence, and any committed report, records an
+operational campaign failure, and does not fabricate a replacement report.
 
 Reports remain private drafts. Only a human may authorize target changes, deploy a
 fix, disclose an issue, publish evidence, or broaden the testing scope.

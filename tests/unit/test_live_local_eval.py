@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from agentforge.contracts.v1.common import utc_now
 from agentforge.evaluation import live_local as live_local_module
 from agentforge.evaluation import load_seed_case, load_taxonomy
 from agentforge.evaluation.live_local import run_live_local_case
+from agentforge.evidence import EvidenceArtifactExportFailed, EvidenceArtifactStore
 from agentforge.orchestration.execution_gate import ValidatedAttackV1
 from agentforge.persistence import Base, Database
 from agentforge.persistence.models import (
@@ -205,6 +207,7 @@ async def _run(
     settings: Settings | None = None,
     target_alias: str = "local",
     headed: bool = False,
+    evidence_store: EvidenceArtifactStore | None = None,
 ):
     database = _database(tmp_path)
     try:
@@ -221,6 +224,7 @@ async def _run(
             version_discoverer=_version,
             target_alias=target_alias,
             headed=headed,
+            evidence_store=evidence_store or EvidenceArtifactStore(tmp_path / "evidence"),
         )
         return database, result
     except Exception:
@@ -370,6 +374,44 @@ async def test_fixed_case_persists_evidence_verdict_and_secret_free_export(
             )
         assert '"outcome": "passed"' in exported
         assert "[REDACTED]" in exported
+    finally:
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_evidence_export_failure_preserves_database_payload_and_skips_judge(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = EvidenceArtifactStore(tmp_path / "evidence")
+
+    def fail_export(_prepared: object) -> Path:
+        raise EvidenceArtifactExportFailed("injected evidence export failure")
+
+    monkeypatch.setattr(store, "export", fail_export)
+    judge = FakeJudge()
+    database, result = await _run(
+        tmp_path,
+        runner=FakeBrowserRunner(),
+        judge=judge,
+        evidence_store=store,
+    )
+
+    try:
+        assert result.successful is False
+        assert result.error_code == "evidence_export_failed"
+        assert judge.calls == 0
+        with database.session_factory() as session:
+            attempt = session.get(AttackAttempt, uuid.UUID(result.attempt_id))
+            assert attempt is not None
+            assert attempt.evidence_payload == result.evidence.model_dump(mode="json")
+            assert attempt.evidence_hash == result.evidence.evidence_hash
+            assert attempt.state == "failed"
+            assert attempt.failure == {
+                "stage": "evidence",
+                "code": "evidence_export_failed",
+                "retryable": True,
+            }
     finally:
         database.dispose()
 

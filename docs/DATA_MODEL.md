@@ -13,7 +13,7 @@ portable exports; they do not replace database records.
 | `judge_verdicts` | Verdict, confidence, severity, exploitability, violated invariants, observed/expected behavior, rubric version/hash | Zero or one per executed attempt |
 | `agent_runs` | Role, model, prompt version, input/output metadata, usage, cost, latency, trace ID, typed failure | Persists successful and rejected/invalid role calls |
 | `findings` | One confirmed attempt, attempt/evidence fingerprint, status | Exactly one new Finding per `exploit_confirmed` attempt |
-| `vulnerability_reports` | Documentation Agent structured output and rendered internal draft | Exactly one per successfully documented Finding |
+| `vulnerability_reports` | Documentation Agent structured output, controller-anchored exact transcript, and rendered internal draft | Exactly one per successfully documented Finding |
 | `regression_cases` | Saved sequence, target requirements, original Judge context, expected secure behavior, taxonomy metadata, source evidence hash | Created mechanically after report persistence |
 | `regression_runs` | New target/evidence/verdict and mapped regression outcome | Many runs per regression case |
 
@@ -63,9 +63,17 @@ parents; they are not separately persisted facts.
 
 ## Evidence identity
 
-The runner constructs `AttackEvidenceV1`. The controller canonicalizes and hashes the
-evidence once when persisting it. The raw evidence and hash are retained unchanged for
-the Judge, report, and regression source.
+The runner constructs `AttackEvidenceV1` and computes its canonical content hash. The
+controller verifies the hash and 5 MiB serialized ceiling, commits the complete
+payload to `AttackAttempt.evidence_payload`, and only then writes a deterministic
+JSON export or invokes the Judge. The raw evidence and hash are retained unchanged
+for the Judge, report, and regression source.
+
+`artifacts/evidence/<campaign-id>/<attempt-id>.json` is a same-directory,
+temporary-file-plus-atomic-rename export derived from the committed payload. Serving
+an export requires a matching PostgreSQL attempt and exact agreement on campaign ID,
+attempt ID, target version, evidence hash, and serialized bytes. Missing or corrupt
+files are unavailable; orphan files are never imported or rendered.
 
 Discovery does not persist deterministic assertion summaries or authorization-result
 fields. Fixed-case assertions are stored only with fixed-case evaluation records and
@@ -81,6 +89,21 @@ counter, semantic deduplication, finding upsert, or target-version reopening rul
 The Documentation Agent runs immediately for that Finding. If report or regression
 creation fails, the Finding and evidence remain durable and the campaign ends
 visibly.
+
+The controller replaces any model-supplied report transcript with the committed
+source-evidence transcript. Structured report data and rendered `markdown_body` are
+committed to PostgreSQL before `reports/generated/<vulnerability-id>.md` is exported;
+`markdown_path` is recorded only after a verified atomic write. `reports/generated/`
+is ignored derived output. `reports/submission/` contains reviewed, Git-tracked
+copies that retain source IDs and the evidence hash and may intentionally differ
+editorially.
+
+`agentforge artifacts reconcile` classifies valid, missing, corrupt, orphan, and
+stale temporary evidence/Markdown files without changing them.
+`agentforge artifacts regenerate-evidence` can recreate a missing JSON file from a
+matching database payload and refuses to overwrite a corrupt file. The existing
+`agentforge reports export` command regenerates Markdown from its PostgreSQL report.
+After a database reset, surviving files are archival only.
 
 ## Regression mapping
 

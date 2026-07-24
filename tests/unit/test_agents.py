@@ -174,7 +174,7 @@ def _agent_options(runner: FakeRunner, **overrides: Any) -> dict[str, Any]:
             VulnerabilityReportV1,
             "gpt-5.6-luna",
             1800,
-            "documentation-v2-2026-07-23",
+            "documentation-v3-2026-07-23",
             False,
         ),
     ],

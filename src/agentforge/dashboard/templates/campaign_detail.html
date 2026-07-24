@@ -110,14 +110,21 @@
     <span class="badge badge-{{ item.state }}">{{ item.state }}</span>
   </div>
 
-  <h3>Response summary</h3>
-  {% for response in result.responses %}
+  <div class="panel-heading">
+    <div>
+      <h3>Exact transcript</h3>
+      <small>Evidence hash: <span class="mono">{{ result.evidence_hash or 'not persisted' }}</span></small>
+    </div>
+    {% if result.download_url %}<a class="button secondary" href="{{ result.download_url }}">Download verified JSON</a>{% endif %}
+  </div>
+  <p><small>{{ result.artifact_state }}</small></p>
+  {% for turn in result.transcript %}
     <article class="response-summary">
-      <span>{{ response.role }}</span>
-      <p>{{ response.content }}</p>
-      <small>{{ response.observed_at }}</small>
+      <span>#{{ turn.turn_index }} · {{ turn.role }}</span>
+      <p>{{ turn.content }}</p>
+      <small>{{ turn.observed_at }}</small>
     </article>
-  {% else %}<p class="empty-state">Waiting for a persisted target response.</p>{% endfor %}
+  {% else %}<p class="empty-state">No durable transcript was persisted for this attempt.</p>{% endfor %}
 
   <h3>Raw structured evidence</h3>
   <dl class="summary-list">

@@ -22,8 +22,14 @@ from agentforge.dashboard.evaluations import (
     EvaluationStartFailed,
 )
 from agentforge.evaluation import load_seed_cases, load_taxonomy
+from agentforge.evidence import (
+    EvidenceArtifactError,
+    EvidenceArtifactMissing,
+    EvidenceArtifactStore,
+)
 from agentforge.observability.metrics import AgentForgeMetrics
 from agentforge.observability.metrics import metrics as default_metrics
+from agentforge.persistence.models import AttackAttempt
 from agentforge.persistence.repositories import (
     CampaignNotFound,
     CampaignRepository,
@@ -187,26 +193,57 @@ def _optional_form_value(value: str) -> str | None:
     return normalized or None
 
 
-def _attempt_result_rows(detail: dict[str, Any]) -> dict[uuid.UUID, dict[str, Any]]:
+def _evidence_store(request: Request) -> EvidenceArtifactStore:
+    configured = Path(getattr(request.app.state.settings, "artifacts_dir", "artifacts"))
+    artifacts = configured if configured.is_absolute() else _repository_root(request) / configured
+    return EvidenceArtifactStore(artifacts / "evidence")
+
+
+def _attempt_result_rows(
+    request: Request,
+    detail: dict[str, Any],
+) -> dict[uuid.UUID, dict[str, Any]]:
     rows: dict[uuid.UUID, dict[str, Any]] = {}
+    store = _evidence_store(request)
     for attempt in detail["attempts"]:
         payload = attempt.evidence_payload if isinstance(attempt.evidence_payload, dict) else {}
         transcript = payload.get("transcript", [])
-        responses = [
+        turns = [
             {
-                "role": str(turn.get("role", "assistant")),
+                "turn_index": turn.get("turn_index"),
+                "role": str(turn.get("role", "system")),
                 "content": redact(str(turn.get("content", ""))),
                 "observed_at": turn.get("observed_at"),
             }
             for turn in transcript
-            if isinstance(turn, dict) and turn.get("role") in {"assistant", "tool"}
+            if isinstance(turn, dict)
         ]
+        artifact_state = "durable evidence unavailable"
+        if payload:
+            try:
+                store.load_verified(
+                    campaign_id=attempt.campaign_id,
+                    attempt_id=attempt.id,
+                    database_payload=payload,
+                )
+                artifact_state = "verified export available"
+            except EvidenceArtifactMissing:
+                artifact_state = "durable evidence unavailable"
+            except EvidenceArtifactError:
+                artifact_state = "evidence export corrupt"
         rows[attempt.id] = {
-            "responses": responses,
+            "transcript": turns,
             "http": redact(payload.get("sanitized_http_metadata", [])),
             "tool_calls": redact(payload.get("target_visible_tool_calls", [])),
             "side_effects": redact(payload.get("side_effects", [])),
             "errors": redact(payload.get("errors", [])),
+            "evidence_hash": attempt.evidence_hash,
+            "artifact_state": artifact_state,
+            "download_url": (
+                f"/dashboard/campaigns/{attempt.campaign_id}/attempts/{attempt.id}/evidence.json"
+                if artifact_state == "verified export available"
+                else None
+            ),
             "verdict": detail["verdicts"].get(attempt.id),
         }
     return rows
@@ -446,8 +483,56 @@ def campaign_detail(request: Request, campaign_id: uuid.UUID) -> HTMLResponse:
             **detail,
             "event_rows": event_rows,
             "safe_error": safe_error,
-            "attempt_results": _attempt_result_rows(detail),
+            "attempt_results": _attempt_result_rows(request, detail),
             "terminal": detail["campaign"].status in TERMINAL_CAMPAIGN_STATUSES,
+        },
+    )
+
+
+@router.get(
+    "/dashboard/campaigns/{campaign_id}/attempts/{attempt_id}/evidence.json",
+    response_class=Response,
+    include_in_schema=False,
+)
+def download_dashboard_attempt_evidence(
+    request: Request,
+    campaign_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+) -> Response:
+    with request.app.state.database.session_factory() as session:
+        attempt = session.get(AttackAttempt, attempt_id)
+        if (
+            attempt is None
+            or attempt.campaign_id != campaign_id
+            or not isinstance(attempt.evidence_payload, dict)
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="durable evidence is unavailable for this campaign attempt",
+            )
+        try:
+            content = _evidence_store(request).load_verified(
+                campaign_id=campaign_id,
+                attempt_id=attempt_id,
+                database_payload=attempt.evidence_payload,
+            )
+        except EvidenceArtifactMissing as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="database evidence exists but its verified export is unavailable",
+            ) from exc
+        except EvidenceArtifactError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="evidence export does not match its PostgreSQL source record",
+            ) from exc
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": (f'attachment; filename="{attempt_id}.evidence.json"'),
+            "X-Content-Type-Options": "nosniff",
         },
     )
 

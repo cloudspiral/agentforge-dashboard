@@ -9,6 +9,10 @@ AgentForge has three separate credential domains: dashboard/API control-plane cr
 - `/healthz` and `/readyz` remain public and content-minimal.
 - The Playwright runner obtains the fixed synthetic test credentials from runtime secrets, creates a fresh context, selects the exact configured synthetic patient, binds the live numeric PID/CSRF/proxy endpoint, blocks cross-origin navigation, and does not persist browser state.
 - PostgreSQL is private and authoritative. The linkage verifier is SELECT-only and runs locally or through authenticated Railway SSH; there is no inspection route.
+- Evidence downloads use the existing dashboard Basic or API bearer boundary. Each
+  request resolves the campaign/attempt in PostgreSQL and verifies the derived JSON
+  file against that record before returning an attachment; filesystem paths are never
+  accepted from clients.
 - Langfuse receives identifiers and redacted metadata. Verified trace payloads were fully masked, observation payloads were absent, and the trace was non-public.
 
 The dashboard evaluation manager is process-local and serializes one browser evaluation at a time. It persists the campaign/attempt/evidence/Judge records directly; it is not claimed by the normal PostgreSQL polling worker.

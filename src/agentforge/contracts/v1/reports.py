@@ -20,7 +20,7 @@ from .common import (
     Sha256Hex,
     ShortText,
 )
-from .evidence import AttackEvidenceV1
+from .evidence import AttackEvidenceV1, TranscriptTurnV1
 from .judge import JudgeVerdictV1
 
 
@@ -106,6 +106,7 @@ class VulnerabilityReportV1(ContractModel):
     expected_behavior: LongText
     source_attempt_id: Identifier
     evidence_hash: Sha256Hex
+    exact_transcript: list[TranscriptTurnV1] = Field(default_factory=list, max_length=100)
     recommended_remediation_approach: LongText
     current_fix_validation_results: list[FixValidationResultV1] = Field(
         default_factory=list,

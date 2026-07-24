@@ -38,6 +38,13 @@ from agentforge.evaluation.deterministic import (
     TransportStatusV1,
     evaluate_deterministically,
 )
+from agentforge.evidence import (
+    EvidenceArtifactCorrupt,
+    EvidenceArtifactError,
+    EvidenceArtifactStore,
+    EvidenceArtifactTooLarge,
+    with_computed_evidence_hash,
+)
 from agentforge.observability import LangfuseTelemetry
 from agentforge.orchestration.budgets import (
     BudgetAccountV1,
@@ -258,19 +265,7 @@ def _rehash_evidence(
     payload = redact(_replace_secret_values(payload, secrets))
     payload["evidence_hash"] = "0" * 64
     draft = AttackEvidenceV1.model_validate_json(json.dumps(payload))
-    canonical = json.dumps(
-        draft.model_dump(mode="json", exclude={"evidence_hash"}),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return AttackEvidenceV1.model_validate_json(
-        json.dumps(
-            {
-                **draft.model_dump(mode="json"),
-                "evidence_hash": hashlib.sha256(canonical.encode()).hexdigest(),
-            }
-        )
-    )
+    return with_computed_evidence_hash(draft)
 
 
 def _budget_reservation(
@@ -600,7 +595,9 @@ def _persist_evidence(
     campaign_id: uuid.UUID,
     attempt_id: uuid.UUID,
     evidence: AttackEvidenceV1,
+    evidence_store: EvidenceArtifactStore,
 ) -> None:
+    prepared = evidence_store.prepare(evidence)
     with database.session_factory() as session:
         attempt = session.get(AttackAttempt, attempt_id)
         campaign = session.get(Campaign, campaign_id)
@@ -609,12 +606,13 @@ def _persist_evidence(
         attempt.executed_sequence = {
             "actions": [item.model_dump(mode="json") for item in evidence.executed_action_sequence]
         }
-        attempt.evidence_payload = evidence.model_dump(mode="json")
+        attempt.evidence_payload = prepared.payload
         attempt.evidence_hash = evidence.evidence_hash
         attempt.latency_ms = round(evidence.total_latency_ms)
         attempt.langfuse_trace_id = evidence.langfuse_trace_id
         attempt.state = "running"
         session.commit()
+    evidence_store.export(prepared)
 
 
 def _persist_failure(
@@ -641,10 +639,22 @@ def _persist_failure(
         )
         _apply_judge_usage(attempt, campaign, judge_results)
         attempt.state = "failed"
+        failure_stage = (
+            "judge"
+            if code == "judge_failed"
+            else "evidence"
+            if code
+            in {
+                "evidence_too_large",
+                "evidence_integrity_failed",
+                "evidence_export_failed",
+            }
+            else "runner"
+        )
         attempt.failure = {
-            "stage": "judge" if code == "judge_failed" else "runner",
+            "stage": failure_stage,
             "code": code,
-            "retryable": False,
+            "retryable": code == "evidence_export_failed",
         }
         attempt.completed_at = completed_at
         campaign.status = "failed"
@@ -808,6 +818,7 @@ async def run_live_local_case(
     telemetry: LangfuseTelemetry | None = None,
     version_discoverer: VersionDiscoverer = _discover_version,
     on_campaign_persisted: CampaignPersistedCallback | None = None,
+    evidence_store: EvidenceArtifactStore | None = None,
 ) -> LiveLocalEvaluationResultV1:
     """Execute, judge, persist, and export one checked-in local or deployed case."""
 
@@ -951,6 +962,7 @@ async def run_live_local_case(
         if settings.artifacts_dir.is_absolute()
         else repository / settings.artifacts_dir
     )
+    configured_evidence_store = evidence_store or EvidenceArtifactStore(artifacts / "evidence")
     execution_context = TargetExecutionContext(
         target_id=loaded_profile.profile.name,
         campaign_id=str(campaign_id),
@@ -1009,12 +1021,23 @@ async def run_live_local_case(
             campaign_id=campaign_id,
             attempt_id=attempt_id,
             evidence=evidence,
+            evidence_store=configured_evidence_store,
         )
-    except Exception:
+    except Exception as exc:
         warnings.extend(getattr(configured_runner, "cleanup_warnings", ()))
         warnings = list(dict.fromkeys(warnings))
-        code = "browser_execution_failed"
-        message = "the predefined browser evaluation did not complete"
+        if isinstance(exc, EvidenceArtifactTooLarge):
+            code = "evidence_too_large"
+            message = "runner evidence exceeded the 5 MiB persistence ceiling"
+        elif isinstance(exc, EvidenceArtifactCorrupt):
+            code = "evidence_integrity_failed"
+            message = "runner evidence failed canonical integrity validation"
+        elif isinstance(exc, EvidenceArtifactError):
+            code = "evidence_export_failed"
+            message = "database evidence was saved but its verified JSON export failed"
+        else:
+            code = "browser_execution_failed"
+            message = "the predefined browser evaluation did not complete"
         _persist_failure(
             database,
             campaign_id=campaign_id,
