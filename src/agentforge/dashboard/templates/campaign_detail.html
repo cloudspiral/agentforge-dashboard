@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page-heading">
   <p class="eyebrow">{{ campaign.campaign_type }} campaign</p>
-  <h1>{{ campaign.category_scope or 'Automatically ranked scope' }}</h1>
+  <h1>{{ campaign.category_scope or ('Agent-selected scope' if campaign.campaign_type == 'discovery' else 'Full active regression cohort') }}</h1>
   <p class="mono">{{ campaign.id }}</p>
 </section>
 <section class="stat-grid">
@@ -38,11 +38,11 @@
 
 <section class="panel two-column">
   <div><h2>Scope and limits</h2><dl class="summary-list">
-    <div><dt>Category</dt><dd>{{ campaign.category_scope or 'automatic' }}</dd></div>
-    <div><dt>Subcategory</dt><dd>{{ campaign.subcategory_scope or 'automatic' }}</dd></div>
+    <div><dt>Category</dt><dd>{{ campaign.category_scope or ('selected per attempt by the Orchestrator' if campaign.campaign_type == 'discovery' else 'active regression cohort') }}</dd></div>
+    <div><dt>Subcategory</dt><dd>{{ campaign.subcategory_scope or ('selected per attempt by the Orchestrator' if campaign.campaign_type == 'discovery' else 'active regression cohort') }}</dd></div>
     <div><dt>Maximum attempts</dt><dd>{{ campaign.max_attempts }}</dd></div>
     <div><dt>Maximum duration</dt><dd>{{ campaign.max_duration_seconds }}s</dd></div>
-    <div><dt>Priority</dt><dd>{{ campaign.priority }}</dd></div>
+    <div><dt>Queue priority</dt><dd>{{ campaign.priority }}<small>operator-supplied scheduling input; not taxonomy ranking</small></dd></div>
   </dl></div>
   <div><h2>Timing</h2><dl class="summary-list">
     <div><dt>Created</dt><dd>{{ campaign.created_at }}</dd></div>
@@ -71,7 +71,7 @@
 <section class="panel">
   <h2>Ordered agent timeline</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>Time</th><th>Role</th><th>Status</th><th>Attempt</th><th>Model</th><th>Tokens</th><th>Cost</th><th>Trace ID</th></tr></thead>
+    <thead><tr><th>Time</th><th>Role</th><th>Status</th><th>Attempt</th><th>Model</th><th>Tokens</th><th>Cost</th><th>Orchestrator decision / error</th><th>Trace ID</th></tr></thead>
     <tbody>{% for run in agent_runs %}<tr>
       <td>{{ run.created_at }}</td>
       <td>{{ run.role | replace('_', ' ') }}</td>
@@ -80,26 +80,29 @@
       <td>{{ run.model }}<small>{{ run.prompt_version }}</small></td>
       <td>{{ run.input_tokens }} in / {{ run.output_tokens }} out</td>
       <td>${{ run.estimated_cost_usd }}</td>
+      <td>{% if run.role == 'orchestrator' %}<code>{{ run.output_payload or run.typed_error or 'not produced' }}</code>{% elif run.typed_error %}<code>{{ run.typed_error }}</code>{% else %}see linked attempt or result{% endif %}</td>
       <td class="mono">{{ run.langfuse_trace_id or 'not available' }}</td>
-    </tr>{% else %}<tr><td colspan="8">No agent runs have been persisted.</td></tr>{% endfor %}</tbody>
+    </tr>{% else %}<tr><td colspan="9">No agent runs have been persisted.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 
 <section class="panel">
   <h2>Attempts and results</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>State</th><th>Proposal source</th><th>Objective source</th><th>Parent</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
+    <thead><tr><th>State</th><th>Proposal source</th><th>Objective source</th><th>Parent</th><th>Orchestrator decision</th><th>Surface / technique</th><th>Category</th><th>Verdict</th><th>Latency</th><th>Cost</th><th>Trace ID</th></tr></thead>
     <tbody>{% for item in attempts %}<tr>
       <td>{{ item.state }}{% if item.failure %}<small>{{ item.failure.stage }}: {{ item.failure.code }}</small>{% endif %}</td>
       <td><span class="badge badge-provenance">{% if item.proposal_source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% elif item.proposal_source == 'deterministic_seed_fallback' %}historical deterministic fallback{% else %}{{ item.proposal_source | replace('_', ' ') }}{% endif %}</span></td>
       <td>{% if item.objective_source == 'legacy_unknown' %}legacy_unknown (pre-provenance){% else %}{{ item.objective_source | replace('_', ' ') }}{% endif %}</td>
       <td class="mono">{{ item.parent_attempt_id or 'new lineage' }}<small>generation {{ generations.get(item.id, 0) }}</small></td>
+      <td>{{ item.objective }}<small>{{ item.orchestrator_rationale or 'fixed case or legacy record; no Orchestrator rationale' }}</small></td>
+      <td>{{ item.execution_surface | replace('_', ' ') }}<small>{{ item.technique }}{% if item.fuzz_variant_id %} · {{ item.fuzz_variant_id }}{% endif %}</small></td>
       <td>{{ item.category }} / {{ item.subcategory }}</td>
       <td>{{ verdicts[item.id].verdict if item.id in verdicts else 'not produced' if item.state == 'failed' else 'pending' }}</td>
       <td>{{ item.latency_ms ~ 'ms' if item.latency_ms is not none else '—' }}</td>
       <td>${{ item.estimated_cost_usd }}</td>
       <td class="mono">{{ item.langfuse_trace_id or 'not available' }}</td>
-    </tr>{% else %}<tr><td colspan="9">No attempts recorded.</td></tr>{% endfor %}</tbody>
+    </tr>{% else %}<tr><td colspan="11">No attempts recorded.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 
@@ -118,6 +121,16 @@
     {% if result.download_url %}<a class="button secondary" href="{{ result.download_url }}">Download verified JSON</a>{% endif %}
   </div>
   <p><small>{{ result.artifact_state }}</small></p>
+
+  <h3>Planning provenance</h3>
+  <dl class="summary-list">
+    <div><dt>Objective</dt><dd>{{ item.objective }}</dd></div>
+    <div><dt>Orchestrator rationale</dt><dd>{{ item.orchestrator_rationale or 'fixed case or legacy record; no Orchestrator rationale' }}</dd></div>
+    <div><dt>Execution surface</dt><dd>{{ item.execution_surface | replace('_', ' ') }}</dd></div>
+    <div><dt>Technique</dt><dd>{{ item.technique }}{% if item.fuzz_variant_id %} · {{ item.fuzz_variant_id }}{% endif %}</dd></div>
+    <div><dt>Fuzz strategy</dt><dd><code>{{ item.fuzz_plan or 'not a fuzz attempt' }}</code></dd></div>
+  </dl>
+
   {% for turn in result.transcript %}
     <article class="response-summary">
       <span>#{{ turn.turn_index }} · {{ turn.role }}</span>

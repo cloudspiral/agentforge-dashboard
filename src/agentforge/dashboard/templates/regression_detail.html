@@ -13,7 +13,7 @@
 <section class="panel two-column">
   <div><h2>Metadata</h2><dl class="summary-list">
     <div><dt>Trigger</dt><dd>{{ run.trigger }}</dd></div>
-    <div><dt>Previous version</dt><dd class="mono">{{ run.previous_target_version or 'no matched prior cohort' }}</dd></div>
+    <div><dt>Previous version</dt><dd><span class="mono">{{ run.previous_target_version or 'none' }}</span><small>{{ comparison_note }}</small></dd></div>
     <div><dt>Cohort hash</dt><dd class="mono">{{ run.cohort_hash or 'not assigned' }}</dd></div>
     <div><dt>Campaign</dt><dd>{% if run.campaign_id %}<a class="mono" href="/dashboard/campaigns/{{ run.campaign_id }}">{{ run.campaign_id }}</a>{% else %}not linked{% endif %}</dd></div>
     <div><dt>Started</dt><dd>{{ run.started_at or 'not started' }}</dd></div>
@@ -24,6 +24,7 @@
     <div><dt>Improved</dt><dd>{{ run.improved_cases }}</dd></div>
     <div><dt>Regressed</dt><dd>{{ run.regressed_cases }}</dd></div>
     <div><dt>Cross-category regression</dt><dd>{{ 'yes' if run.cross_category_regression else 'no' }}</dd></div>
+    <div><dt>Comparison status</dt><dd>{{ comparison_note }}</dd></div>
   </dl></div>
 </section>
 <section class="panel"><h2>Results</h2><div class="table-wrap"><table>

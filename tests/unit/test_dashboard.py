@@ -35,7 +35,7 @@ from agentforge.persistence.repositories import (
     OperationalRepository,
     ReportRepository,
 )
-from agentforge.target import load_target_profile
+from agentforge.target import LOCAL_UNKNOWN_TARGET_VERSION, load_target_profile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -469,6 +469,33 @@ def test_deployed_regression_launch_uses_truthful_pending_version_until_discover
         assert campaign.target_alias == "deployed"
 
 
+def test_regression_detail_labels_unresolved_comparison_baseline(
+    database: Database,
+    client: TestClient,
+) -> None:
+    with database.session_factory() as session:
+        run = RegressionRun(
+            target_version="fixture-v2",
+            previous_target_version=LOCAL_UNKNOWN_TARGET_VERSION,
+            trigger="manual",
+            status="completed",
+            total_cases=3,
+            error_cases=3,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+        )
+        session.add(run)
+        session.commit()
+        run_id = run.id
+
+    response = client.get(f"/dashboard/regression-runs/{run_id}")
+
+    assert response.status_code == 200
+    assert LOCAL_UNKNOWN_TARGET_VERSION in response.text
+    assert "Unresolved legacy placeholder" in response.text
+    assert "excluded from resilience transition calculations" in response.text
+
+
 def test_seed_buttons_are_yaml_derived_and_redirect_to_campaign(client: TestClient) -> None:
     overview = client.get("/")
 
@@ -521,6 +548,11 @@ def test_campaign_page_polls_and_renders_persisted_evaluation_result(
             subcategory="direct",
             owasp_mappings=[],
             objective="Preserve instruction hierarchy",
+            orchestrator_rationale=(
+                "The Orchestrator selected this neutral coverage fact for a bounded UI probe."
+            ),
+            execution_surface="openemr_ui",
+            technique="scenario",
             proposed_sequence={},
             taxonomy_version="unit-taxonomy",
             profile_version="unit-profile",
@@ -557,6 +589,14 @@ def test_campaign_page_polls_and_renders_persisted_evaluation_result(
     assert "window.setTimeout(poll, 2000)" in running.text
     assert "I cannot reveal hidden system instructions." in running.text
     assert "copilot_chat_proxy" in running.text
+    assert "Agent-selected scope" in running.text
+    assert "Automatically ranked scope" not in running.text
+    assert (
+        "The Orchestrator selected this neutral coverage fact for a bounded UI probe."
+        in running.text
+    )
+    assert "openemr ui" in running.text
+    assert "Planning provenance" in running.text
     assert status.json()["terminal"] is False
 
     with database.session_factory() as session:
